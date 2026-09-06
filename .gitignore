@@ -1,0 +1,50 @@
+# ==========================================
+# Local Databases & WAL Files (Do NOT push)
+# ==========================================
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# ==========================================
+# Executable Binaries & Runtime (Do NOT push)
+# ==========================================
+*.exe
+pos-server
+pos-server.exe
+cloudflared
+cloudflared.exe
+POS_Simulator.exe
+
+# ==========================================
+# Local Browser Profile & Cache
+# ==========================================
+chrome-pos-profile/
+
+# ==========================================
+# IDE, Editor & OS Files
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ==========================================
+# Environment secrets (if any local .env used)
+# ==========================================
+.env
+.env.*
+*.pem
+*.key
+*.crt
+
+# ==========================================
+# Test & Coverage artifacts
+# ==========================================
+coverage.out
+*.test
