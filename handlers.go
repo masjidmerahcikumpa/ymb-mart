@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"net/http"
 	"os"
@@ -193,7 +194,12 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	err := db.QueryRow("SELECT id,username,password,display_name,role,password_changed FROM users WHERE username=? AND active=1",
 		req.Username).Scan(&user.ID, &user.Username, &user.Password, &user.DisplayName, &user.Role, &user.PasswordChanged)
 	if err != nil {
-		jsonResponse(w, map[string]string{"status": "error", "message": "Username atau password salah"}, 401)
+		if err == sql.ErrNoRows {
+			jsonResponse(w, map[string]string{"status": "error", "message": "Username atau password salah"}, 401)
+		} else {
+			log.Printf("[LOGIN ERROR] DB query error: %v\n", err)
+			jsonResponse(w, map[string]string{"status": "error", "message": "Database error: " + err.Error()}, 500)
+		}
 		return
 	}
 
@@ -1295,7 +1301,18 @@ func handleWSBroadcast(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
-	jsonResponse(w, map[string]string{"status": "ok", "service": "pos-server-go", "version": "2.2"}, 200)
+	dbStatus := "ok"
+	if db == nil {
+		dbStatus = "nil"
+	} else if err := db.Ping(); err != nil {
+		dbStatus = fmt.Sprintf("error: %v", err)
+	}
+	jsonResponse(w, map[string]string{
+		"status":  "ok",
+		"service": "pos-server-go",
+		"version": "2.2",
+		"db":      dbStatus,
+	}, 200)
 }
 
 // === E-Voucher ===

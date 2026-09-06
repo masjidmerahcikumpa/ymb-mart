@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
@@ -35,13 +36,22 @@ func createSession(role string, username string) string {
 	b := make([]byte, 32)
 	rand.Read(b)
 	token := hex.EncodeToString(b)
+	expiresAt := time.Now().Add(8 * time.Hour) // 8 jam per shift
 	sessionsMu.Lock()
 	sessions[token] = &session{
 		role:      role,
 		username:  username,
-		expiresAt: time.Now().Add(8 * time.Hour), // 8 jam per shift
+		expiresAt: expiresAt,
 	}
 	sessionsMu.Unlock()
+
+	// Persist to DB for serverless/distributed environments (like Vercel)
+	if db != nil {
+		go func() {
+			db.Exec("INSERT OR REPLACE INTO active_sessions (token, role, username, expires_at) VALUES (?, ?, ?, ?)",
+				token, role, username, expiresAt.Format(time.RFC3339))
+		}()
+	}
 	return token
 }
 
@@ -49,20 +59,45 @@ func validateSession(token string) (string, bool) {
 	sessionsMu.RLock()
 	s, ok := sessions[token]
 	sessionsMu.RUnlock()
-	if !ok {
-		return "", false
+	if ok {
+		if time.Now().After(s.expiresAt) {
+			deleteSession(token)
+			return "", false
+		}
+		return s.role, true
 	}
-	if time.Now().After(s.expiresAt) {
-		deleteSession(token)
-		return "", false
+
+	// Fallback to database check for serverless lambdas
+	if db != nil {
+		var role, username, expStr string
+		err := db.QueryRow("SELECT role, username, expires_at FROM active_sessions WHERE token=?", token).Scan(&role, &username, &expStr)
+		if err == nil {
+			exp, parseErr := time.Parse(time.RFC3339, expStr)
+			if parseErr == nil && time.Now().Before(exp) {
+				sessionsMu.Lock()
+				sessions[token] = &session{
+					role:      role,
+					username:  username,
+					expiresAt: exp,
+				}
+				sessionsMu.Unlock()
+				return role, true
+			} else {
+				deleteSession(token)
+			}
+		}
 	}
-	return s.role, true
+
+	return "", false
 }
 
 func deleteSession(token string) {
 	sessionsMu.Lock()
 	delete(sessions, token)
 	sessionsMu.Unlock()
+	if db != nil {
+		go db.Exec("DELETE FROM active_sessions WHERE token=?", token)
+	}
 }
 
 func cleanupSessions() {
@@ -294,19 +329,39 @@ func initDB() {
 	}
 
 	if tursoURL != "" && tursoToken != "" {
-		dir := getDataDir()
-		dbPath := filepath.Join(dir, "ymb-mart.db")
-		connStr := fmt.Sprintf("file:%s?syncUrl=%s&authToken=%s&syncInterval=60s", dbPath, tursoURL, tursoToken)
-		var err error
-		db, err = sql.Open("libsql", connStr)
-		if err != nil {
-			fmt.Printf("[POS] Turso Embedded Replica failed: %v, using local sqlite\n", err)
-			db = nil
-		} else {
-			if pingErr := db.Ping(); pingErr != nil {
-				fmt.Printf("[POS] Turso Embedded Replica ping warning: %v (offline mode on %s)\n", pingErr, dbPath)
+		// On Cloud / Serverless (Vercel, Render, AWS Lambda, Linux) or if read-only filesystem:
+		// Connect DIRECTLY to Turso cloud database without creating local replica file on disk.
+		isCloud := os.Getenv("VERCEL") != "" || os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" || os.Getenv("RENDER") != "" || runtime.GOOS != "windows"
+
+		if isCloud {
+			connStr := fmt.Sprintf("%s?authToken=%s", tursoURL, tursoToken)
+			var err error
+			db, err = sql.Open("libsql", connStr)
+			if err != nil {
+				fmt.Printf("[POS] Turso Direct connection failed: %v\n", err)
+				db = nil
 			} else {
-				fmt.Printf("[POS] DB: Turso Embedded Replica active (%s <-> %s)\n", dbPath, tursoURL)
+				if pingErr := db.Ping(); pingErr != nil {
+					fmt.Printf("[POS] Turso Direct ping warning: %v\n", pingErr)
+				} else {
+					fmt.Printf("[POS] DB: Turso Direct active (%s)\n", tursoURL)
+				}
+			}
+		} else {
+			dir := getDataDir()
+			dbPath := filepath.Join(dir, "ymb-mart.db")
+			connStr := fmt.Sprintf("file:%s?syncUrl=%s&authToken=%s&syncInterval=60s", dbPath, tursoURL, tursoToken)
+			var err error
+			db, err = sql.Open("libsql", connStr)
+			if err != nil {
+				fmt.Printf("[POS] Turso Embedded Replica failed: %v, using local sqlite\n", err)
+				db = nil
+			} else {
+				if pingErr := db.Ping(); pingErr != nil {
+					fmt.Printf("[POS] Turso Embedded Replica ping warning: %v (offline mode on %s)\n", pingErr, dbPath)
+				} else {
+					fmt.Printf("[POS] DB: Turso Embedded Replica active (%s <-> %s)\n", dbPath, tursoURL)
+				}
 			}
 		}
 	}
@@ -447,6 +502,13 @@ db.Exec("ALTER TABLE products ADD COLUMN description TEXT DEFAULT ''")
 		details TEXT DEFAULT '',
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	)`)
+	db.Exec(`CREATE TABLE IF NOT EXISTS active_sessions (
+		token TEXT PRIMARY KEY,
+		role TEXT NOT NULL,
+		username TEXT NOT NULL,
+		expires_at TEXT NOT NULL
+	)`)
+
 	db.Exec("INSERT OR IGNORE INTO schema_migrations (version,name,checksum) VALUES (1,'initial','v2.2')")
 
 	// Stock Opname tables
