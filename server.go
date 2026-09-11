@@ -211,11 +211,21 @@ func setupRouter() *http.ServeMux {
 	mux.HandleFunc("/ws", handleWebSocket)
 	mux.HandleFunc("/health", handleHealth)
 
-	// Frontend routes (embedded)
+	// Frontend routes (embedded, with live disk fallback)
 	frontendHandler := func(name string) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
-			data, err := frontendFS.ReadFile("frontend/" + name)
-			if err != nil {
+			var data []byte
+			var err error
+			dir := getDataDir()
+			diskPath := filepath.Join(dir, "frontend", name)
+			if d, e := os.ReadFile(diskPath); e == nil {
+				data = d
+			} else if d, e := os.ReadFile(filepath.Join("frontend", name)); e == nil {
+				data = d
+			} else {
+				data, err = frontendFS.ReadFile("frontend/" + name)
+			}
+			if err != nil && len(data) == 0 {
 				http.Error(w, "Not found", 404)
 				return
 			}
@@ -231,12 +241,28 @@ func setupRouter() *http.ServeMux {
 	mux.HandleFunc("/admin", frontendHandler("admin.html"))
 	mux.HandleFunc("/customer", frontendHandler("customer.html"))
 	mux.HandleFunc("/sw.js", func(w http.ResponseWriter, r *http.Request) {
-		data, _ := frontendFS.ReadFile("frontend/sw.js")
+		var data []byte
+		dir := getDataDir()
+		if d, e := os.ReadFile(filepath.Join(dir, "frontend", "sw.js")); e == nil {
+			data = d
+		} else if d, e := os.ReadFile("frontend/sw.js"); e == nil {
+			data = d
+		} else {
+			data, _ = frontendFS.ReadFile("frontend/sw.js")
+		}
 		w.Header().Set("Content-Type", "application/javascript")
 		w.Write(data)
 	})
 	mux.HandleFunc("/manifest.json", func(w http.ResponseWriter, r *http.Request) {
-		data, _ := frontendFS.ReadFile("frontend/manifest.json")
+		var data []byte
+		dir := getDataDir()
+		if d, e := os.ReadFile(filepath.Join(dir, "frontend", "manifest.json")); e == nil {
+			data = d
+		} else if d, e := os.ReadFile("frontend/manifest.json"); e == nil {
+			data = d
+		} else {
+			data, _ = frontendFS.ReadFile("frontend/manifest.json")
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(data)
 	})

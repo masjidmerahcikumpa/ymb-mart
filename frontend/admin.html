@@ -673,6 +673,9 @@ async function loadShifts(){
       </td>
     </tr>`;
   }).join("");
+  }catch(e){
+    console.error("loadShifts error:", e);
+  }
 }
 
 async function adminCloseShift(id){
