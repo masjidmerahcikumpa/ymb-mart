@@ -9,7 +9,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"time"
 
@@ -329,44 +328,25 @@ func initDB() {
 	}
 
 	if tursoURL != "" && tursoToken != "" {
-		// On Cloud / Serverless (Vercel, Render, AWS Lambda, Linux) or if read-only filesystem:
-		// Connect DIRECTLY to Turso cloud database without creating local replica file on disk.
-		isCloud := os.Getenv("VERCEL") != "" || os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" || os.Getenv("RENDER") != "" || runtime.GOOS != "windows"
-
-		if isCloud {
-			connStr := fmt.Sprintf("%s?authToken=%s", tursoURL, tursoToken)
-			var err error
-			db, err = sql.Open("libsql", connStr)
-			if err != nil {
-				fmt.Printf("[POS] Turso Direct connection failed: %v\n", err)
-				db = nil
-			} else {
-				if pingErr := db.Ping(); pingErr != nil {
-					fmt.Printf("[POS] Turso Direct ping warning: %v\n", pingErr)
-				} else {
-					fmt.Printf("[POS] DB: Turso Direct active (%s)\n", tursoURL)
-				}
-			}
+		connStr := fmt.Sprintf("%s?authToken=%s", tursoURL, tursoToken)
+		var err error
+		db, err = sql.Open("libsql", connStr)
+		if err != nil {
+			fmt.Printf("[POS] Turso connection initialization failed: %v\n", err)
+			db = nil
 		} else {
-			dir := getDataDir()
-			dbPath := filepath.Join(dir, "ymb-mart.db")
-			connStr := fmt.Sprintf("file:%s?syncUrl=%s&authToken=%s&syncInterval=60s", dbPath, tursoURL, tursoToken)
-			var err error
-			db, err = sql.Open("libsql", connStr)
-			if err != nil {
-				fmt.Printf("[POS] Turso Embedded Replica failed: %v, using local sqlite\n", err)
+			if pingErr := db.Ping(); pingErr != nil {
+				fmt.Printf("[POS] Turso ping failed: %v (falling back to local sqlite)\n", pingErr)
+				db.Close()
 				db = nil
 			} else {
-				if pingErr := db.Ping(); pingErr != nil {
-					fmt.Printf("[POS] Turso Embedded Replica ping warning: %v (offline mode on %s)\n", pingErr, dbPath)
-				} else {
-					fmt.Printf("[POS] DB: Turso Embedded Replica active (%s <-> %s)\n", dbPath, tursoURL)
-				}
+				db.SetMaxOpenConns(10)
+				fmt.Printf("[POS] DB: Turso Cloud active (%s)\n", tursoURL)
 			}
 		}
 	}
 
-	// Fallback to local SQLite
+	// Fallback to local SQLite if Turso is unreachable or offline
 	if db == nil {
 		dir := getDataDir()
 		dbPath := filepath.Join(dir, "ymb-mart.db")
@@ -375,8 +355,13 @@ func initDB() {
 		if err != nil {
 			log.Fatal(err)
 		}
+		// Crucial for SQLite: serialize through single connection to prevent SQLITE_BUSY locking
+		db.SetMaxOpenConns(1)
+		db.SetMaxIdleConns(1)
+		db.Exec("PRAGMA journal_mode = WAL")
+		db.Exec("PRAGMA busy_timeout = 5000")
 		db.Exec("PRAGMA foreign_keys = ON")
-		fmt.Printf("[POS] DB: %s\n", dbPath)
+		fmt.Printf("[POS] DB: Local SQLite active (offline mode: %s)\n", dbPath)
 	}
 
 	tables := `

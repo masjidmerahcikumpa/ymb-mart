@@ -834,7 +834,12 @@ func handleCashIn(w http.ResponseWriter, r *http.Request) {
 
 func handleGetCashLog(w http.ResponseWriter, r *http.Request) {
 	id := parseID(r.URL.Path)
-	rows, _ := db.Query("SELECT id,shift_id,type,amount,description,created_at FROM cash_log WHERE shift_id=? ORDER BY created_at", id)
+	rows, err := db.Query("SELECT id,shift_id,type,amount,description,created_at FROM cash_log WHERE shift_id=? ORDER BY created_at", id)
+	if err != nil {
+		logError("handleGetCashLog", err)
+		jsonResponse(w, []CashLog{}, 200)
+		return
+	}
 	defer rows.Close()
 	var logs []CashLog
 	for rows.Next() {
@@ -1092,7 +1097,12 @@ func handleGetHolds(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, map[string]string{"error": "Unauthorized"}, 401)
 		return
 	}
-	rows, _ := db.Query("SELECT id,hold_id,items_json,customer_name,created_at FROM holds ORDER BY created_at DESC")
+	rows, err := db.Query("SELECT id,hold_id,items_json,customer_name,created_at FROM holds ORDER BY created_at DESC")
+	if err != nil {
+		logError("handleGetHolds", err)
+		jsonResponse(w, []map[string]interface{}{}, 200)
+		return
+	}
 	defer rows.Close()
 	var holds []map[string]interface{}
 	for rows.Next() {
@@ -1132,20 +1142,27 @@ func handleGetTransactions(w http.ResponseWriter, r *http.Request) {
 	q += " ORDER BY created_at DESC LIMIT ?"
 	args = append(args, limit)
 
-	rows, _ := db.Query(q, args...)
+	rows, err := db.Query(q, args...)
+	if err != nil {
+		logError("handleGetTransactions", err)
+		jsonResponse(w, []map[string]interface{}{}, 200)
+		return
+	}
 	defer rows.Close()
 	var txs []map[string]interface{}
 	for rows.Next() {
 		var t Transaction
 		rows.Scan(&t.ID, &t.TxID, &t.ShiftID, &t.Total, &t.Discount, &t.Tax, &t.GrandTotal, &t.Payment, &t.AmountPaid, &t.ChangeAmt, &t.Customer, &t.Cashier, &t.Notes, &t.Status, &t.CreatedAt)
-		itemRows, _ := db.Query("SELECT id,tx_id,product_id,name,qty,price,discount,subtotal,notes FROM tx_items WHERE tx_id=?", t.TxID)
+		itemRows, itErr := db.Query("SELECT id,tx_id,product_id,name,qty,price,discount,subtotal,notes FROM tx_items WHERE tx_id=?", t.TxID)
 		var items []TxItem
-		for itemRows.Next() {
-			var it TxItem
-			itemRows.Scan(&it.ID, &it.TxID, &it.ProductID, &it.Name, &it.Qty, &it.Price, &it.Discount, &it.Subtotal, &it.Notes)
-			items = append(items, it)
+		if itErr == nil {
+			for itemRows.Next() {
+				var it TxItem
+				itemRows.Scan(&it.ID, &it.TxID, &it.ProductID, &it.Name, &it.Qty, &it.Price, &it.Discount, &it.Subtotal, &it.Notes)
+				items = append(items, it)
+			}
+			itemRows.Close()
 		}
-		itemRows.Close()
 		txMap := map[string]interface{}{
 			"id": t.ID, "tx_id": t.TxID, "shift_id": t.ShiftID, "total": t.Total,
 			"discount": t.Discount, "tax": t.Tax, "grand_total": t.GrandTotal,
@@ -1245,13 +1262,18 @@ func handleGetStats(w http.ResponseWriter, r *http.Request) {
 		TotalQty int    `json:"total_qty"`
 		TotalRev int    `json:"total_rev"`
 	}
-	tpRows, _ := db.Query("SELECT p.name, SUM(ti.qty), SUM(ti.subtotal) FROM tx_items ti JOIN products p ON ti.product_id=p.id JOIN transactions t ON ti.tx_id=t.tx_id WHERE t.created_at LIKE ? AND t.status='completed' GROUP BY p.name ORDER BY SUM(ti.qty) DESC LIMIT 5", todayPattern)
-	defer tpRows.Close()
+	tpRows, tpErr := db.Query("SELECT p.name, SUM(ti.qty), SUM(ti.subtotal) FROM tx_items ti JOIN products p ON ti.product_id=p.id JOIN transactions t ON ti.tx_id=t.tx_id WHERE t.created_at LIKE ? AND t.status='completed' GROUP BY p.name ORDER BY SUM(ti.qty) DESC LIMIT 5", todayPattern)
 	var topProducts []topProd
-	for tpRows.Next() {
-		var tp topProd
-		tpRows.Scan(&tp.Name, &tp.TotalQty, &tp.TotalRev)
-		topProducts = append(topProducts, tp)
+	if tpErr == nil {
+		for tpRows.Next() {
+			var tp topProd
+			tpRows.Scan(&tp.Name, &tp.TotalQty, &tp.TotalRev)
+			topProducts = append(topProducts, tp)
+		}
+		tpRows.Close()
+	}
+	if topProducts == nil {
+		topProducts = []topProd{}
 	}
 
 	type recentTx struct {
@@ -1261,22 +1283,32 @@ func handleGetStats(w http.ResponseWriter, r *http.Request) {
 		Cashier    string `json:"cashier"`
 		CreatedAt  string `json:"created_at"`
 	}
-	rtRows, _ := db.Query("SELECT tx_id,grand_total,payment,cashier,created_at FROM transactions WHERE status='completed' ORDER BY created_at DESC LIMIT 10")
-	defer rtRows.Close()
+	rtRows, rtErr := db.Query("SELECT tx_id,grand_total,payment,cashier,created_at FROM transactions WHERE status='completed' ORDER BY created_at DESC LIMIT 10")
 	var recentTxs []recentTx
-	for rtRows.Next() {
-		var rt recentTx
-		rtRows.Scan(&rt.TxID, &rt.GrandTotal, &rt.Payment, &rt.Cashier, &rt.CreatedAt)
-		recentTxs = append(recentTxs, rt)
+	if rtErr == nil {
+		for rtRows.Next() {
+			var rt recentTx
+			rtRows.Scan(&rt.TxID, &rt.GrandTotal, &rt.Payment, &rt.Cashier, &rt.CreatedAt)
+			recentTxs = append(recentTxs, rt)
+		}
+		rtRows.Close()
+	}
+	if recentTxs == nil {
+		recentTxs = []recentTx{}
 	}
 
-	aRows, _ := db.Query("SELECT id,shift_name,cashier,opening_cash,total_sales FROM shifts WHERE status='open'")
-	defer aRows.Close()
+	aRows, aErr := db.Query("SELECT id,shift_name,cashier,opening_cash,total_sales FROM shifts WHERE status='open'")
 	var activeShifts []Shift
-	for aRows.Next() {
-		var s Shift
-		aRows.Scan(&s.ID, &s.ShiftName, &s.Cashier, &s.OpeningCash, &s.TotalSales)
-		activeShifts = append(activeShifts, s)
+	if aErr == nil {
+		for aRows.Next() {
+			var s Shift
+			aRows.Scan(&s.ID, &s.ShiftName, &s.Cashier, &s.OpeningCash, &s.TotalSales)
+			activeShifts = append(activeShifts, s)
+		}
+		aRows.Close()
+	}
+	if activeShifts == nil {
+		activeShifts = []Shift{}
 	}
 
 	jsonResponse(w, map[string]interface{}{
@@ -1387,13 +1419,18 @@ func handleReceipt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, _ := db.Query("SELECT name,qty,price,discount,subtotal FROM tx_items WHERE tx_id=?", txID)
-	defer rows.Close()
+	rows, err := db.Query("SELECT name,qty,price,discount,subtotal FROM tx_items WHERE tx_id=?", txID)
 	var items []TxItem
-	for rows.Next() {
-		var it TxItem
-		rows.Scan(&it.Name, &it.Qty, &it.Price, &it.Discount, &it.Subtotal)
-		items = append(items, it)
+	if err == nil {
+		for rows.Next() {
+			var it TxItem
+			rows.Scan(&it.Name, &it.Qty, &it.Price, &it.Discount, &it.Subtotal)
+			items = append(items, it)
+		}
+		rows.Close()
+	}
+	if items == nil {
+		items = []TxItem{}
 	}
 
 	storeName := "POS Simulator"
@@ -1414,13 +1451,18 @@ func handleReceipt(w http.ResponseWriter, r *http.Request) {
 
 // === Quick Access ===
 func handleQuickAccess(w http.ResponseWriter, r *http.Request) {
-	rows, _ := db.Query(`
+	rows, err := db.Query(`
 		SELECT p.id, p.name, p.price, p.promo_price, p.promo_active, p.stock, p.category,
 			COALESCE(SUM(ti.qty),0) as total_sold
 		FROM products p LEFT JOIN tx_items ti ON p.id = ti.product_id
 		WHERE p.active=1 AND p.stock>0
 		GROUP BY p.id ORDER BY total_sold DESC LIMIT 12
 	`)
+	if err != nil {
+		logError("handleQuickAccess", err)
+		jsonResponse(w, []map[string]interface{}{}, 200)
+		return
+	}
 	defer rows.Close()
 	var products []map[string]interface{}
 	for rows.Next() {
@@ -1464,13 +1506,18 @@ func handleDailyReport(w http.ResponseWriter, r *http.Request) {
 		Qty     int    `json:"qty"`
 		Revenue int    `json:"revenue"`
 	}
-	irRows, _ := db.Query("SELECT p.name, SUM(ti.qty), SUM(ti.subtotal) FROM tx_items ti JOIN products p ON ti.product_id=p.id JOIN transactions t ON ti.tx_id=t.tx_id WHERE t.created_at LIKE ? AND t.status='completed' GROUP BY p.name ORDER BY SUM(ti.qty) DESC LIMIT 10", pattern)
-	defer irRows.Close()
+	irRows, irErr := db.Query("SELECT p.name, SUM(ti.qty), SUM(ti.subtotal) FROM tx_items ti JOIN products p ON ti.product_id=p.id JOIN transactions t ON ti.tx_id=t.tx_id WHERE t.created_at LIKE ? AND t.status='completed' GROUP BY p.name ORDER BY SUM(ti.qty) DESC LIMIT 10", pattern)
 	var topItems []itemReport
-	for irRows.Next() {
-		var ir itemReport
-		irRows.Scan(&ir.Name, &ir.Qty, &ir.Revenue)
-		topItems = append(topItems, ir)
+	if irErr == nil {
+		for irRows.Next() {
+			var ir itemReport
+			irRows.Scan(&ir.Name, &ir.Qty, &ir.Revenue)
+			topItems = append(topItems, ir)
+		}
+		irRows.Close()
+	}
+	if topItems == nil {
+		topItems = []itemReport{}
 	}
 
 	type hourlyReport struct {
@@ -1478,26 +1525,36 @@ func handleDailyReport(w http.ResponseWriter, r *http.Request) {
 		TxCount int    `json:"tx_count"`
 		Sales   int    `json:"sales"`
 	}
-	hrRows, _ := db.Query("SELECT strftime('%H:00', created_at), COUNT(*), SUM(grand_total) FROM transactions WHERE created_at LIKE ? AND status='completed' GROUP BY strftime('%H:00', created_at) ORDER BY strftime('%H:00', created_at)", pattern)
-	defer hrRows.Close()
+	hrRows, hrErr := db.Query("SELECT strftime('%H:00', created_at), COUNT(*), SUM(grand_total) FROM transactions WHERE created_at LIKE ? AND status='completed' GROUP BY strftime('%H:00', created_at) ORDER BY strftime('%H:00', created_at)", pattern)
 	var hourly []hourlyReport
-	for hrRows.Next() {
-		var hr hourlyReport
-		hrRows.Scan(&hr.Hour, &hr.TxCount, &hr.Sales)
-		hourly = append(hourly, hr)
+	if hrErr == nil {
+		for hrRows.Next() {
+			var hr hourlyReport
+			hrRows.Scan(&hr.Hour, &hr.TxCount, &hr.Sales)
+			hourly = append(hourly, hr)
+		}
+		hrRows.Close()
+	}
+	if hourly == nil {
+		hourly = []hourlyReport{}
 	}
 
 	type lowStockItem struct {
 		Name  string `json:"name"`
 		Stock int    `json:"stock"`
 	}
-	lsRows, _ := db.Query("SELECT name, stock FROM products WHERE active=1 AND stock<10 ORDER BY stock ASC")
-	defer lsRows.Close()
+	lsRows, lsErr := db.Query("SELECT name, stock FROM products WHERE active=1 AND stock<10 ORDER BY stock ASC")
 	var lowStock []lowStockItem
-	for lsRows.Next() {
-		var ls lowStockItem
-		lsRows.Scan(&ls.Name, &ls.Stock)
-		lowStock = append(lowStock, ls)
+	if lsErr == nil {
+		for lsRows.Next() {
+			var ls lowStockItem
+			lsRows.Scan(&ls.Name, &ls.Stock)
+			lowStock = append(lowStock, ls)
+		}
+		lsRows.Close()
+	}
+	if lowStock == nil {
+		lowStock = []lowStockItem{}
 	}
 
 	jsonResponse(w, map[string]interface{}{
@@ -1510,7 +1567,12 @@ func handleDailyReport(w http.ResponseWriter, r *http.Request) {
 
 // === Stock Report ===
 func handleStockReport(w http.ResponseWriter, r *http.Request) {
-	rows, _ := db.Query("SELECT id,sku,name,category,stock,cost,price,unit,barcode FROM products WHERE active=1 ORDER BY category, name")
+	rows, err := db.Query("SELECT id,sku,name,category,stock,cost,price,unit,barcode FROM products WHERE active=1 ORDER BY category, name")
+	if err != nil {
+		logError("handleStockReport", err)
+		jsonResponse(w, []Product{}, 200)
+		return
+	}
 	defer rows.Close()
 	var products []Product
 	for rows.Next() {
@@ -1518,27 +1580,38 @@ func handleStockReport(w http.ResponseWriter, r *http.Request) {
 		rows.Scan(&p.ID, &p.SKU, &p.Name, &p.Category, &p.Stock, &p.Cost, &p.Price, &p.Unit, &p.Barcode)
 		products = append(products, p)
 	}
+	if products == nil {
+		products = []Product{}
+	}
 	jsonResponse(w, products, 200)
 }
 
 // === Sales Trend ===
 func handleSalesTrend(w http.ResponseWriter, r *http.Request) {
-	rows, _ := db.Query(`
-		SELECT DATE(created_at) as date, SUM(grand_total) as total, COUNT(*) as tx_count
-		FROM transactions WHERE status='completed' AND created_at >= date('now','-7 days')
-		GROUP BY DATE(created_at) ORDER BY date
-	`)
-	defer rows.Close()
 	type TrendPoint struct {
 		Date    string `json:"date"`
 		Sales   int    `json:"sales"`
 		TxCount int    `json:"tx_count"`
 	}
+	rows, err := db.Query(`
+		SELECT DATE(created_at) as date, SUM(grand_total) as total, COUNT(*) as tx_count
+		FROM transactions WHERE status='completed' AND created_at >= date('now','-7 days')
+		GROUP BY DATE(created_at) ORDER BY date
+	`)
+	if err != nil {
+		logError("handleSalesTrend", err)
+		jsonResponse(w, []TrendPoint{}, 200)
+		return
+	}
+	defer rows.Close()
 	var trend []TrendPoint
 	for rows.Next() {
 		var tp TrendPoint
 		rows.Scan(&tp.Date, &tp.Sales, &tp.TxCount)
 		trend = append(trend, tp)
+	}
+	if trend == nil {
+		trend = []TrendPoint{}
 	}
 	jsonResponse(w, trend, 200)
 }
@@ -1551,13 +1624,21 @@ func handlePaymentBreakdown(w http.ResponseWriter, r *http.Request) {
 		Count  int    `json:"count"`
 		Total  int    `json:"total"`
 	}
-	rows, _ := db.Query("SELECT payment, COUNT(*), SUM(grand_total) FROM transactions WHERE created_at LIKE ? AND status='completed' GROUP BY payment", today)
+	rows, err := db.Query("SELECT payment, COUNT(*), SUM(grand_total) FROM transactions WHERE created_at LIKE ? AND status='completed' GROUP BY payment", today)
+	if err != nil {
+		logError("handlePaymentBreakdown", err)
+		jsonResponse(w, []PayMethod{}, 200)
+		return
+	}
 	defer rows.Close()
 	var breakdown []PayMethod
 	for rows.Next() {
 		var pm PayMethod
 		rows.Scan(&pm.Method, &pm.Count, &pm.Total)
 		breakdown = append(breakdown, pm)
+	}
+	if breakdown == nil {
+		breakdown = []PayMethod{}
 	}
 	jsonResponse(w, breakdown, 200)
 }
@@ -1664,9 +1745,14 @@ func handleRestore(w http.ResponseWriter, r *http.Request) {
 
 // === Settings ===
 func handleGetSettings(w http.ResponseWriter, r *http.Request) {
-	rows, _ := db.Query("SELECT key, value FROM settings")
-	defer rows.Close()
 	settings := map[string]string{}
+	rows, err := db.Query("SELECT key, value FROM settings")
+	if err != nil {
+		logError("handleGetSettings", err)
+		jsonResponse(w, settings, 200)
+		return
+	}
+	defer rows.Close()
 	for rows.Next() {
 		var k, v string
 		rows.Scan(&k, &v)
@@ -1723,7 +1809,12 @@ func handleRestockCandidates(w http.ResponseWriter, r *http.Request) {
 		t, _ := strconv.Atoi(aiThreshold)
 		if t > 0 { threshold = t }
 	}
-	rows, _ := db.Query("SELECT id,sku,name,stock,category,price,cost FROM products WHERE active=1 AND stock<? ORDER BY stock", threshold)
+	rows, err := db.Query("SELECT id,sku,name,stock,category,price,cost FROM products WHERE active=1 AND stock<? ORDER BY stock", threshold)
+	if err != nil {
+		logError("handleRestockCandidates", err)
+		jsonResponse(w, map[string]interface{}{"version": "1.0", "threshold": threshold, "candidates": []map[string]interface{}{}, "count": 0}, 200)
+		return
+	}
 	defer rows.Close()
 	var candidates []map[string]interface{}
 	for rows.Next() {
@@ -1737,6 +1828,9 @@ func handleRestockCandidates(w http.ResponseWriter, r *http.Request) {
 			"stock": stock, "category": category,
 			"price": price, "cost": cost, "margin_pct": margin,
 		})
+	}
+	if candidates == nil {
+		candidates = []map[string]interface{}{}
 	}
 	jsonResponse(w, map[string]interface{}{
 		"version": "1.0",
@@ -1866,7 +1960,12 @@ func handleAIWebhook(w http.ResponseWriter, r *http.Request) {
 
 	case "restock_recommendation":
 		// AI agent baca stok rendah
-		rows, _ := db.Query("SELECT id,sku,name,stock,category FROM products WHERE active=1 AND stock<10 ORDER BY stock")
+		rows, err := db.Query("SELECT id,sku,name,stock,category FROM products WHERE active=1 AND stock<10 ORDER BY stock")
+		if err != nil {
+			logError("handleAIWebhook restock", err)
+			jsonResponse(w, []map[string]interface{}{}, 200)
+			return
+		}
 		defer rows.Close()
 		var recommendations []map[string]interface{}
 		for rows.Next() {
@@ -1876,6 +1975,9 @@ func handleAIWebhook(w http.ResponseWriter, r *http.Request) {
 			recommendations = append(recommendations, map[string]interface{}{
 				"product_id": id, "sku": sku, "name": name, "stock": stock, "category": category,
 			})
+		}
+		if recommendations == nil {
+			recommendations = []map[string]interface{}{}
 		}
 		jsonResponse(w, recommendations, 200)
 
@@ -1896,48 +1998,57 @@ func handleAIReport(w http.ResponseWriter, r *http.Request) {
 	db.QueryRow("SELECT COALESCE(SUM(grand_total),0), COUNT(*), COALESCE(SUM(tax),0) FROM transactions WHERE status='completed' AND DATE(created_at)=?", date).Scan(&totalSales, &totalTx, &totalTax)
 
 	// Sales per product
-	rows, _ := db.Query(`
+	type ProductSales struct {
+		Name    string `json:"name"`
+		Qty     int    `json:"qty"`
+		Revenue int    `json:"revenue"`
+	}
+	rows, err := db.Query(`
 		SELECT ti.name, SUM(ti.qty) as total_qty, SUM(ti.subtotal) as total_revenue
 		FROM tx_items ti
 		JOIN transactions t ON ti.tx_id = t.tx_id
 		WHERE t.status='completed' AND DATE(t.created_at)=?
 		GROUP BY ti.name ORDER BY total_revenue DESC
 	`, date)
-	defer rows.Close()
-	type ProductSales struct {
-		Name    string `json:"name"`
-		Qty     int    `json:"qty"`
-		Revenue int    `json:"revenue"`
-	}
 	var productSales []ProductSales
-	for rows.Next() {
-		var ps ProductSales
-		rows.Scan(&ps.Name, &ps.Qty, &ps.Revenue)
-		productSales = append(productSales, ps)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var ps ProductSales
+			rows.Scan(&ps.Name, &ps.Qty, &ps.Revenue)
+			productSales = append(productSales, ps)
+		}
+	}
+	if productSales == nil {
+		productSales = []ProductSales{}
 	}
 
 	// Low stock items
-	lowStockRows, _ := db.Query("SELECT id,sku,name,stock,category FROM products WHERE active=1 AND stock<10 ORDER BY stock")
-	defer lowStockRows.Close()
+	lowStockRows, lsErr := db.Query("SELECT id,sku,name,stock,category FROM products WHERE active=1 AND stock<10 ORDER BY stock")
 	var lowStock []map[string]interface{}
-	for lowStockRows.Next() {
-		var id, stock int
-		var sku, name, category string
-		lowStockRows.Scan(&id, &sku, &name, &stock, &category)
-		lowStock = append(lowStock, map[string]interface{}{
-			"product_id": id, "sku": sku, "name": name, "stock": stock, "category": category,
-		})
+	if lsErr == nil {
+		for lowStockRows.Next() {
+			var id, stock int
+			var sku, name, category string
+			lowStockRows.Scan(&id, &sku, &name, &stock, &category)
+			lowStock = append(lowStock, map[string]interface{}{
+				"product_id": id, "sku": sku, "name": name, "stock": stock, "category": category,
+			})
+		}
+		lowStockRows.Close()
+	}
+	if lowStock == nil {
+		lowStock = []map[string]interface{}{}
 	}
 
 	// Member activity
-	memberRows, _ := db.Query(`
+	memberRows, mErr := db.Query(`
 		SELECT m.name, m.member_id, COUNT(t.id) as tx_count, SUM(t.grand_total) as total_spent
 		FROM transactions t
 		JOIN members m ON t.member_id = m.id
 		WHERE t.status='completed' AND DATE(t.created_at)=?
 		GROUP BY m.id ORDER BY total_spent DESC LIMIT 10
 	`, date)
-	defer memberRows.Close()
 	type MemberActivity struct {
 		Name       string `json:"name"`
 		MemberID   string `json:"member_id"`
@@ -1945,10 +2056,16 @@ func handleAIReport(w http.ResponseWriter, r *http.Request) {
 		TotalSpent int    `json:"total_spent"`
 	}
 	var memberActivity []MemberActivity
-	for memberRows.Next() {
-		var ma MemberActivity
-		memberRows.Scan(&ma.Name, &ma.MemberID, &ma.TxCount, &ma.TotalSpent)
-		memberActivity = append(memberActivity, ma)
+	if mErr == nil {
+		for memberRows.Next() {
+			var ma MemberActivity
+			memberRows.Scan(&ma.Name, &ma.MemberID, &ma.TxCount, &ma.TotalSpent)
+			memberActivity = append(memberActivity, ma)
+		}
+		memberRows.Close()
+	}
+	if memberActivity == nil {
+		memberActivity = []MemberActivity{}
 	}
 
 	jsonResponse(w, map[string]interface{}{
@@ -1966,7 +2083,12 @@ func handleAIReport(w http.ResponseWriter, r *http.Request) {
 func handleGetAISettings(w http.ResponseWriter, r *http.Request) {
 	var settings map[string]string
 	settings = make(map[string]string)
-	rows, _ := db.Query("SELECT key, value FROM settings WHERE key LIKE 'ai_%'")
+	rows, err := db.Query("SELECT key, value FROM settings WHERE key LIKE 'ai_%'")
+	if err != nil {
+		logError("handleGetAISettings", err)
+		jsonResponse(w, settings, 200)
+		return
+	}
 	defer rows.Close()
 	for rows.Next() {
 		var k, v string
