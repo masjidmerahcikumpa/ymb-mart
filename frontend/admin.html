@@ -530,7 +530,18 @@ async function fetchCsrfToken(){
   try{var r=await fetch("/api/csrf-token",{headers:{"Authorization":token}});var d=await r.json();csrfToken=d.csrf_token||d.token||""}catch(e){csrfToken=""}
 }
 fetchCsrfToken();
-function authFetch(url,opts){opts=opts||{};opts.headers=opts.headers||{};opts.headers["Authorization"]=sessionStorage.getItem("token")||"";opts.headers["X-CSRF-Token"]=csrfToken;return fetch(url,opts)}
+function authFetch(url,opts){
+  opts=opts||{};opts.headers=opts.headers||{};
+  opts.headers["Authorization"]=sessionStorage.getItem("token")||"";
+  opts.headers["X-CSRF-Token"]=csrfToken;
+  return fetch(url,opts).then(function(r){
+    if(r.status===401){
+      sessionStorage.clear();
+      location.href="/admin-login";
+    }
+    return r;
+  });
+}
 async function logout(){await authFetch("/api/logout",{method:"POST"});sessionStorage.clear();location.href="/admin-login"}
 
 // Tabs
@@ -569,14 +580,24 @@ async function checkAlerts(){
 
 // PRODUCTS
 async function loadProducts(){
-  const r=await authFetch("/api/products?admin=1");const p=await r.json();
-  document.getElementById("products-table").innerHTML=p.map(x=>`<tr>
-    <td style="font-family:monospace;font-size:11px">${x.sku}</td><td style="font-weight:600">${x.name}</td>
-    <td style="text-align:right">Rp${x.price.toLocaleString("id-ID")}</td>
-    <td style="text-align:center;${x.stock<=(x.min_stock||0)&&x.min_stock>0?'color:#dc2626;font-weight:700':x.stock<10?'color:#f59e0b':''}">${x.stock}${x.min_stock>0?'/'+x.min_stock:''} </td>
-    <td>${x.category}</td>
-    <td style="text-align:center">${x.promo_active?'<span style="color:#dc2626;font-weight:600;font-size:11px">Rp'+x.promo_price.toLocaleString("id-ID")+'</span>':'-'}</td>
-    <td style="text-align:center"><button class="btn btn-ghost btn-sm" onclick='editProduct(${JSON.stringify(x).replace(/'/g,"&#39;")})'>Edit</button> <button class="btn btn-ghost btn-sm" style="color:#dc2626" onclick="deleteProduct(${x.id})">Hapus</button></td></tr>`).join("");
+  try{
+    const r=await authFetch("/api/products?admin=1");
+    if(!r.ok)return;
+    const p=await r.json();
+    if(!Array.isArray(p)){
+      document.getElementById("products-table").innerHTML='<tr><td colspan="7" style="text-align:center;padding:20px;color:#94a3b8">Belum ada data produk</td></tr>';
+      return;
+    }
+    document.getElementById("products-table").innerHTML=p.map(x=>`<tr>
+      <td style="font-family:monospace;font-size:11px">${x.sku}</td><td style="font-weight:600">${x.name}</td>
+      <td style="text-align:right">Rp${x.price.toLocaleString("id-ID")}</td>
+      <td style="text-align:center;${x.stock<=(x.min_stock||0)&&x.min_stock>0?'color:#dc2626;font-weight:700':x.stock<10?'color:#f59e0b':''}">${x.stock}${x.min_stock>0?'/'+x.min_stock:''} </td>
+      <td>${x.category}</td>
+      <td style="text-align:center">${x.promo_active?'<span style="color:#dc2626;font-weight:600;font-size:11px">Rp'+x.promo_price.toLocaleString("id-ID")+'</span>':'-'}</td>
+      <td style="text-align:center"><button class="btn btn-ghost btn-sm" onclick='editProduct(${JSON.stringify(x).replace(/'/g,"&#39;")})'>Edit</button> <button class="btn btn-ghost btn-sm" style="color:#dc2626" onclick="deleteProduct(${x.id})">Hapus</button></td></tr>`).join("")||'<tr><td colspan="7" style="text-align:center;padding:20px;color:#94a3b8">Belum ada data produk</td></tr>';
+  }catch(e){
+    console.error("loadProducts error:",e);
+  }
 }
 
 function showAddProduct(){
@@ -625,9 +646,15 @@ function formatDate(str){
 
 // SHIFTS
 async function loadShifts(){
-  const r=await authFetch("/api/shifts");
-  const s=await r.json();
-  document.getElementById("shifts-table").innerHTML=s.map(x=>{
+  try{
+    const r=await authFetch("/api/shifts");
+    if(!r.ok)return;
+    const s=await r.json();
+    if(!Array.isArray(s)){
+      document.getElementById("shifts-table").innerHTML='<tr><td colspan="11" style="text-align:center;padding:20px;color:#94a3b8">Belum ada riwayat shift</td></tr>';
+      return;
+    }
+    document.getElementById("shifts-table").innerHTML=s.map(x=>{
     const qrisSales=Math.max(0, (x.total_sales||0) - (x.cash_sales||0));
     return `<tr>
       <td style="font-size:11px">#${x.id}</td>
@@ -1819,7 +1846,7 @@ function renderAdCarousel(){
 }
 function goSlide(i){_adIdx=i;renderAdCarousel()}
 function updateMarqueePreview(){var v=document.getElementById("a-marquee").value||"Running text preview...";document.getElementById("ad-marquee-preview").textContent=v}
-async function loadAdsSettings(){try{var r=await fetch("/api/settings");var s=await r.json();document.getElementById("a-marquee").value=s.ad_marquee||"🎉 Promo Spesial! Diskon menarik untuk semua produk! 🎉";updateMarqueePreview();_adImages=JSON.parse(s.ad_images||"[]");renderAdCarousel();document.getElementById("ad-count-text").textContent=_adImages.length+" gambar";}catch(e){}}
+async function loadAdsSettings(){try{var r=await fetch("/api/settings?include_ads=1");var s=await r.json();document.getElementById("a-marquee").value=s.ad_marquee||"🎉 Promo Spesial! Diskon menarik untuk semua produk! 🎉";updateMarqueePreview();_adImages=JSON.parse(s.ad_images||"[]");renderAdCarousel();document.getElementById("ad-count-text").textContent=_adImages.length+" gambar";}catch(e){}}
 async function saveAds(){await authFetch("/api/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({ad_marquee:document.getElementById("a-marquee").value,ad_images:JSON.stringify(_adImages)})});alert("Iklan tersimpan!")}
 
 

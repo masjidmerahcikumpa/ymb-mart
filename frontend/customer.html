@@ -138,7 +138,7 @@ var _carouselTimer=null;
 // Load ads + images from settings
 async function loadAds(){
   try{
-    var r=await fetch("/api/settings");var s=await r.json();
+    var r=await fetch("/api/settings?include_ads=1");var s=await r.json();
     if(s.ad_title)document.getElementById("ad-title").textContent=s.ad_title;
     if(s.ad_desc)document.getElementById("ad-desc").textContent=s.ad_desc;
     if(s.ad_marquee)document.getElementById("ad-marquee").textContent=s.ad_marquee;

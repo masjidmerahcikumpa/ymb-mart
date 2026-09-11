@@ -1909,8 +1909,13 @@ func handleRestore(w http.ResponseWriter, r *http.Request) {
 
 // === Settings ===
 func handleGetSettings(w http.ResponseWriter, r *http.Request) {
+	includeAds := r.URL.Query().Get("include_ads") == "1"
 	settings := map[string]string{}
-	rows, err := db.Query("SELECT key, value FROM settings")
+	q := "SELECT key, value FROM settings"
+	if !includeAds {
+		q = "SELECT key, value FROM settings WHERE key != 'ad_images'"
+	}
+	rows, err := db.Query(q)
 	if err != nil {
 		logError("handleGetSettings", err)
 		jsonResponse(w, settings, 200)

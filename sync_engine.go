@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net"
 	"sync"
 	"time"
 )
@@ -91,6 +92,20 @@ func GetSyncStatus() SyncStatus {
 	return currentSyncStatus
 }
 
+func hasInternetConnectivity() bool {
+	conn, err := net.DialTimeout("tcp", "8.8.8.8:53", 600*time.Millisecond)
+	if err == nil {
+		conn.Close()
+		return true
+	}
+	conn2, err2 := net.DialTimeout("tcp", "1.1.1.1:53", 600*time.Millisecond)
+	if err2 == nil {
+		conn2.Close()
+		return true
+	}
+	return false
+}
+
 func DoSync() {
 	syncMu.Lock()
 	if currentSyncStatus.IsSyncing {
@@ -110,8 +125,17 @@ func DoSync() {
 		return
 	}
 
-	// 1. Non-blocking connectivity test to Turso with 4s timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	// Fast pre-check: if no internet, skip Turso connection immediately (zero DNS lag)
+	if !hasInternetConnectivity() {
+		syncMu.Lock()
+		currentSyncStatus.IsOnline = false
+		currentSyncStatus.LastError = "offline: no internet"
+		syncMu.Unlock()
+		return
+	}
+
+	// 1. Non-blocking connectivity test to Turso with 3s timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	pingErr := cloudDB.PingContext(ctx)
@@ -150,8 +174,8 @@ func pullMasterDataFromCloud() error {
 		return nil
 	}
 
-	// A. Pull Settings
-	sRows, err := cloudDB.Query("SELECT key, value FROM settings")
+	// A. Pull Settings (exclude massive ad_images blob to keep sync light & fast)
+	sRows, err := cloudDB.Query("SELECT key, value FROM settings WHERE key != 'ad_images'")
 	if err == nil {
 		defer sRows.Close()
 		for sRows.Next() {

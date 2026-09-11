@@ -352,8 +352,8 @@ func initDB() {
 			log.Fatal(err)
 		}
 		// Crucial for SQLite: serialize through single connection to prevent SQLITE_BUSY locking
-		db.SetMaxOpenConns(1)
-		db.SetMaxIdleConns(1)
+		db.SetMaxOpenConns(10)
+		db.SetMaxIdleConns(5)
 		db.Exec("PRAGMA journal_mode = WAL")
 		db.Exec("PRAGMA busy_timeout = 5000")
 		db.Exec("PRAGMA foreign_keys = ON")
