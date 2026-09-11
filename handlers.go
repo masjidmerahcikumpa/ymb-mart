@@ -1065,27 +1065,9 @@ func handleCheckout(w http.ResponseWriter, r *http.Request) {
 		}
 		discount = int(math.Round(float64(total) * float64(req.Discount) / 100.0))
 	}
-	// Per-product tax calculation
-	var globalTaxRate float64 = 11
-	var ppnStr string
-	sqlTx.QueryRow("SELECT value FROM settings WHERE key='ppn_rate'").Scan(&ppnStr)
-	if ppnStr != "" {
-		if v, err := strconv.ParseFloat(ppnStr, 64); err == nil {
-			globalTaxRate = v
-		}
-	}
-	totalTax := 0
-	for _, it := range items {
-		var taxRate float64
-		if it.TaxRate >= 0 {
-			taxRate = it.TaxRate
-		} else {
-			taxRate = globalTaxRate
-		}
-		totalTax += int(math.Round(float64(it.Subtotal) * taxRate / 100))
-	}
-	tax := totalTax
-	grandTotal := total - discount + tax
+	// PPN / Tax disabled (No PPN)
+	tax := 0
+	grandTotal := total - discount
 	amountPaid := req.AmountPaid
 	if amountPaid == 0 {
 		amountPaid = grandTotal

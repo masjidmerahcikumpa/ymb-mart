@@ -260,7 +260,7 @@ input,select,button{font-family:inherit}
   </div>
   <div class="cart-summary">
     <div class="summary-row"><span class="label">Subtotal</span><span id="subtotal">Rp 0</span></div>
-    <div class="summary-row"><span class="label" id="ppn-label">PPN 11%</span><span id="tax-display">Rp 0</span></div>
+    <div class="summary-row" id="ppn-row" style="display:none"><span class="label" id="ppn-label">PPN</span><span id="tax-display">Rp 0</span></div>
     <div class="summary-row" style="display:flex;align-items:center;gap:8px"><span class="label" style="flex:1">Diskon</span><input id="discount-input" type="number" value="0" min="0" style="width:80px;border:1px solid #d1d5db;border-radius:6px;padding:4px 8px;font-size:12px;text-align:right" onchange="updateTotal()"><select id="discount-type" style="border:1px solid #d1d5db;border-radius:6px;padding:4px;font-size:11px" onchange="updateTotal()"><option value="nominal">Rp</option><option value="percent">%</option></select></div>
     <div class="summary-row total"><span>TOTAL</span><span class="value" id="cart-total">Rp 0</span></div>
   </div>
@@ -387,7 +387,7 @@ input,select,button{font-family:inherit}
 </div>
 
 <script>
-var cart=[],payment="CASH",ppnRate=11,currentUser="",currentDisplayName="",currentToken="",currentShiftId=null,activeMember=null,lastTxReceipt=null;
+var cart=[],payment="CASH",ppnRate=0,currentUser="",currentDisplayName="",currentToken="",currentShiftId=null,activeMember=null,lastTxReceipt=null;
 var API="";
 var csrfToken="";
 
@@ -905,8 +905,7 @@ async function handleSearchEnter(query){
 // CART
 function broadcastCart(){
   var total=cart.reduce(function(s,i){return s+i.price*i.qty},0);
-  var tax=Math.round(total*ppnRate/100);
-  var grand=total+tax;
+  var grand=total;
   var items=cart.map(function(i){return{name:i.name,qty:i.qty,price:i.price}});
   fetch(API+"/api/ws-broadcast",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({type:"cart_update",data:{items:items,total:grand,cashier:currentDisplayName,member:activeMember?activeMember.name:""}})}).catch(function(){});
 }
@@ -942,11 +941,8 @@ function updateTotal(){
   var discount=0;
   if(discountType==="percent"){discount=Math.round(subtotal*discountInput/100)}
   else{discount=discountInput}
-  var tax=Math.round((subtotal-discount)*ppnRate/100);
-  var grand=subtotal-discount+tax;
-  if(grand<0)grand=0;
+  var grand=Math.max(0, subtotal-discount);
   document.getElementById("subtotal").textContent="Rp "+subtotal.toLocaleString("id-ID");
-  document.getElementById("tax-display").textContent="Rp "+tax.toLocaleString("id-ID");
   document.getElementById("cart-total").textContent="Rp "+grand.toLocaleString("id-ID");
   var paid=payment==="CASH"?(parseInt(document.getElementById("amount-paid").value)||0):0;
   var change=paid>grand?paid-grand:0;
@@ -966,8 +962,12 @@ function setPayment(m){
 // QRIS
 function showQrisModal(){
   var subtotal=cart.reduce(function(s,i){return s+i.price*i.qty},0);
-  var tax=Math.round(subtotal*ppnRate/100);
-  var grand=subtotal+tax;
+  var discountInput=parseInt(document.getElementById("discount-input").value)||0;
+  var discountType=document.getElementById("discount-type").value;
+  var discount=0;
+  if(discountType==="percent"){discount=Math.round(subtotal*discountInput/100)}
+  else{discount=discountInput}
+  var grand=Math.max(0, subtotal-discount);
   document.getElementById("qris-amount-text").textContent="Rp "+grand.toLocaleString("id-ID");
   var qrText="QRIS|POS|"+grand;
   document.getElementById("qris-img").src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data="+encodeURIComponent(qrText);
@@ -1059,7 +1059,7 @@ function clearMember(){
 }
 
 // PPN
-async function loadPPN(){try{var r=await fetch("/api/settings");var s=await r.json();if(s.ppn_rate){ppnRate=parseFloat(s.ppn_rate)||11;document.getElementById("ppn-label").textContent="PPN "+ppnRate+"%"}if(s.store_name)document.title=s.store_name+" - Kasir"}catch(e){}}
+async function loadPPN(){try{var r=await fetch("/api/settings");var s=await r.json();ppnRate=0;if(s.store_name)document.title=s.store_name+" - Kasir"}catch(e){}}
 
 // WEBSOCKET
 var WS_URL="ws://"+location.host+"/ws";

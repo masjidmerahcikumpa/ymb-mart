@@ -58,7 +58,7 @@ body{font-family:'Courier New',Consolas,monospace;background:#f5f5f5;display:fle
   <div class="summary">
     <div class="row"><span>Subtotal</span><span id="r-subtotal">Rp 0</span></div>
     <div class="row" id="r-disc-row" style="display:none;color:red"><span>Diskon</span><span id="r-discount">-Rp 0</span></div>
-    <div class="row"><span id="ppn-label">PPN 11%</span><span id="r-tax">Rp 0</span></div>
+    <div class="row" id="r-tax-row" style="display:none"><span id="ppn-label">PPN</span><span id="r-tax">Rp 0</span></div>
     <div class="row total"><span>TOTAL</span><span id="r-total">Rp 0</span></div>
     <div class="row"><span>Bayar</span><span id="r-paid">Rp 0</span></div>
     <div class="row" id="r-change-row" style="display:none"><span>Kembali</span><span id="r-change">Rp 0</span></div>
@@ -111,15 +111,18 @@ async function loadReceipt(){
     });
     document.getElementById('receipt-items').innerHTML=itemsHtml;
     document.getElementById('r-subtotal').textContent=formatRp(d.subtotal||0);
-    document.getElementById('r-tax').textContent=formatRp(d.tax||0);
+    if(d.tax && d.tax > 0){
+      document.getElementById('r-tax-row').style.display='flex';
+      document.getElementById('r-tax').textContent=formatRp(d.tax);
+    }else{
+      document.getElementById('r-tax-row').style.display='none';
+    }
     document.getElementById('r-total').textContent=formatRp(d.total||0);
     document.getElementById('r-paid').textContent=formatRp(d.amount_paid||0);
     document.getElementById('r-payment').textContent=d.payment||'CASH';
     if(d.footer)document.getElementById('r-footer').textContent=d.footer;
     if(d.discount>0){document.getElementById('r-disc-row').style.display='flex';document.getElementById('r-discount').textContent='-'+formatRp(d.discount)}
     if(d.change>0){document.getElementById('r-change-row').style.display='flex';document.getElementById('r-change').textContent=formatRp(d.change)}
-    // Load PPN rate
-    try{var sr=await fetch("/api/settings");var s=await sr.json();if(s.ppn_rate)document.getElementById("ppn-label").textContent="PPN "+s.ppn_rate+"%";}catch(e){}
     // Auto-print jika ?autoprint=1
     if(autoPrint)setTimeout(function(){doPrint()},1000);
   }catch(e){document.getElementById('receipt-items').innerHTML='<p style="text-align:center;padding:20px">Error loading receipt</p>'}

@@ -434,7 +434,7 @@ tr:hover{background:#f8fafc}
         <div class="form-group"><label>Nama Toko</label><input id="s-name" value=""></div>
         <div class="form-group"><label>Alamat</label><input id="s-address" value=""></div>
         <div class="form-group"><label>No. HP</label><input id="s-phone" value=""></div>
-        <div class="form-group"><label>PPN (%)</label><input id="s-ppn" type="number" value="11" min="0" max="100" step="0.5"></div>
+        <div class="form-group" style="display:none"><label>PPN (%)</label><input id="s-ppn" type="number" value="0" min="0" max="100" step="0.5"></div>
         <button class="btn btn-primary" onclick="saveSettings()">Simpan Pengaturan</button>
       </div>
     </div>
@@ -451,7 +451,7 @@ tr:hover{background:#f8fafc}
   <div class="form-row"><div class="form-group"><label>Harga Jual</label><input id="p-price" type="number"></div><div class="form-group"><label>Modal</label><input id="p-cost" type="number"></div></div>
   <div class="form-row"><div class="form-group"><label>Kategori</label><select id="p-category"><option>Makanan</option><option>Minuman</option><option>Snack</option><option>Lainnya</option></select></div><div class="form-group"><label>Stok</label><input id="p-stock" type="number"></div><div class="form-group"><label>Min Stok</label><input id="p-min-stock" type="number" value="0"></div></div>
   <div class="form-row"><div class="form-group"><label>Promo Price</label><input id="p-promo" type="number" value="0"></div><div class="form-group"><label>Promo?</label><select id="p-promo-active"><option value="0">Tidak</option><option value="1">Ya</option></select></div></div>
-  <div class="form-row"><div class="form-group"><label>PPN per Produk (%)</label><input id="p-tax" type="number" value="-1" min="-1" max="100" step="0.5" placeholder="-1 = gunakan global"></div></div>
+  <div class="form-row" style="display:none"><div class="form-group"><label>PPN per Produk (%)</label><input id="p-tax" type="number" value="0" min="-1" max="100" step="0.5" placeholder="-1 = gunakan global"></div></div>
   <div class="modal-actions"><button class="btn btn-primary" onclick="saveProduct()">Simpan</button><button class="btn" style="background:#e2e8f0;color:#475569" onclick="closeModal('product-modal')">Batal</button></div>
 </div></div>
 
@@ -808,7 +808,7 @@ async function loadDailyReport(){const date=document.getElementById("report-date
     <div class="report-card"><p>Total Sales</p><div class="value" style="color:#22c55e">Rp${r.total_sales.toLocaleString("id-ID")}</div></div>
     <div class="report-card"><p>Total Transaksi</p><div class="value" style="color:#2563eb">${r.total_tx}</div></div>
     <div class="report-card"><p>Profit</p><div class="value" style="color:#7c3aed">Rp${r.total_profit.toLocaleString("id-ID")}</div></div>
-    <div class="report-card"><p>PPN</p><div class="value" style="color:#ea580c">Rp${r.total_tax.toLocaleString("id-ID")}</div></div>
+    ${(r.total_tax && r.total_tax > 0) ? `<div class="report-card"><p>PPN</p><div class="value" style="color:#ea580c">Rp${r.total_tax.toLocaleString("id-ID")}</div></div>` : ''}
     <div class="report-card"><p>💵 Cash</p><div class="value">Rp${r.cash_sales.toLocaleString("id-ID")}</div></div>
     <div class="report-card"><p>⚡ QRIS</p><div class="value">Rp${r.qris_sales.toLocaleString("id-ID")}</div></div>
     <div class="report-card"><p>💰 Diskon</p><div class="value" style="color:#dc2626">-Rp${(r.total_discount||0).toLocaleString("id-ID")}</div></div>`;
@@ -1721,7 +1721,7 @@ async function submitChangeAdminPassword(){
     errEl.style.display="block";
   }
 }
-async function loadSettings(){const r=await authFetch("/api/settings");const s=await r.json();document.getElementById("s-name").value=s.store_name||"";document.getElementById("s-address").value=s.store_address||"";document.getElementById("s-phone").value=s.store_phone||"";document.getElementById("s-ppn").value=s.ppn_rate||"11"}
+async function loadSettings(){const r=await authFetch("/api/settings");const s=await r.json();document.getElementById("s-name").value=s.store_name||"";document.getElementById("s-address").value=s.store_address||"";document.getElementById("s-phone").value=s.store_phone||"";document.getElementById("s-ppn").value=s.ppn_rate||"0"}
 async function saveSettings(){await authFetch("/api/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({store_name:document.getElementById("s-name").value,store_address:document.getElementById("s-address").value,store_phone:document.getElementById("s-phone").value,ppn_rate:document.getElementById("s-ppn").value})});alert("Pengaturan tersimpan!")}
 async function backupDB(){
   const token=sessionStorage.getItem("token")||"";

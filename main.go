@@ -549,11 +549,12 @@ db.Exec("ALTER TABLE products ADD COLUMN description TEXT DEFAULT ''")
 		"ad_cards":     "[]",
 		"qris_merchant": "POS Simulator",
 		"qris_amount":   "0",
-		"ppn_rate":      "11",
+		"ppn_rate":      "0",
 	}
 	for k, v := range settings {
 		db.Exec("INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)", k, v)
 	}
+	db.Exec("UPDATE settings SET value='0' WHERE key='ppn_rate'")
 }
 
 func now() string {
