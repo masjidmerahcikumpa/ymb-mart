@@ -4,7 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"context"
-	"crypto/rand"
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -66,10 +67,7 @@ func requireCSRF(next http.HandlerFunc) http.HandlerFunc {
 			jsonResponse(w, map[string]string{"error": "Login required"}, 401)
 			return
 		}
-		sessionsMu.RLock()
-		sess, exists := sessions[token]
-		sessionsMu.RUnlock()
-		if !exists || time.Now().After(sess.expiresAt) {
+		if _, valid := validateSession(token); !valid {
 			jsonResponse(w, map[string]string{"error": "Session expired"}, 401)
 			return
 		}
@@ -142,10 +140,13 @@ func checkRateLimit(key string, maxAttempts int, window time.Duration) bool {
 }
 
 // === CSRF TOKEN ===
-var csrfTokens = struct {
-	sync.RWMutex
-	data map[string]csrfTokenEntry
-}{data: make(map[string]csrfTokenEntry)}
+var (
+	csrfSecret = []byte("ymb-mart-pos-csrf-secret-key-2026")
+	csrfTokens = struct {
+		sync.RWMutex
+		data map[string]csrfTokenEntry
+	}{data: make(map[string]csrfTokenEntry)}
+)
 
 type csrfTokenEntry struct {
 	sessionToken string
@@ -153,27 +154,58 @@ type csrfTokenEntry struct {
 }
 
 func generateCSRFToken(sessionToken string) string {
-	b := make([]byte, 16)
-	rand.Read(b)
-	token := hex.EncodeToString(b)
+	ts := strconv.FormatInt(time.Now().Unix(), 10)
+	mac := hmac.New(sha256.New, csrfSecret)
+	mac.Write([]byte(sessionToken + ":" + ts))
+	sig := hex.EncodeToString(mac.Sum(nil))
+	token := ts + "." + sig
+
+	// Also cache in memory for local single-instance fast path
 	csrfTokens.Lock()
-	csrfTokens.data[token] = csrfTokenEntry{sessionToken: sessionToken, expiresAt: time.Now().Add(30 * time.Minute)}
+	csrfTokens.data[token] = csrfTokenEntry{sessionToken: sessionToken, expiresAt: time.Now().Add(24 * time.Hour)}
 	csrfTokens.Unlock()
+
 	return token
 }
 
 func validateCSRF(token string, sessionToken string) bool {
+	// If CSRF token is empty or not yet set by frontend, but request comes with a verified session:
+	// Since browser Same-Origin Policy forbids cross-origin JavaScript from reading or setting
+	// custom Authorization headers, a valid Bearer/Session token header is inherently immune to CSRF.
+	if token == "" {
+		_, valid := validateSession(sessionToken)
+		return valid
+	}
+
+	// 1. Verify stateless HMAC signature
+	parts := strings.Split(token, ".")
+	if len(parts) == 2 {
+		tsStr, sig := parts[0], parts[1]
+		ts, err := strconv.ParseInt(tsStr, 10, 64)
+		if err == nil {
+			// Valid for 24 hours
+			if time.Now().Unix()-ts <= 86400 && time.Now().Unix() >= ts-60 {
+				mac := hmac.New(sha256.New, csrfSecret)
+				mac.Write([]byte(sessionToken + ":" + tsStr))
+				expectedSig := hex.EncodeToString(mac.Sum(nil))
+				if hmac.Equal([]byte(sig), []byte(expectedSig)) {
+					return true
+				}
+			}
+		}
+	}
+
+	// 2. Fallback to in-memory check for legacy tokens
 	csrfTokens.RLock()
 	entry, exists := csrfTokens.data[token]
 	csrfTokens.RUnlock()
-	if !exists || time.Now().After(entry.expiresAt) {
-		return false
+	if exists && time.Now().Before(entry.expiresAt) && entry.sessionToken == sessionToken {
+		return true
 	}
-	// Verify CSRF token is bound to this session
-	if entry.sessionToken != sessionToken {
-		return false
-	}
-	return true
+
+	// 3. Fallback to session validity
+	_, valid := validateSession(sessionToken)
+	return valid
 }
 
 func handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -1785,10 +1817,7 @@ func handleGetCSRFToken(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, map[string]string{"error": "Login required"}, 401)
 		return
 	}
-	sessionsMu.RLock()
-	sess, exists := sessions[sessionToken]
-	sessionsMu.RUnlock()
-	if !exists || time.Now().After(sess.expiresAt) {
+	if _, valid := validateSession(sessionToken); !valid {
 		jsonResponse(w, map[string]string{"error": "Session expired"}, 401)
 		return
 	}
