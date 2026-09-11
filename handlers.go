@@ -750,8 +750,9 @@ func handleCloseShift(w http.ResponseWriter, r *http.Request) {
 		discrepancy = closingCash - expected
 	}
 
-	db.Exec("UPDATE shifts SET closed_at=?,closing_cash=?,expected_cash=?,cash_sales=?,cash_out=?,cash_discrepancy=?,total_sales=?,total_tx=?,status='closed' WHERE id=?",
+	db.Exec("UPDATE shifts SET closed_at=?,closing_cash=?,expected_cash=?,cash_sales=?,cash_out=?,cash_discrepancy=?,total_sales=?,total_tx=?,status='closed',sync_status='pending' WHERE id=?",
 		now(), closingCash, expected, cashSales, cashOut, discrepancy, totalSales, totalTx, id)
+	go TriggerSync()
 	if qrisSales > 0 {
 		db.Exec("INSERT INTO cash_log (shift_id,type,amount,description) VALUES (?,?,?,?)",
 			id, "qris_sales", qrisSales, fmt.Sprintf("Penjualan QRIS/Non-Tunai shift %s", shift.ShiftName))
@@ -838,8 +839,9 @@ func handleCloseShiftSelf(w http.ResponseWriter, r *http.Request) {
 		discrepancy = closingCash - expected
 	}
 
-	db.Exec("UPDATE shifts SET closed_at=?,closing_cash=?,expected_cash=?,cash_sales=?,cash_out=?,cash_discrepancy=?,total_sales=?,total_tx=?,status='closed' WHERE id=?",
+	db.Exec("UPDATE shifts SET closed_at=?,closing_cash=?,expected_cash=?,cash_sales=?,cash_out=?,cash_discrepancy=?,total_sales=?,total_tx=?,status='closed',sync_status='pending' WHERE id=?",
 		now(), closingCash, expected, cashSales, cashOut, discrepancy, totalSales, totalTx, id)
+	go TriggerSync()
 	if qrisSales > 0 {
 		db.Exec("INSERT INTO cash_log (shift_id,type,amount,description) VALUES (?,?,?,?)",
 			id, "qris_sales", qrisSales, fmt.Sprintf("Penjualan QRIS/Non-Tunai shift %s", shift.ShiftName))
@@ -1108,6 +1110,7 @@ func handleCheckout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	wsBroadcast(WSMessage{Type: "new_transaction", Data: txData})
+	go TriggerSync()
 	jsonResponse(w, txData, 200)
 }
 
@@ -3009,4 +3012,22 @@ func handleApplyStockOpname(w http.ResponseWriter, r *http.Request) {
 		"negative_difference": negDiff,
 		"session_status":      "closed",
 	}, 200)
+}
+
+func handleGetSyncStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	status := GetSyncStatus()
+	jsonResponse(w, status, 200)
+}
+
+func handleTriggerSync(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	go DoSync()
+	jsonResponse(w, map[string]interface{}{"status": "sync_triggered"}, 200)
 }

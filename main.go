@@ -327,7 +327,9 @@ func initDB() {
 		}
 	}
 
-	if tursoURL != "" && tursoToken != "" {
+	isVercel := os.Getenv("VERCEL") == "1"
+
+	if isVercel && tursoURL != "" && tursoToken != "" {
 		connStr := fmt.Sprintf("%s?authToken=%s", tursoURL, tursoToken)
 		var err error
 		db, err = sql.Open("libsql", connStr)
@@ -335,18 +337,12 @@ func initDB() {
 			fmt.Printf("[POS] Turso connection initialization failed: %v\n", err)
 			db = nil
 		} else {
-			if pingErr := db.Ping(); pingErr != nil {
-				fmt.Printf("[POS] Turso ping failed: %v (falling back to local sqlite)\n", pingErr)
-				db.Close()
-				db = nil
-			} else {
-				db.SetMaxOpenConns(10)
-				fmt.Printf("[POS] DB: Turso Cloud active (%s)\n", tursoURL)
-			}
+			db.SetMaxOpenConns(10)
+			fmt.Printf("[POS] DB: Turso Cloud active (Vercel Serverless: %s)\n", tursoURL)
 		}
 	}
 
-	// Fallback to local SQLite if Turso is unreachable or offline
+	// For local desktop app or fallback: always use Local SQLite as primary DB (offline-first)
 	if db == nil {
 		dir := getDataDir()
 		dbPath := filepath.Join(dir, "ymb-mart.db")
@@ -361,7 +357,12 @@ func initDB() {
 		db.Exec("PRAGMA journal_mode = WAL")
 		db.Exec("PRAGMA busy_timeout = 5000")
 		db.Exec("PRAGMA foreign_keys = ON")
-		fmt.Printf("[POS] DB: Local SQLite active (offline mode: %s)\n", dbPath)
+		fmt.Printf("[POS] DB: Local SQLite active (offline-first mode: %s)\n", dbPath)
+
+		// Start background Sync Engine to synchronize with Turso Cloud when online
+		if tursoURL != "" && tursoToken != "" {
+			InitSyncEngine(tursoURL, tursoToken)
+		}
 	}
 
 	tables := `
@@ -479,6 +480,10 @@ func initDB() {
 	db.Exec("ALTER TABLE products ADD COLUMN tax_rate REAL DEFAULT -1")
 db.Exec("ALTER TABLE products ADD COLUMN description TEXT DEFAULT ''")
 	db.Exec("ALTER TABLE products ADD COLUMN min_stock INTEGER DEFAULT 0")
+	db.Exec("ALTER TABLE transactions ADD COLUMN sync_status TEXT DEFAULT 'pending'")
+	db.Exec("ALTER TABLE shifts ADD COLUMN sync_status TEXT DEFAULT 'pending'")
+	db.Exec("ALTER TABLE cash_log ADD COLUMN sync_status TEXT DEFAULT 'pending'")
+	db.Exec("ALTER TABLE inventory_movements ADD COLUMN sync_status TEXT DEFAULT 'pending'")
 
 	db.Exec(`CREATE TABLE IF NOT EXISTS audit_log (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -205,6 +205,8 @@ func setupRouter() *http.ServeMux {
 			adminOnly(handleUpdateSettings)(w, r)
 		}
 	})
+	mux.HandleFunc("/api/sync/status", handleGetSyncStatus)
+	mux.HandleFunc("/api/sync/trigger", handleTriggerSync)
 	mux.HandleFunc("/api/ws-broadcast", handleWSBroadcast)
 	mux.HandleFunc("/ws", handleWebSocket)
 	mux.HandleFunc("/health", handleHealth)

@@ -221,6 +221,10 @@ input,select,button{font-family:inherit}
 <div class="navbar">
   <div><a href="/">🏠</a> <a href="/kasir" class="active">🛒 Kasir</a> <a href="/admin">⚙️ Admin</a></div>
   <div class="nav-right">
+    <span id="sync-badge" onclick="triggerManualSync()" title="Klik untuk sinkronkan manual" style="cursor:pointer;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:5px;background:#e2e8f0;color:#475569">
+      <span id="sync-dot" style="width:7px;height:7px;border-radius:50%;background:#94a3b8"></span>
+      <span id="sync-text">Cek Koneksi...</span>
+    </span>
     <span class="nav-info" id="kasir-user-info">Kasir: -- | Shift: -</span>
     <span style="color:#64748b;font-size:10px">POS v2.2</span>
     <button class="btn-logout" onclick="showCloseShiftModal()" style="background:#dc2626;display:flex;align-items:center;gap:4px">🔒 Tutup Shift</button>
@@ -1119,11 +1123,63 @@ document.addEventListener("keydown",function(e){
   }
 });
 
+// SYNC STATUS
+async function checkSyncStatus(){
+  try{
+    var r=await fetch('/api/sync/status');
+    if(!r.ok)return;
+    var s=await r.json();
+    var dot=document.getElementById('sync-dot');
+    var txt=document.getElementById('sync-text');
+    var badge=document.getElementById('sync-badge');
+    if(!dot||!txt||!badge)return;
+    if(s.is_syncing){
+      badge.style.background='#dbeafe';badge.style.color='#1e40af';
+      dot.style.background='#3b82f6';
+      txt.textContent='🔄 Sinkronisasi...';
+    }else if(s.is_online){
+      if(s.pending_count>0){
+        badge.style.background='#fef3c7';badge.style.color='#92400e';
+        dot.style.background='#f59e0b';
+        txt.textContent='🟢 Online ('+s.pending_count+' pending)';
+      }else{
+        badge.style.background='#dcfce7';badge.style.color='#166534';
+        dot.style.background='#22c55e';
+        txt.textContent='🟢 Online (Tersinkron)';
+      }
+    }else{
+      badge.style.background='#fef3c7';badge.style.color='#b45309';
+      dot.style.background='#f59e0b';
+      txt.textContent='🟡 Offline ('+(s.pending_count||0)+' pending)';
+    }
+  }catch(e){
+    var txt=document.getElementById('sync-text');
+    var dot=document.getElementById('sync-dot');
+    var badge=document.getElementById('sync-badge');
+    if(txt&&dot&&badge){
+      badge.style.background='#fee2e2';badge.style.color='#991b1b';
+      dot.style.background='#ef4444';
+      txt.textContent='🔴 Server Offline';
+    }
+  }
+}
+
+async function triggerManualSync(){
+  var txt=document.getElementById('sync-text');
+  if(txt)txt.textContent='🔄 Menyinkronkan...';
+  try{
+    await fetch('/api/sync/trigger',{method:'POST'});
+    setTimeout(checkSyncStatus,1500);
+  }catch(e){}
+}
+
 // INIT
 restoreKasirSession();
 loadProducts();
 loadPPN();
 connectWS();
+checkSyncStatus();
+setInterval(checkSyncStatus, 10000);
 setTimeout(function(){
   var s = document.getElementById("search");
   if(s) s.focus();

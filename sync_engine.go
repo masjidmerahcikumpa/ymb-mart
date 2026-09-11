@@ -1,0 +1,428 @@
+package main
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"sync"
+	"time"
+)
+
+type SyncStatus struct {
+	IsOnline     bool   `json:"is_online"`
+	LastSync     string `json:"last_sync"`
+	PendingCount int    `json:"pending_count"`
+	IsSyncing    bool   `json:"is_syncing"`
+	LastError    string `json:"last_error"`
+	Mode         string `json:"mode"`
+}
+
+var (
+	cloudDB           *sql.DB
+	syncMu            sync.Mutex
+	currentSyncStatus = SyncStatus{
+		IsOnline:  false,
+		LastSync:  "-",
+		Mode:      "local_offline_first",
+	}
+	syncTriggerChan = make(chan struct{}, 1)
+)
+
+func InitSyncEngine(tursoURL, tursoToken string) {
+	if tursoURL == "" || tursoToken == "" {
+		fmt.Println("[Sync] No Turso credentials provided; running in pure offline mode")
+		return
+	}
+
+	connStr := fmt.Sprintf("%s?authToken=%s", tursoURL, tursoToken)
+	var err error
+	cloudDB, err = sql.Open("libsql", connStr)
+	if err != nil {
+		fmt.Printf("[Sync] Failed to open cloud DB: %v\n", err)
+		return
+	}
+	cloudDB.SetMaxOpenConns(5)
+	cloudDB.SetMaxIdleConns(2)
+
+	fmt.Println("[Sync] Sync Engine initialized with Turso Cloud")
+
+	// Start background sync worker
+	go syncWorker()
+}
+
+func syncWorker() {
+	// Run initial sync after a short delay
+	time.Sleep(1 * time.Second)
+	TriggerSync()
+
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			DoSync()
+		case <-syncTriggerChan:
+			DoSync()
+		}
+	}
+}
+
+func TriggerSync() {
+	select {
+	case syncTriggerChan <- struct{}{}:
+	default:
+	}
+}
+
+func GetSyncStatus() SyncStatus {
+	syncMu.Lock()
+	defer syncMu.Unlock()
+
+	// Update pending count from local DB
+	if db != nil {
+		var txCount, shiftCount, cashCount int
+		db.QueryRow("SELECT COUNT(*) FROM transactions WHERE sync_status = 'pending'").Scan(&txCount)
+		db.QueryRow("SELECT COUNT(*) FROM shifts WHERE sync_status = 'pending'").Scan(&shiftCount)
+		db.QueryRow("SELECT COUNT(*) FROM cash_log WHERE sync_status = 'pending'").Scan(&cashCount)
+		currentSyncStatus.PendingCount = txCount + shiftCount + cashCount
+	}
+
+	return currentSyncStatus
+}
+
+func DoSync() {
+	syncMu.Lock()
+	if currentSyncStatus.IsSyncing {
+		syncMu.Unlock()
+		return
+	}
+	currentSyncStatus.IsSyncing = true
+	syncMu.Unlock()
+
+	defer func() {
+		syncMu.Lock()
+		currentSyncStatus.IsSyncing = false
+		syncMu.Unlock()
+	}()
+
+	if cloudDB == nil || db == nil {
+		return
+	}
+
+	// 1. Non-blocking connectivity test to Turso with 4s timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+
+	pingErr := cloudDB.PingContext(ctx)
+	if pingErr != nil {
+		syncMu.Lock()
+		currentSyncStatus.IsOnline = false
+		currentSyncStatus.LastError = pingErr.Error()
+		syncMu.Unlock()
+		return
+	}
+
+	syncMu.Lock()
+	currentSyncStatus.IsOnline = true
+	currentSyncStatus.LastError = ""
+	syncMu.Unlock()
+
+	// 2. PULL Master Data from Turso Cloud to Local SQLite
+	pullErr := pullMasterDataFromCloud()
+	if pullErr != nil {
+		fmt.Printf("[Sync] Pull error: %v\n", pullErr)
+	}
+
+	// 3. PUSH Pending Local Transactions & Shifts to Turso Cloud
+	pushErr := pushLocalTransactionsToCloud()
+	if pushErr != nil {
+		fmt.Printf("[Sync] Push error: %v\n", pushErr)
+	}
+
+	syncMu.Lock()
+	currentSyncStatus.LastSync = time.Now().Format("2006-01-02 15:04:05")
+	syncMu.Unlock()
+}
+
+func pullMasterDataFromCloud() error {
+	if cloudDB == nil || db == nil {
+		return nil
+	}
+
+	// A. Pull Settings
+	sRows, err := cloudDB.Query("SELECT key, value FROM settings")
+	if err == nil {
+		defer sRows.Close()
+		for sRows.Next() {
+			var k, v string
+			if err := sRows.Scan(&k, &v); err == nil {
+				db.Exec("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", k, v)
+			}
+		}
+	}
+
+	// B. Pull Users
+	uRows, err := cloudDB.Query("SELECT id, username, password, display_name, role, active, password_changed FROM users")
+	if err == nil {
+		defer uRows.Close()
+		for uRows.Next() {
+			var id, active, pwdChanged int
+			var uname, pwd, disp, role string
+			if err := uRows.Scan(&id, &uname, &pwd, &disp, &role, &active, &pwdChanged); err == nil {
+				db.Exec(`INSERT INTO users (id, username, password, display_name, role, active, password_changed) 
+					VALUES (?, ?, ?, ?, ?, ?, ?)
+					ON CONFLICT(id) DO UPDATE SET username=excluded.username, password=excluded.password, 
+					display_name=excluded.display_name, role=excluded.role, active=excluded.active, password_changed=excluded.password_changed`,
+					id, uname, pwd, disp, role, active, pwdChanged)
+			}
+		}
+	}
+
+	// C. Pull Categories
+	cRows, err := cloudDB.Query("SELECT id, name, icon FROM categories")
+	if err == nil {
+		defer cRows.Close()
+		for cRows.Next() {
+			var id int
+			var name, icon string
+			if err := cRows.Scan(&id, &name, &icon); err == nil {
+				db.Exec("INSERT INTO categories (id, name, icon) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, icon=excluded.icon", id, name, icon)
+			}
+		}
+	}
+
+	// D. Pull Products (Master inventory, prices, promos)
+	// Check if local has pending transactions before pulling stock
+	var pendingTx int
+	db.QueryRow("SELECT COUNT(*) FROM transactions WHERE sync_status='pending'").Scan(&pendingTx)
+
+	pRows, err := cloudDB.Query("SELECT id, sku, name, description, price, cost, category, stock, min_stock, unit, barcode, promo_price, promo_active, tax_rate, active FROM products")
+	if err == nil {
+		defer pRows.Close()
+		for pRows.Next() {
+			var id, price, cost, stock, minStock, promoPrice, promoActive, active int
+			var sku, name, desc, cat, unit, barcode string
+			var taxRate float64
+			if err := pRows.Scan(&id, &sku, &name, &desc, &price, &cost, &cat, &stock, &minStock, &unit, &barcode, &promoPrice, &promoActive, &taxRate, &active); err == nil {
+				if pendingTx > 0 {
+					// Don't overwrite local stock if there are pending offline transactions that haven't been pushed
+					db.Exec(`INSERT INTO products (id, sku, name, description, price, cost, category, min_stock, unit, barcode, promo_price, promo_active, tax_rate, active, stock) 
+						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+						ON CONFLICT(id) DO UPDATE SET sku=excluded.sku, name=excluded.name, description=excluded.description,
+						price=excluded.price, cost=excluded.cost, category=excluded.category, min_stock=excluded.min_stock,
+						unit=excluded.unit, barcode=excluded.barcode, promo_price=excluded.promo_price, promo_active=excluded.promo_active,
+						tax_rate=excluded.tax_rate, active=excluded.active`,
+						id, sku, name, desc, price, cost, cat, minStock, unit, barcode, promoPrice, promoActive, taxRate, active, stock)
+				} else {
+					// Fully sync including stock
+					db.Exec(`INSERT INTO products (id, sku, name, description, price, cost, category, stock, min_stock, unit, barcode, promo_price, promo_active, tax_rate, active) 
+						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+						ON CONFLICT(id) DO UPDATE SET sku=excluded.sku, name=excluded.name, description=excluded.description,
+						price=excluded.price, cost=excluded.cost, category=excluded.category, stock=excluded.stock, min_stock=excluded.min_stock,
+						unit=excluded.unit, barcode=excluded.barcode, promo_price=excluded.promo_price, promo_active=excluded.promo_active,
+						tax_rate=excluded.tax_rate, active=excluded.active`,
+						id, sku, name, desc, price, cost, cat, stock, minStock, unit, barcode, promoPrice, promoActive, taxRate, active)
+				}
+			}
+		}
+	}
+
+	// E. Pull Members
+	mRows, err := cloudDB.Query("SELECT id, member_id, name, phone, email, points, tier, active FROM members")
+	if err == nil {
+		defer mRows.Close()
+		for mRows.Next() {
+			var id, points, active int
+			var memberID, name, phone, email, tier string
+			if err := mRows.Scan(&id, &memberID, &name, &phone, &email, &points, &tier, &active); err == nil {
+				db.Exec(`INSERT INTO members (id, member_id, name, phone, email, points, tier, active)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+					ON CONFLICT(id) DO UPDATE SET member_id=excluded.member_id, name=excluded.name, phone=excluded.phone,
+					email=excluded.email, points=excluded.points, tier=excluded.tier, active=excluded.active`,
+					id, memberID, name, phone, email, points, tier, active)
+			}
+		}
+	}
+
+	return nil
+}
+
+type pendingShift struct {
+	id, opCash, clCash, expCash, csSales, csOut, csDisc, totSales, totTx int
+	shName, cashier, opAt, clAt, status string
+}
+
+type pendingCashLog struct {
+	id, shiftID, amount int
+	logType, desc, createdAt string
+}
+
+type pendingTxItem struct {
+	pid, qty, price, disc, subtotal int
+	name, itemNotes string
+}
+
+type pendingTx struct {
+	id, total, discount, tax, grandTotal, amountPaid, changeAmount int
+	shiftID, memberID sql.NullInt64
+	txID, payment, customerName, cashier, notes, status, createdAt string
+	items []pendingTxItem
+}
+
+type pendingInvMovement struct {
+	id, pid, qty, stBefore, stAfter int
+	movType, refType, refID, source, reason, invUser, createdAt string
+}
+
+func pushLocalTransactionsToCloud() error {
+	if cloudDB == nil || db == nil {
+		return nil
+	}
+
+	// 1. Fetch Pending Shifts into memory
+	var shifts []pendingShift
+	shiftRows, err := db.Query(`SELECT id, shift_name, cashier, opened_at, COALESCE(closed_at,''), opening_cash, 
+		closing_cash, expected_cash, cash_sales, cash_out, cash_discrepancy, total_sales, total_tx, status 
+		FROM shifts WHERE sync_status = 'pending'`)
+	if err == nil {
+		for shiftRows.Next() {
+			var s pendingShift
+			if err := shiftRows.Scan(&s.id, &s.shName, &s.cashier, &s.opAt, &s.clAt, &s.opCash, &s.clCash, &s.expCash, &s.csSales, &s.csOut, &s.csDisc, &s.totSales, &s.totTx, &s.status); err == nil {
+				shifts = append(shifts, s)
+			}
+		}
+		shiftRows.Close()
+	}
+
+	// Push Shifts
+	for _, s := range shifts {
+		var closedAtVal interface{} = nil
+		if s.clAt != "" {
+			closedAtVal = s.clAt
+		}
+		_, cErr := cloudDB.Exec(`INSERT INTO shifts (id, shift_name, cashier, opened_at, closed_at, opening_cash, closing_cash, expected_cash, cash_sales, cash_out, cash_discrepancy, total_sales, total_tx, status)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(id) DO UPDATE SET closed_at=excluded.closed_at, closing_cash=excluded.closing_cash,
+			expected_cash=excluded.expected_cash, cash_sales=excluded.cash_sales, cash_out=excluded.cash_out,
+			cash_discrepancy=excluded.cash_discrepancy, total_sales=excluded.total_sales, total_tx=excluded.total_tx, status=excluded.status`,
+			s.id, s.shName, s.cashier, s.opAt, closedAtVal, s.opCash, s.clCash, s.expCash, s.csSales, s.csOut, s.csDisc, s.totSales, s.totTx, s.status)
+		if cErr == nil {
+			db.Exec("UPDATE shifts SET sync_status = 'synced' WHERE id = ?", s.id)
+		}
+	}
+
+	// 2. Fetch Pending Cash Logs into memory
+	var cashLogs []pendingCashLog
+	cashRows, err := db.Query("SELECT id, shift_id, type, amount, description, created_at FROM cash_log WHERE sync_status = 'pending'")
+	if err == nil {
+		for cashRows.Next() {
+			var c pendingCashLog
+			if err := cashRows.Scan(&c.id, &c.shiftID, &c.logType, &c.amount, &c.desc, &c.createdAt); err == nil {
+				cashLogs = append(cashLogs, c)
+			}
+		}
+		cashRows.Close()
+	}
+
+	// Push Cash Logs
+	for _, c := range cashLogs {
+		_, cErr := cloudDB.Exec(`INSERT INTO cash_log (id, shift_id, type, amount, description, created_at)
+			VALUES (?, ?, ?, ?, ?, ?)
+			ON CONFLICT(id) DO NOTHING`,
+			c.id, c.shiftID, c.logType, c.amount, c.desc, c.createdAt)
+		if cErr == nil {
+			db.Exec("UPDATE cash_log SET sync_status = 'synced' WHERE id = ?", c.id)
+		}
+	}
+
+	// 3. Fetch Pending Transactions into memory
+	var transactions []pendingTx
+	txRows, err := db.Query(`SELECT id, tx_id, shift_id, total, discount, tax, grand_total, payment, amount_paid, 
+		change_amount, customer_name, member_id, cashier, notes, status, created_at 
+		FROM transactions WHERE sync_status = 'pending'`)
+	if err == nil {
+		for txRows.Next() {
+			var t pendingTx
+			if err := txRows.Scan(&t.id, &t.txID, &t.shiftID, &t.total, &t.discount, &t.tax, &t.grandTotal, &t.payment, &t.amountPaid, &t.changeAmount, &t.customerName, &t.memberID, &t.cashier, &t.notes, &t.status, &t.createdAt); err == nil {
+				transactions = append(transactions, t)
+			}
+		}
+		txRows.Close()
+	}
+
+	// Fetch items for each transaction
+	for i := range transactions {
+		itRows, itErr := db.Query("SELECT product_id, name, qty, price, discount, subtotal, notes FROM tx_items WHERE tx_id = ?", transactions[i].txID)
+		if itErr == nil {
+			for itRows.Next() {
+				var it pendingTxItem
+				if itRows.Scan(&it.pid, &it.name, &it.qty, &it.price, &it.disc, &it.subtotal, &it.itemNotes) == nil {
+					transactions[i].items = append(transactions[i].items, it)
+				}
+			}
+			itRows.Close()
+		}
+	}
+
+	// Push Transactions & Items to Cloud
+	for _, t := range transactions {
+		var shVal interface{} = nil
+		if t.shiftID.Valid {
+			shVal = t.shiftID.Int64
+		}
+		var mVal interface{} = nil
+		if t.memberID.Valid {
+			mVal = t.memberID.Int64
+		}
+
+		_, cErr := cloudDB.Exec(`INSERT INTO transactions (tx_id, shift_id, total, discount, tax, grand_total, payment, amount_paid, change_amount, customer_name, member_id, cashier, notes, status, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(tx_id) DO NOTHING`,
+			t.txID, shVal, t.total, t.discount, t.tax, t.grandTotal, t.payment, t.amountPaid, t.changeAmount, t.customerName, mVal, t.cashier, t.notes, t.status, t.createdAt)
+		if cErr != nil {
+			fmt.Printf("[Sync] Error inserting transaction %s to cloud: %v\n", t.txID, cErr)
+			continue
+		}
+
+		for _, it := range t.items {
+			cloudDB.Exec(`INSERT INTO tx_items (tx_id, product_id, name, qty, price, discount, subtotal, notes)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+				t.txID, it.pid, it.name, it.qty, it.price, it.disc, it.subtotal, it.itemNotes)
+
+			if it.pid > 0 {
+				cloudDB.Exec("UPDATE products SET stock = MAX(0, stock - ?) WHERE id = ?", it.qty, it.pid)
+			}
+		}
+
+		db.Exec("UPDATE transactions SET sync_status = 'synced' WHERE id = ?", t.id)
+		fmt.Printf("[Sync] Transaction %s successfully pushed to Turso Cloud\n", t.txID)
+	}
+
+	// 4. Fetch Pending Inventory Movements into memory
+	var invMovements []pendingInvMovement
+	invRows, err := db.Query(`SELECT id, product_id, movement_type, quantity, stock_before, stock_after, 
+		reference_type, reference_id, source, reason, user, created_at 
+		FROM inventory_movements WHERE sync_status = 'pending'`)
+	if err == nil {
+		for invRows.Next() {
+			var im pendingInvMovement
+			if err := invRows.Scan(&im.id, &im.pid, &im.movType, &im.qty, &im.stBefore, &im.stAfter, &im.refType, &im.refID, &im.source, &im.reason, &im.invUser, &im.createdAt); err == nil {
+				invMovements = append(invMovements, im)
+			}
+		}
+		invRows.Close()
+	}
+
+	// Push Inventory Movements
+	for _, im := range invMovements {
+		_, cErr := cloudDB.Exec(`INSERT INTO inventory_movements (product_id, movement_type, quantity, stock_before, stock_after, reference_type, reference_id, source, reason, user, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			im.pid, im.movType, im.qty, im.stBefore, im.stAfter, im.refType, im.refID, im.source, im.reason, im.invUser, im.createdAt)
+		if cErr == nil {
+			db.Exec("UPDATE inventory_movements SET sync_status = 'synced' WHERE id = ?", im.id)
+		}
+	}
+
+	return nil
+}
