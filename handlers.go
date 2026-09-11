@@ -720,7 +720,8 @@ func handleCloseShift(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		ClosingCash int `json:"closing_cash"`
+		ClosingCash *int   `json:"closing_cash"`
+		Notes       string `json:"notes"`
 	}
 	if err := decodeJSON(w,r, &req); err != nil {
 		jsonResponse(w, map[string]string{"error": "Invalid request"}, 400)
@@ -744,8 +745,8 @@ func handleCloseShift(w http.ResponseWriter, r *http.Request) {
 	expected := shift.OpeningCash + cashSales - cashOut
 	closingCash := expected
 	discrepancy := 0
-	if req.ClosingCash > 0 {
-		closingCash = req.ClosingCash
+	if req.ClosingCash != nil {
+		closingCash = *req.ClosingCash
 		discrepancy = closingCash - expected
 	}
 
@@ -755,15 +756,30 @@ func handleCloseShift(w http.ResponseWriter, r *http.Request) {
 		db.Exec("INSERT INTO cash_log (shift_id,type,amount,description) VALUES (?,?,?,?)",
 			id, "qris_sales", qrisSales, fmt.Sprintf("Penjualan QRIS/Non-Tunai shift %s", shift.ShiftName))
 	}
+	desc := fmt.Sprintf("Closing cash shift %s", shift.ShiftName)
+	if req.Notes != "" {
+		desc = fmt.Sprintf("Closing cash shift %s: %s", shift.ShiftName, req.Notes)
+	}
 	db.Exec("INSERT INTO cash_log (shift_id,type,amount,description) VALUES (?,?,?,?)",
-		id, "closing", closingCash, fmt.Sprintf("Closing cash shift %s", shift.ShiftName))
+		id, "closing", closingCash, desc)
 
 	wsBroadcast(WSMessage{
 		Type: "shift_close",
 		Data: map[string]interface{}{"shift_id": id},
 	})
 
-	jsonResponse(w, map[string]interface{}{"status": "ok", "expected": expected, "closing": closingCash, "discrepancy": discrepancy}, 200)
+	jsonResponse(w, map[string]interface{}{
+		"status":      "ok",
+		"shift_id":    id,
+		"opening":     shift.OpeningCash,
+		"cash_sales":  cashSales,
+		"qris_sales":  qrisSales,
+		"total_sales": totalSales,
+		"total_tx":    totalTx,
+		"expected":    expected,
+		"closing":     closingCash,
+		"discrepancy": discrepancy,
+	}, 200)
 }
 
 func handleCloseShiftSelf(w http.ResponseWriter, r *http.Request) {
@@ -788,7 +804,8 @@ func handleCloseShiftSelf(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		ClosingCash int `json:"closing_cash"`
+		ClosingCash *int   `json:"closing_cash"`
+		Notes       string `json:"notes"`
 	}
 	decodeJSON(w,r, &req)
 
@@ -816,8 +833,8 @@ func handleCloseShiftSelf(w http.ResponseWriter, r *http.Request) {
 	expected := shift.OpeningCash + cashSales - cashOut
 	closingCash := expected
 	discrepancy := 0
-	if req.ClosingCash > 0 {
-		closingCash = req.ClosingCash
+	if req.ClosingCash != nil {
+		closingCash = *req.ClosingCash
 		discrepancy = closingCash - expected
 	}
 
@@ -827,15 +844,30 @@ func handleCloseShiftSelf(w http.ResponseWriter, r *http.Request) {
 		db.Exec("INSERT INTO cash_log (shift_id,type,amount,description) VALUES (?,?,?,?)",
 			id, "qris_sales", qrisSales, fmt.Sprintf("Penjualan QRIS/Non-Tunai shift %s", shift.ShiftName))
 	}
+	desc := fmt.Sprintf("Closing shift %s", shift.ShiftName)
+	if req.Notes != "" {
+		desc = fmt.Sprintf("Closing shift %s: %s", shift.ShiftName, req.Notes)
+	}
 	db.Exec("INSERT INTO cash_log (shift_id,type,amount,description) VALUES (?,?,?,?)",
-		id, "closing", closingCash, fmt.Sprintf("Closing shift %s (auto)", shift.ShiftName))
+		id, "closing", closingCash, desc)
 
 	wsBroadcast(WSMessage{
 		Type: "shift_close",
 		Data: map[string]interface{}{"shift_id": id},
 	})
 
-	jsonResponse(w, map[string]interface{}{"status": "ok", "expected": expected, "closing": closingCash, "discrepancy": discrepancy}, 200)
+	jsonResponse(w, map[string]interface{}{
+		"status":      "ok",
+		"shift_id":    id,
+		"opening":     shift.OpeningCash,
+		"cash_sales":  cashSales,
+		"qris_sales":  qrisSales,
+		"total_sales": totalSales,
+		"total_tx":    totalTx,
+		"expected":    expected,
+		"closing":     closingCash,
+		"discrepancy": discrepancy,
+	}, 200)
 }
 
 // === Cash ===
