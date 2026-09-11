@@ -1716,21 +1716,136 @@ func getActiveDBPath() string {
 
 // === Backup / Restore ===
 func handleBackup(w http.ResponseWriter, r *http.Request) {
-	if db != nil {
-		_, _ = db.Exec("PRAGMA wal_checkpoint(PASSIVE)")
-	}
+	filename := fmt.Sprintf("pos_backup_%s.db", time.Now().Format("20060102_150405"))
 
+	// 1. If physical local database file exists on disk (offline/local PC mode), serve it directly
 	dbPath := getActiveDBPath()
-	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
-		logError("handleBackup", fmt.Errorf("database file not found: %s", dbPath))
-		http.Error(w, "File database tidak ditemukan di server", http.StatusNotFound)
+	if fi, err := os.Stat(dbPath); err == nil && fi.Size() > 0 {
+		if db != nil {
+			_, _ = db.Exec("PRAGMA wal_checkpoint(PASSIVE)")
+		}
+		w.Header().Set("Content-Disposition", "attachment; filename="+filename)
+		w.Header().Set("Content-Type", "application/octet-stream")
+		http.ServeFile(w, r, dbPath)
 		return
 	}
 
-	filename := fmt.Sprintf("pos_backup_%s.db", time.Now().Format("20060102_150405"))
+	// 2. In serverless cloud environment (Vercel with Turso Cloud, no local file on disk),
+	// export the active database into a portable SQLite .db file.
+	if db == nil {
+		http.Error(w, "Database tidak terhubung", http.StatusInternalServerError)
+		return
+	}
+
+	tmpFile := filepath.Join(os.TempDir(), fmt.Sprintf("pos_backup_%d.db", time.Now().UnixNano()))
+	defer os.Remove(tmpFile)
+
+	destDB, err := sql.Open("sqlite", tmpFile)
+	if err != nil {
+		logError("handleBackup open temp db", err)
+		http.Error(w, "Gagal membuat file backup", http.StatusInternalServerError)
+		return
+	}
+	defer destDB.Close()
+
+	// Query schema objects from active database (tables & indices)
+	rows, err := db.Query("SELECT type, name, sql FROM sqlite_master WHERE type IN ('table', 'index') AND name NOT LIKE 'sqlite_%' AND sql IS NOT NULL ORDER BY CASE WHEN type='table' THEN 1 ELSE 2 END")
+	if err != nil {
+		logError("handleBackup query sqlite_master", err)
+		http.Error(w, "Gagal membaca skema database", http.StatusInternalServerError)
+		return
+	}
+
+	type SchemaItem struct {
+		Type string
+		Name string
+		SQL  string
+	}
+	var items []SchemaItem
+	for rows.Next() {
+		var it SchemaItem
+		if err := rows.Scan(&it.Type, &it.Name, &it.SQL); err == nil {
+			items = append(items, it)
+		}
+	}
+	rows.Close()
+
+	// Create tables
+	for _, it := range items {
+		if it.Type == "table" {
+			if _, err := destDB.Exec(it.SQL); err != nil {
+				logError("handleBackup create table "+it.Name, err)
+			}
+		}
+	}
+
+	// Copy data table by table
+	for _, it := range items {
+		if it.Type != "table" {
+			continue
+		}
+		table := it.Name
+		dRows, err := db.Query(fmt.Sprintf("SELECT * FROM %s", table))
+		if err != nil {
+			continue
+		}
+		cols, err := dRows.Columns()
+		dRows.Close()
+		if err != nil || len(cols) == 0 {
+			continue
+		}
+
+		tRows, err := db.Query(fmt.Sprintf("SELECT * FROM %s", table))
+		if err != nil {
+			continue
+		}
+
+		placeholders := make([]string, len(cols))
+		for i := range placeholders {
+			placeholders[i] = "?"
+		}
+		insertSQL := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", table, strings.Join(cols, ","), strings.Join(placeholders, ","))
+
+		tx, err := destDB.Begin()
+		if err != nil {
+			tRows.Close()
+			continue
+		}
+		stmt, err := tx.Prepare(insertSQL)
+		if err != nil {
+			tRows.Close()
+			_ = tx.Rollback()
+			continue
+		}
+
+		for tRows.Next() {
+			vals := make([]interface{}, len(cols))
+			valPtrs := make([]interface{}, len(cols))
+			for i := range vals {
+				valPtrs[i] = &vals[i]
+			}
+			if err := tRows.Scan(valPtrs...); err == nil {
+				stmt.Exec(vals...)
+			}
+		}
+		stmt.Close()
+		tRows.Close()
+		_ = tx.Commit()
+	}
+
+	// Create indices
+	for _, it := range items {
+		if it.Type == "index" {
+			_, _ = destDB.Exec(it.SQL)
+		}
+	}
+
+	// Close destDB before serving so all WAL pages are flushed and lock is released
+	destDB.Close()
+
 	w.Header().Set("Content-Disposition", "attachment; filename="+filename)
 	w.Header().Set("Content-Type", "application/octet-stream")
-	http.ServeFile(w, r, dbPath)
+	http.ServeFile(w, r, tmpFile)
 }
 
 func handleRestore(w http.ResponseWriter, r *http.Request) {
