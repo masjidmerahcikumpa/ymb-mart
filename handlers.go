@@ -360,7 +360,7 @@ func handleAddCashier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := db.Exec("INSERT INTO users (username, password, display_name, role, active, password_changed) VALUES (?, ?, ?, 'kasir', 1, 0)",
+	res, err := db.Exec("INSERT INTO users (username, password, display_name, role, active, password_changed, sync_status) VALUES (?, ?, ?, 'kasir', 1, 0, 'pending')",
 		req.Username, string(hash), req.DisplayName)
 	if err != nil {
 		logError("handleAddCashier insert", err)
@@ -368,6 +368,21 @@ func handleAddCashier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	newID, _ := res.LastInsertId()
+
+	if cloudDB != nil {
+		go func(u, h, d string) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_, err := cloudDB.ExecContext(ctx, `INSERT INTO users (username, password, display_name, role, active, password_changed) 
+				VALUES (?, ?, ?, 'kasir', 1, 0)
+				ON CONFLICT(username) DO UPDATE SET password=excluded.password, display_name=excluded.display_name, role=excluded.role, active=excluded.active, password_changed=excluded.password_changed`,
+				u, h, d)
+			if err == nil {
+				db.Exec("UPDATE users SET sync_status='synced' WHERE username=?", u)
+			}
+		}(req.Username, string(hash), req.DisplayName)
+	}
+	go TriggerSync()
 
 	token := r.Header.Get("Authorization")
 	adminUser, _ := validateSession(token)
@@ -419,12 +434,24 @@ func handleToggleUserStatus(w http.ResponseWriter, r *http.Request) {
 		newActive = 0
 	}
 
-	_, err = db.Exec("UPDATE users SET active = ? WHERE id = ?", newActive, id)
+	_, err = db.Exec("UPDATE users SET active = ?, sync_status = 'pending' WHERE id = ?", newActive, id)
 	if err != nil {
 		logError("handleToggleUserStatus", err)
 		jsonResponse(w, map[string]string{"error": "Gagal memperbarui status pengguna"}, 500)
 		return
 	}
+
+	if cloudDB != nil {
+		go func(u string, act int) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_, err := cloudDB.ExecContext(ctx, "UPDATE users SET active=? WHERE username=?", act, u)
+			if err == nil {
+				db.Exec("UPDATE users SET sync_status='synced' WHERE username=?", u)
+			}
+		}(username, newActive)
+	}
+	go TriggerSync()
 
 	token := r.Header.Get("Authorization")
 	adminUser, _ := validateSession(token)
@@ -476,12 +503,24 @@ func handleResetUserPIN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = db.Exec("UPDATE users SET password = ?, password_changed = 0 WHERE id = ?", string(hash), id)
+	_, err = db.Exec("UPDATE users SET password = ?, password_changed = 0, sync_status = 'pending' WHERE id = ?", string(hash), id)
 	if err != nil {
 		logError("handleResetUserPIN", err)
 		jsonResponse(w, map[string]string{"error": "Gagal mereset PIN pengguna"}, 500)
 		return
 	}
+
+	if cloudDB != nil {
+		go func(u, h string) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_, err := cloudDB.ExecContext(ctx, "UPDATE users SET password=?, password_changed=0 WHERE username=?", h, u)
+			if err == nil {
+				db.Exec("UPDATE users SET sync_status='synced' WHERE username=?", u)
+			}
+		}(username, string(hash))
+	}
+	go TriggerSync()
 
 	token := r.Header.Get("Authorization")
 	adminUser, _ := validateSession(token)
@@ -2341,7 +2380,23 @@ func handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	newHash, _ := bcrypt.GenerateFromPassword([]byte(req.NewPassword), 10)
-	db.Exec("UPDATE users SET password=?, password_changed=1 WHERE username=?", string(newHash), req.Username)
+	db.Exec("UPDATE users SET password=?, password_changed=1, sync_status='pending' WHERE username=?", string(newHash), req.Username)
+
+	if cloudDB != nil {
+		go func(u, h string) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_, err := cloudDB.ExecContext(ctx, "UPDATE users SET password=?, password_changed=1 WHERE username=?", h, u)
+			if err == nil {
+				db.Exec("UPDATE users SET sync_status='synced' WHERE username=?", u)
+				fmt.Printf("[Auth] Password change for %s pushed immediately to Turso Cloud\n", u)
+			} else {
+				fmt.Printf("[Auth] Failed to push password change to cloud immediately: %v\n", err)
+			}
+		}(req.Username, string(newHash))
+	}
+	go TriggerSync()
+
 	auditLog("password_change", "user", req.Username, req.Username, "Password changed")
 	jsonResponse(w, map[string]interface{}{"status": "ok", "message": "Password berhasil diubah"}, 200)
 }

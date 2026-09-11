@@ -82,11 +82,12 @@ func GetSyncStatus() SyncStatus {
 
 	// Update pending count from local DB
 	if db != nil {
-		var txCount, shiftCount, cashCount int
+		var txCount, shiftCount, cashCount, userCount int
 		db.QueryRow("SELECT COUNT(*) FROM transactions WHERE sync_status = 'pending'").Scan(&txCount)
 		db.QueryRow("SELECT COUNT(*) FROM shifts WHERE sync_status = 'pending'").Scan(&shiftCount)
 		db.QueryRow("SELECT COUNT(*) FROM cash_log WHERE sync_status = 'pending'").Scan(&cashCount)
-		currentSyncStatus.PendingCount = txCount + shiftCount + cashCount
+		db.QueryRow("SELECT COUNT(*) FROM users WHERE sync_status = 'pending'").Scan(&userCount)
+		currentSyncStatus.PendingCount = txCount + shiftCount + cashCount + userCount
 	}
 
 	return currentSyncStatus
@@ -187,18 +188,26 @@ func pullMasterDataFromCloud() error {
 	}
 
 	// B. Pull Users
-	uRows, err := cloudDB.Query("SELECT id, username, password, display_name, role, active, password_changed FROM users")
+	uRows, err := cloudDB.Query("SELECT username, password, display_name, role, active, password_changed FROM users")
 	if err == nil {
 		defer uRows.Close()
 		for uRows.Next() {
-			var id, active, pwdChanged int
+			var active, pwdChanged int
 			var uname, pwd, disp, role string
-			if err := uRows.Scan(&id, &uname, &pwd, &disp, &role, &active, &pwdChanged); err == nil {
-				db.Exec(`INSERT INTO users (id, username, password, display_name, role, active, password_changed) 
-					VALUES (?, ?, ?, ?, ?, ?, ?)
-					ON CONFLICT(id) DO UPDATE SET username=excluded.username, password=excluded.password, 
-					display_name=excluded.display_name, role=excluded.role, active=excluded.active, password_changed=excluded.password_changed`,
-					id, uname, pwd, disp, role, active, pwdChanged)
+			if err := uRows.Scan(&uname, &pwd, &disp, &role, &active, &pwdChanged); err == nil {
+				// Protect local user changes (such as local password change) from being overwritten
+				var localSyncStatus string
+				db.QueryRow("SELECT sync_status FROM users WHERE username = ?", uname).Scan(&localSyncStatus)
+				if localSyncStatus == "pending" {
+					continue
+				}
+
+				db.Exec(`INSERT INTO users (username, password, display_name, role, active, password_changed, sync_status) 
+					VALUES (?, ?, ?, ?, ?, ?, 'synced')
+					ON CONFLICT(username) DO UPDATE SET password=excluded.password, 
+					display_name=excluded.display_name, role=excluded.role, active=excluded.active, 
+					password_changed=excluded.password_changed, sync_status='synced'`,
+					uname, pwd, disp, role, active, pwdChanged)
 			}
 		}
 	}
@@ -289,7 +298,8 @@ type pendingTxItem struct {
 
 type pendingTx struct {
 	id, total, discount, tax, grandTotal, amountPaid, changeAmount int
-	shiftID, memberID sql.NullInt64
+	shiftID sql.NullInt64
+	memberID sql.NullString
 	txID, payment, customerName, cashier, notes, status, createdAt string
 	items []pendingTxItem
 }
@@ -302,6 +312,33 @@ type pendingInvMovement struct {
 func pushLocalTransactionsToCloud() error {
 	if cloudDB == nil || db == nil {
 		return nil
+	}
+
+	// 0. Fetch and Push Pending Users (passwords, PIN resets, status, new users)
+	var pendingUsers []User
+	userRows, err := db.Query("SELECT id, username, password, display_name, role, active, password_changed FROM users WHERE sync_status = 'pending'")
+	if err == nil {
+		for userRows.Next() {
+			var u User
+			if err := userRows.Scan(&u.ID, &u.Username, &u.Password, &u.DisplayName, &u.Role, &u.Active, &u.PasswordChanged); err == nil {
+				pendingUsers = append(pendingUsers, u)
+			}
+		}
+		userRows.Close()
+	}
+
+	for _, u := range pendingUsers {
+		_, cErr := cloudDB.Exec(`INSERT INTO users (username, password, display_name, role, active, password_changed)
+			VALUES (?, ?, ?, ?, ?, ?)
+			ON CONFLICT(username) DO UPDATE SET password=excluded.password, display_name=excluded.display_name,
+			role=excluded.role, active=excluded.active, password_changed=excluded.password_changed`,
+			u.Username, u.Password, u.DisplayName, u.Role, u.Active, u.PasswordChanged)
+		if cErr == nil {
+			db.Exec("UPDATE users SET sync_status = 'synced' WHERE id = ?", u.ID)
+			fmt.Printf("[Sync] User %s successfully pushed to Turso Cloud\n", u.Username)
+		} else {
+			fmt.Printf("[Sync] Error pushing user %s to cloud: %v\n", u.Username, cErr)
+		}
 	}
 
 	// 1. Fetch Pending Shifts into memory
@@ -396,8 +433,8 @@ func pushLocalTransactionsToCloud() error {
 			shVal = t.shiftID.Int64
 		}
 		var mVal interface{} = nil
-		if t.memberID.Valid {
-			mVal = t.memberID.Int64
+		if t.memberID.Valid && t.memberID.String != "" {
+			mVal = t.memberID.String
 		}
 
 		_, cErr := cloudDB.Exec(`INSERT INTO transactions (tx_id, shift_id, total, discount, tax, grand_total, payment, amount_paid, change_amount, customer_name, member_id, cashier, notes, status, created_at)
