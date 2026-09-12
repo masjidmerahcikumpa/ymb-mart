@@ -400,7 +400,20 @@ tr:hover td{background:#f8fafc}
 
   <!-- CASH -->
   <div id="panel-cash" class="card hidden">
-    <h2 style="font-size:16px;font-weight:700;color:#0f172a;margin-bottom:12px">Arus Kas Laci Kasir</h2>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px">
+      <div>
+        <h2 style="font-size:16px;font-weight:700;color:#0f172a">Arus Kas Laci Kasir</h2>
+        <p style="font-size:12px;color:#64748b;margin-top:2px">Catatan riwayat mutasi fisik uang di laci kasir (opening, closing, QRIS, suntik modal, setoran drop).</p>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" style="background:#059669;color:#fff;font-weight:600;display:inline-flex;align-items:center;gap:6px" onclick="showCashModal('cash_in')">
+          ➕ Catat Cash In
+        </button>
+        <button class="btn" style="background:#dc2626;color:#fff;font-weight:600;display:inline-flex;align-items:center;gap:6px" onclick="showCashModal('cash_drop')">
+          ➖ Catat Cash Drop
+        </button>
+      </div>
+    </div>
     <table><thead><tr><th class="sortable" onclick="sortTable('cash-table',0)">Waktu</th><th class="sortable" onclick="sortTable('cash-table',1)">Shift</th><th class="sortable" onclick="sortTable('cash-table',2)">Tipe</th><th class="sortable" onclick="sortTable('cash-table',3,'num')" style="text-align:right">Jumlah</th><th>Keterangan</th></tr></thead><tbody id="cash-table"></tbody></table>
   </div>
 
@@ -874,6 +887,50 @@ tr:hover td{background:#f8fafc}
   <div class="modal-actions">
     <button class="btn btn-primary" onclick="submitChangeAdminPassword()">Simpan Password</button>
     <button class="btn" style="background:#e2e8f0;color:#475569" onclick="closeModal('admin-password-modal')">Batal</button>
+  </div>
+</div></div>
+
+<!-- Cash Movement Modal (Cash In / Cash Drop) -->
+<div id="cash-movement-modal" class="modal-bg hidden"><div class="modal" style="width:420px">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+    <span id="cm-icon" style="font-size:24px">➕</span>
+    <div>
+      <h3 id="cm-title" style="font-size:16px;font-weight:700">Catat Kas Masuk (Cash In)</h3>
+      <p id="cm-desc" style="font-size:12px;color:#64748b">Suntik uang kas/kembalian ke laci kasir.</p>
+    </div>
+  </div>
+  <input type="hidden" id="cm-type" value="cash_in">
+  
+  <div class="form-group" style="margin-top:14px">
+    <label>Pilih Shift Aktif Kasir *</label>
+    <select id="cm-shift-id" style="width:100%;padding:9px 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;font-weight:600;color:#0f172a">
+      <option value="">Memuat shift aktif...</option>
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label>Nominal (Rp) *</label>
+    <input id="cm-amount" type="number" min="1" placeholder="Contoh: 100000" style="font-size:18px;font-weight:700;color:#0f172a" oninput="updateCmPreview()">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+      <button type="button" class="btn btn-ghost btn-sm" style="border:1px solid #cbd5e1;font-size:11px" onclick="setCmQuickAmount(50000)">50rb</button>
+      <button type="button" class="btn btn-ghost btn-sm" style="border:1px solid #cbd5e1;font-size:11px" onclick="setCmQuickAmount(100000)">100rb</button>
+      <button type="button" class="btn btn-ghost btn-sm" style="border:1px solid #cbd5e1;font-size:11px" onclick="setCmQuickAmount(200000)">200rb</button>
+      <button type="button" class="btn btn-ghost btn-sm" style="border:1px solid #cbd5e1;font-size:11px" onclick="setCmQuickAmount(500000)">500rb</button>
+      <button type="button" class="btn btn-ghost btn-sm" style="border:1px solid #cbd5e1;font-size:11px" onclick="setCmQuickAmount(1000000)">1 Jt</button>
+    </div>
+    <div id="cm-amount-preview" style="font-size:12px;font-weight:600;color:#059669;margin-top:4px">Rp 0</div>
+  </div>
+
+  <div class="form-group">
+    <label>Keterangan / Alasan *</label>
+    <input id="cm-notes" placeholder="Contoh: Suntik uang kembalian pecahan kecil">
+  </div>
+
+  <div id="cm-error" style="color:#dc2626;font-size:12px;margin-bottom:10px;display:none"></div>
+
+  <div class="modal-actions">
+    <button class="btn btn-primary" id="cm-submit-btn" onclick="submitCashMovement()">Simpan</button>
+    <button class="btn" style="background:#e2e8f0;color:#475569" onclick="closeModal('cash-movement-modal')">Batal</button>
   </div>
 </div></div>
 
@@ -1808,13 +1865,149 @@ async function loadCash(){
       logs=logs.concat(l);
     }catch(e){}
   }
-  document.getElementById("cash-table").innerHTML=logs.sort((a,b)=>b.id-a.id).map(l=>`<tr>
-    <td style="font-size:11px">${formatDate(l.created_at)}</td>
-    <td>#${l.shift_id}</td>
-    <td><span class="badge badge-${l.type==='opening'?'blue':l.type==='closing'?'green':l.type==='qris_sales'?'purple':l.type==='cash_drop'?'red':'yellow'}">${l.type}</span></td>
-    <td style="text-align:right;font-weight:700">Rp${l.amount.toLocaleString("id-ID")}</td>
-    <td style="font-size:11px;color:#64748b">${esc(l.description)}</td>
-  </tr>`).join("");
+  document.getElementById("cash-table").innerHTML=logs.sort((a,b)=>b.id-a.id).map(l=>{
+    let typeBadge = `<span class="badge badge-yellow">${esc(l.type)}</span>`;
+    let amtDisplay = `Rp${l.amount.toLocaleString("id-ID")}`;
+    let amtColor = "#0f172a";
+
+    if(l.type === 'cash_in'){
+      typeBadge = `<span class="badge" style="background:#dcfce7;color:#166534;font-weight:700">➕ Cash In</span>`;
+      amtDisplay = `+ Rp${l.amount.toLocaleString("id-ID")}`;
+      amtColor = "#16a34a";
+    } else if(l.type === 'cash_drop'){
+      typeBadge = `<span class="badge" style="background:#fee2e2;color:#991b1b;font-weight:700">➖ Cash Drop</span>`;
+      amtDisplay = `- Rp${l.amount.toLocaleString("id-ID")}`;
+      amtColor = "#dc2626";
+    } else if(l.type === 'opening'){
+      typeBadge = `<span class="badge badge-blue">Opening</span>`;
+    } else if(l.type === 'closing'){
+      typeBadge = `<span class="badge badge-green">Closing</span>`;
+    } else if(l.type === 'qris_sales'){
+      typeBadge = `<span class="badge badge-purple">QRIS Sales</span>`;
+    }
+
+    return `<tr>
+      <td style="font-size:11px">${formatDate(l.created_at)}</td>
+      <td>#${l.shift_id}</td>
+      <td>${typeBadge}</td>
+      <td style="text-align:right;font-weight:700;color:${amtColor}">${amtDisplay}</td>
+      <td style="font-size:11px;color:#64748b">${esc(l.description)}</td>
+    </tr>`;
+  }).join("");
+}
+
+let _activeShiftsForCash = [];
+
+async function showCashModal(type){
+  const isDrop = type === 'cash_drop';
+  document.getElementById("cm-type").value = type;
+  document.getElementById("cm-icon").textContent = isDrop ? "➖" : "➕";
+  document.getElementById("cm-title").textContent = isDrop ? "Catat Kas Keluar (Cash Drop)" : "Catat Kas Masuk (Cash In)";
+  document.getElementById("cm-desc").textContent = isDrop 
+    ? "Setor uang kas fisik dari laci kasir ke brankas atau rekening bank." 
+    : "Suntik uang modal / pecahan uang kembalian ke laci kasir.";
+  document.getElementById("cm-notes").placeholder = isDrop 
+    ? "Contoh: Setor uang lebih ke brankas toko" 
+    : "Contoh: Suntik modal receh pecahan kecil";
+  document.getElementById("cm-amount").value = "";
+  document.getElementById("cm-amount-preview").textContent = "Rp 0";
+  document.getElementById("cm-error").style.display = "none";
+  
+  const btn = document.getElementById("cm-submit-btn");
+  if(isDrop){
+    btn.style.background = "#dc2626";
+    btn.textContent = "Simpan Cash Drop";
+  } else {
+    btn.style.background = "#059669";
+    btn.textContent = "Simpan Cash In";
+  }
+
+  // Load active shifts
+  const sel = document.getElementById("cm-shift-id");
+  sel.innerHTML = '<option value="">Memuat shift aktif...</option>';
+  try {
+    const r = await authFetch("/api/shifts?status=open");
+    _activeShiftsForCash = await r.json();
+    if(!_activeShiftsForCash || _activeShiftsForCash.length === 0){
+      sel.innerHTML = '<option value="">-- Tidak ada shift kasir yang sedang aktif --</option>';
+      document.getElementById("cm-error").textContent = "Peringatan: Saat ini belum ada shift kasir yang buka (open). Buka shift terlebih dahulu di kasir.";
+      document.getElementById("cm-error").style.display = "block";
+    } else {
+      sel.innerHTML = _activeShiftsForCash.map(s => 
+        `<option value="${s.id}">#${s.id} - ${esc(s.shift_name)} (Kasir: ${esc(s.cashier_name || s.cashier)})</option>`
+      ).join("");
+    }
+  } catch(e){
+    sel.innerHTML = '<option value="">Gagal memuat shift</option>';
+  }
+
+  document.getElementById("cash-movement-modal").classList.remove("hidden");
+  setTimeout(() => document.getElementById("cm-amount").focus(), 100);
+}
+
+function setCmQuickAmount(val){
+  document.getElementById("cm-amount").value = val;
+  updateCmPreview();
+}
+
+function updateCmPreview(){
+  const val = parseInt(document.getElementById("cm-amount").value) || 0;
+  const isDrop = document.getElementById("cm-type").value === 'cash_drop';
+  const prev = document.getElementById("cm-amount-preview");
+  prev.style.color = isDrop ? "#dc2626" : "#059669";
+  prev.textContent = (isDrop ? "- Rp " : "+ Rp ") + val.toLocaleString("id-ID");
+}
+
+async function submitCashMovement(){
+  const type = document.getElementById("cm-type").value;
+  const shiftId = parseInt(document.getElementById("cm-shift-id").value);
+  const amount = parseInt(document.getElementById("cm-amount").value) || 0;
+  const notes = document.getElementById("cm-notes").value.trim();
+  const errDiv = document.getElementById("cm-error");
+
+  if(!shiftId){
+    errDiv.textContent = "Pilih shift aktif terlebih dahulu!";
+    errDiv.style.display = "block";
+    return;
+  }
+  if(amount <= 0){
+    errDiv.textContent = "Nominal harus lebih besar dari Rp 0!";
+    errDiv.style.display = "block";
+    document.getElementById("cm-amount").focus();
+    return;
+  }
+
+  errDiv.style.display = "none";
+  const endpoint = type === 'cash_drop' ? "/api/cash/drop" : "/api/cash/in";
+  try {
+    const r = await authFetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        shift_id: shiftId,
+        amount: amount,
+        description: notes || (type === 'cash_drop' ? "Cash drop ke bank/brankas" : "Suntikan modal/uang kembalian")
+      })
+    });
+    const res = await r.json();
+    if(!r.ok){
+      errDiv.textContent = res.error || "Gagal menyimpan transaksi kas";
+      errDiv.style.display = "block";
+      return;
+    }
+    closeModal("cash-movement-modal");
+    Swal.fire({
+      icon: "success",
+      title: type === 'cash_drop' ? "Cash Drop Berhasil!" : "Cash In Berhasil!",
+      text: `Mutasi ${type === 'cash_drop' ? 'Cash Drop' : 'Cash In'} sebesar Rp ${amount.toLocaleString('id-ID')} berhasil dicatat.`,
+      timer: 2000,
+      showConfirmButton: false
+    });
+    loadCash();
+  } catch(e){
+    errDiv.textContent = "Terjadi kesalahan: " + e.message;
+    errDiv.style.display = "block";
+  }
 }
 
 // USERS / MANAJEMEN AKUN

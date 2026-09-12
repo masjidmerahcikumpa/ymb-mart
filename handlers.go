@@ -775,13 +775,14 @@ func handleCloseShift(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var cashSales, qrisSales, cashOut, totalSales, totalTx int
+	var cashSales, qrisSales, cashOut, cashIn, totalSales, totalTx int
 	db.QueryRow("SELECT COALESCE(SUM(grand_total),0) FROM transactions WHERE shift_id=? AND payment='CASH' AND status='completed'", id).Scan(&cashSales)
 	db.QueryRow("SELECT COALESCE(SUM(grand_total),0) FROM transactions WHERE shift_id=? AND payment!='CASH' AND status='completed'", id).Scan(&qrisSales)
-	db.QueryRow("SELECT COALESCE(SUM(amount),0) FROM cash_log WHERE shift_id=? AND type='cash_out'", id).Scan(&cashOut)
+	db.QueryRow("SELECT COALESCE(SUM(amount),0) FROM cash_log WHERE shift_id=? AND (type='cash_drop' OR type='cash_out')", id).Scan(&cashOut)
+	db.QueryRow("SELECT COALESCE(SUM(amount),0) FROM cash_log WHERE shift_id=? AND type='cash_in'", id).Scan(&cashIn)
 	db.QueryRow("SELECT COALESCE(SUM(grand_total),0), COUNT(*) FROM transactions WHERE shift_id=? AND status='completed'", id).Scan(&totalSales, &totalTx)
 
-	expected := shift.OpeningCash + cashSales - cashOut
+	expected := shift.OpeningCash + cashSales + cashIn - cashOut
 	closingCash := expected
 	discrepancy := 0
 	if req.ClosingCash != nil {
@@ -864,13 +865,14 @@ func handleCloseShiftSelf(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var cashSales, qrisSales, cashOut, totalSales, totalTx int
+	var cashSales, qrisSales, cashOut, cashIn, totalSales, totalTx int
 	db.QueryRow("SELECT COALESCE(SUM(grand_total),0) FROM transactions WHERE shift_id=? AND payment='CASH' AND status='completed'", id).Scan(&cashSales)
 	db.QueryRow("SELECT COALESCE(SUM(grand_total),0) FROM transactions WHERE shift_id=? AND payment!='CASH' AND status='completed'", id).Scan(&qrisSales)
-	db.QueryRow("SELECT COALESCE(SUM(amount),0) FROM cash_log WHERE shift_id=? AND type='cash_out'", id).Scan(&cashOut)
+	db.QueryRow("SELECT COALESCE(SUM(amount),0) FROM cash_log WHERE shift_id=? AND (type='cash_drop' OR type='cash_out')", id).Scan(&cashOut)
+	db.QueryRow("SELECT COALESCE(SUM(amount),0) FROM cash_log WHERE shift_id=? AND type='cash_in'", id).Scan(&cashIn)
 	db.QueryRow("SELECT COALESCE(SUM(grand_total),0), COUNT(*) FROM transactions WHERE shift_id=? AND status='completed'", id).Scan(&totalSales, &totalTx)
 
-	expected := shift.OpeningCash + cashSales - cashOut
+	expected := shift.OpeningCash + cashSales + cashIn - cashOut
 	closingCash := expected
 	discrepancy := 0
 	if req.ClosingCash != nil {
@@ -918,11 +920,29 @@ func handleCashDrop(w http.ResponseWriter, r *http.Request) {
 		Amount      int    `json:"amount"`
 		Description string `json:"description"`
 	}
-	decodeJSON(w,r, &req)
-	if req.Description == "" {
-		req.Description = "Cash drop ke bank"
+	decodeJSON(w, r, &req)
+	if req.ShiftID <= 0 {
+		jsonResponse(w, map[string]string{"error": "Shift ID tidak valid"}, 400)
+		return
 	}
-	db.Exec("INSERT INTO cash_log (shift_id,type,amount,description) VALUES (?,?,?,?)", req.ShiftID, "cash_drop", req.Amount, req.Description)
+	if req.Amount <= 0 {
+		jsonResponse(w, map[string]string{"error": "Nominal cash drop harus lebih besar dari 0"}, 400)
+		return
+	}
+	if req.Description == "" {
+		req.Description = "Cash drop ke bank / brankas"
+	}
+	_, err := db.Exec("INSERT INTO cash_log (shift_id,type,amount,description,sync_status) VALUES (?,?,?,?,'pending')", req.ShiftID, "cash_drop", req.Amount, req.Description)
+	if err != nil {
+		logError("handleCashDrop", err)
+		jsonResponse(w, map[string]string{"error": "Gagal mencatat cash drop"}, 500)
+		return
+	}
+	go TriggerSync()
+	wsBroadcast(WSMessage{
+		Type: "cash_update",
+		Data: map[string]interface{}{"shift_id": req.ShiftID, "type": "cash_drop", "amount": req.Amount, "desc": req.Description},
+	})
 	jsonResponse(w, map[string]string{"status": "ok"}, 200)
 }
 
@@ -932,8 +952,29 @@ func handleCashIn(w http.ResponseWriter, r *http.Request) {
 		Amount      int    `json:"amount"`
 		Description string `json:"description"`
 	}
-	decodeJSON(w,r, &req)
-	db.Exec("INSERT INTO cash_log (shift_id,type,amount,description) VALUES (?,?,?,?)", req.ShiftID, "cash_in", req.Amount, req.Description)
+	decodeJSON(w, r, &req)
+	if req.ShiftID <= 0 {
+		jsonResponse(w, map[string]string{"error": "Shift ID tidak valid"}, 400)
+		return
+	}
+	if req.Amount <= 0 {
+		jsonResponse(w, map[string]string{"error": "Nominal cash in harus lebih besar dari 0"}, 400)
+		return
+	}
+	if req.Description == "" {
+		req.Description = "Suntikan modal / uang kembalian"
+	}
+	_, err := db.Exec("INSERT INTO cash_log (shift_id,type,amount,description,sync_status) VALUES (?,?,?,?,'pending')", req.ShiftID, "cash_in", req.Amount, req.Description)
+	if err != nil {
+		logError("handleCashIn", err)
+		jsonResponse(w, map[string]string{"error": "Gagal mencatat cash in"}, 500)
+		return
+	}
+	go TriggerSync()
+	wsBroadcast(WSMessage{
+		Type: "cash_update",
+		Data: map[string]interface{}{"shift_id": req.ShiftID, "type": "cash_in", "amount": req.Amount, "desc": req.Description},
+	})
 	jsonResponse(w, map[string]string{"status": "ok"}, 200)
 }
 
