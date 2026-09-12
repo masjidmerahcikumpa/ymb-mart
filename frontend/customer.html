@@ -434,11 +434,17 @@ body {
 <!-- RIGHT: Transaksi Belanja (30%) -->
 <div class="right">
   <div class="r-header">
-    <div class="r-header-top">
-      <h2 class="r-store-title" id="store-name-header"><img src="/logo.png" alt="Logo YMB" style="width:28px;height:28px;object-fit:contain;background:#ffffff;border-radius:6px;padding:1.5px;vertical-align:middle;margin-right:6px"> YMB<span>Mart</span></h2>
-      <div class="r-clock" id="clock">--:--:--</div>
+    <div class="r-header-top" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <div style="display:flex;align-items:center;gap:12px;min-width:0">
+        <img src="/logo.png" alt="Logo YMB" id="customer-store-logo" style="width:62px;height:62px;object-fit:contain;background:#ffffff;border-radius:50%;padding:4px;box-shadow:0 6px 18px rgba(0,0,0,0.4),0 0 12px rgba(212,175,55,0.25);border:2px solid rgba(212,175,55,0.45);flex-shrink:0">
+        <div style="min-width:0">
+          <h2 class="r-store-title" id="store-name-header" style="font-size:20px;font-weight:900;letter-spacing:-0.4px;margin:0">YMB<span>Mart</span></h2>
+          <div style="font-size:11.5px;color:#94a3b8;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Masjid Jami' Baiturrahman</div>
+        </div>
+      </div>
+      <div class="r-clock" id="clock" style="font-size:16px;font-weight:800;color:var(--gold);flex-shrink:0">--:--:--</div>
     </div>
-    <div class="r-header-sub">
+    <div class="r-header-sub" style="margin-top:6px">
       <span id="kasir-display" style="color:#d4af37;font-weight:700">Kasir: --</span>
       <span id="member-display" style="color:#94a3b8"></span>
     </div>
@@ -476,6 +482,9 @@ body {
 <!-- CUSTOMER QRIS SCAN OVERLAY -->
 <div id="customer-qris-overlay" style="display:none;position:fixed;inset:0;background:rgba(9,13,22,0.92);backdrop-filter:blur(10px);z-index:9999;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center">
   <div style="background:#ffffff;border-radius:24px;padding:34px 38px;max-width:480px;width:92%;box-shadow:0 25px 60px rgba(0,0,0,0.6);border:2px solid #d4af37;animation:slideIn 0.3s ease-out">
+    <div style="text-align:center;margin-bottom:12px">
+      <img src="/logo.png" alt="Logo YMB" style="width:68px;height:68px;object-fit:contain;background:#ffffff;border-radius:50%;padding:4px;box-shadow:0 4px 16px rgba(0,0,0,0.12);border:2px solid #d4af37">
+    </div>
     <div style="display:inline-flex;align-items:center;gap:8px;background:#fdf2f4;padding:6px 14px;border-radius:20px;border:1px solid #f8c9d2;margin-bottom:12px">
       <span style="font-size:16px">⚡</span>
       <span style="font-size:13px;font-weight:800;color:#8b1538;text-transform:uppercase;letter-spacing:0.5px">Pembayaran QRIS</span>
@@ -533,6 +542,7 @@ function renderCarousel(){
   var dots = document.getElementById("ad-dots");
   if(!_adImages.length){
     el.innerHTML = '<div class="ad-fallback" id="ad-fallback">' +
+      '<div style="margin-bottom:16px"><img src="/logo.png" alt="Logo YMB" style="width:96px;height:96px;object-fit:contain;background:#ffffff;border-radius:50%;padding:6px;box-shadow:0 8px 24px rgba(0,0,0,0.4);border:2px solid rgba(212,175,55,0.4)"></div>' +
       '<div class="ad-badge"><span>✨ Promo Pilihan YMB Mart</span></div>' +
       '<h2 id="ad-title">Belanja Berkah & Hemat Setiap Hari</h2>' +
       '<p id="ad-desc">Dapatkan aneka produk kebutuhan harian dengan harga terjangkau dan kualitas terjamin di Masjid Jami\' Baiturrahman.</p>' +
@@ -562,7 +572,7 @@ async function loadStoreName(){
     var r = await fetch("/api/settings");
     var s = await r.json();
     if(s.store_name){
-      document.getElementById("store-name-header").innerHTML = '<img src="/logo.png" alt="Logo YMB" style="width:28px;height:28px;object-fit:contain;background:#ffffff;border-radius:6px;padding:1.5px;vertical-align:middle;margin-right:6px"> ' + esc(s.store_name);
+      document.getElementById("store-name-header").textContent = s.store_name;
     }
   } catch(e){}
 }
