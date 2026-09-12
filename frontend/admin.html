@@ -43,7 +43,7 @@ body{background:var(--canvas-bg);color:var(--text-main);min-height:100vh;overflo
 .sidebar-scroll::-webkit-scrollbar-thumb{background:#334155;border-radius:2px}
 
 /* BRAND HEADER */
-.brand-box{padding:18px 20px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--sidebar-border);background:#0b1120}
+.brand-box{padding:18px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--sidebar-border);background:#0b1120}
 .brand-badge{width:38px;height:38px;background:var(--primary);border:1.5px solid var(--secondary);color:#fff;font-weight:800;font-size:13px;border-radius:9px;display:flex;align-items:center;justify-content:center;letter-spacing:.5px;flex-shrink:0}
 .brand-name{color:#ffffff;font-weight:800;font-size:14px;letter-spacing:.5px;line-height:1.2}
 .brand-sub{color:var(--secondary);font-size:11px;font-weight:600;letter-spacing:.2px;line-height:1.2;margin-top:2px}
@@ -149,19 +149,207 @@ tr:hover td{background:#f8fafc}
 .sort-desc::after{content:"\2193";color:var(--primary)}
 .table-responsive{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
 
+/* HAMBURGER & SIDEBAR TOGGLE */
+.btn-hamburger{
+  background:transparent;
+  border:1px solid #cbd5e1;
+  border-radius:8px;
+  width:34px;
+  height:34px;
+  cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  color:#334155;
+  transition:all .15s ease;
+  flex-shrink:0;
+  margin-right:6px;
+}
+.btn-hamburger:hover{
+  background:#f1f5f9;
+  color:#0f172a;
+  border-color:#94a3b8;
+}
+.btn-hamburger svg{
+  width:18px;
+  height:18px;
+  stroke:currentColor;
+  stroke-width:2.2;
+  fill:none;
+}
+.btn-sidebar-close{
+  background:rgba(255,255,255,0.06);
+  border:1px solid rgba(255,255,255,0.12);
+  color:#94a3b8;
+  cursor:pointer;
+  width:30px;
+  height:30px;
+  border-radius:7px;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  margin-left:auto;
+  flex-shrink:0;
+  transition:all .15s;
+}
+.btn-sidebar-close:hover{
+  background:rgba(220,38,38,0.25);
+  color:#f87171;
+  border-color:rgba(220,38,38,0.4);
+}
+.btn-sidebar-close svg{
+  width:16px;
+  height:16px;
+  stroke:currentColor;
+  stroke-width:2.2;
+  fill:none;
+}
+
+.sidebar-backdrop{
+  position:fixed;
+  inset:0;
+  background:rgba(15,23,42,0.6);
+  backdrop-filter:blur(3px);
+  -webkit-backdrop-filter:blur(3px);
+  z-index:90;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .25s ease;
+}
+.sidebar-backdrop.show{
+  opacity:1;
+  pointer-events:auto;
+}
+
+/* SIDEBAR COLLAPSIBLE TRANSITIONS */
+.app-sidebar{
+  width:260px;
+  min-width:260px;
+  background:var(--sidebar-bg);
+  border-right:1px solid var(--sidebar-border);
+  display:flex;
+  flex-direction:column;
+  height:100vh;
+  position:sticky;
+  top:0;
+  z-index:50;
+  transition:margin-left .25s cubic-bezier(0.4, 0, 0.2, 1), transform .25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media(min-width:901px){
+  body.sidebar-collapsed .app-sidebar{
+    margin-left:-260px;
+  }
+}
+
 @media(max-width:1200px){
   .dash-kpi-grid{grid-template-columns:repeat(3,1fr)}
   .dash-grid-2col{grid-template-columns:1fr}
 }
+
+/* Tablet & Mobile (<= 900px) */
 @media(max-width:900px){
-  .app-sidebar{width:220px;min-width:220px}
+  .app-sidebar{
+    position:fixed;
+    top:0;
+    left:0;
+    bottom:0;
+    height:100vh;
+    width:280px;
+    min-width:280px;
+    z-index:100;
+    transform:translateX(-100%);
+    box-shadow:none;
+  }
+  body.sidebar-mobile-open .app-sidebar{
+    transform:translateX(0);
+    box-shadow:12px 0 35px rgba(0,0,0,0.5);
+  }
+  .btn-sidebar-close{
+    display:inline-flex;
+  }
+  .app-topbar{
+    padding:0 16px;
+  }
+  .topbar-clock{
+    display:none;
+  }
   .dash-kpi-grid{grid-template-columns:repeat(2,1fr)}
   .dash-grid-halves{grid-template-columns:1fr}
 }
+
+/* Small Phones (<= 640px) */
 @media(max-width:640px){
-  .app-layout{flex-direction:column}
-  .app-sidebar{width:100%;height:auto;position:relative}
-  .dash-kpi-grid{grid-template-columns:1fr}
+  .app-topbar{
+    height:54px;
+    padding:0 10px;
+  }
+  .topbar-left{
+    gap:6px;
+    font-size:12px;
+    min-width:0;
+  }
+  .topbar-brand-crumb, .topbar-sep{
+    display:none;
+  }
+  .topbar-current-crumb{
+    font-size:13px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    max-width:120px;
+  }
+  .topbar-right{
+    gap:6px;
+  }
+  .topbar-right .btn span{
+    display:none;
+  }
+  .topbar-right .btn{
+    padding:6px 9px;
+  }
+  #admin-sync-badge{
+    padding:3px 7px;
+    font-size:10px;
+  }
+  .app-content{
+    padding:12px 8px;
+  }
+  .card{
+    padding:14px;
+    border-radius:10px;
+    margin-bottom:12px;
+  }
+  .dash-kpi-grid{
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+    margin-bottom:14px;
+  }
+  .dash-kpi-card{
+    padding:10px 12px;
+  }
+  .dash-kpi-value{
+    font-size:16px;
+  }
+  .dash-kpi-sub{
+    font-size:10px;
+  }
+  /* Table responsiveness on mobile */
+  .card table, .table-responsive{
+    display:block;
+    width:100%;
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+    white-space:nowrap;
+  }
+  .card table th, .card table td{
+    padding:8px 10px;
+  }
+  .modal{
+    padding:16px;
+    width:95vw;
+    max-width:95vw;
+  }
 }
 </style></head><body>
 
@@ -169,11 +357,16 @@ tr:hover td{background:#f8fafc}
   <!-- SIDEBAR KIRI (260px) -->
   <aside class="app-sidebar">
     <div class="brand-box">
-      <div class="brand-badge">YMB</div>
-      <div class="brand-text">
-        <div class="brand-name">YMB MART</div>
-        <div class="brand-sub">Yayasan Masjid Baiturrahman</div>
+      <div style="display:flex;align-items:center;gap:12px;min-width:0">
+        <div class="brand-badge">YMB</div>
+        <div class="brand-text">
+          <div class="brand-name">YMB MART</div>
+          <div class="brand-sub">Yayasan Masjid Baiturrahman</div>
+        </div>
       </div>
+      <button class="btn-sidebar-close" onclick="toggleSidebar()" aria-label="Tutup Menu" title="Tutup Menu">
+        <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
     </div>
 
     <div class="sidebar-scroll">
@@ -262,11 +455,17 @@ tr:hover td{background:#f8fafc}
     </div>
   </aside>
 
+  <!-- BACKDROP MOBILE DRAWER -->
+  <div id="sidebar-backdrop" class="sidebar-backdrop" onclick="closeMobileSidebar()"></div>
+
   <!-- MAIN CANVAS -->
   <div class="app-main">
     <!-- TOPBAR -->
     <header class="app-topbar">
       <div class="topbar-left">
+        <button class="btn-hamburger" id="sidebar-toggle-btn" onclick="toggleSidebar()" aria-label="Menu Navigasi" title="Buka/Tutup Menu">
+          <svg viewBox="0 0 24 24"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+        </button>
         <span class="topbar-brand-crumb">YMB Mart</span>
         <span class="topbar-sep">/</span>
         <span class="topbar-current-crumb" id="topbar-title">Dashboard Eksekutif</span>
@@ -1386,7 +1585,37 @@ async function printDailySummary(targetDate){
 
 // Tabs & Navigation
 var _currentTab="dashboard";
+
+function toggleSidebar(){
+  if(window.innerWidth <= 900){
+    const isOpen = document.body.classList.toggle("sidebar-mobile-open");
+    const backdrop = document.getElementById("sidebar-backdrop");
+    if(backdrop){
+      backdrop.classList.toggle("show", isOpen);
+    }
+  } else {
+    const isCollapsed = document.body.classList.toggle("sidebar-collapsed");
+    localStorage.setItem("ymb_sidebar_collapsed", isCollapsed ? "1" : "0");
+  }
+}
+
+function closeMobileSidebar(){
+  document.body.classList.remove("sidebar-mobile-open");
+  const backdrop = document.getElementById("sidebar-backdrop");
+  if(backdrop){
+    backdrop.classList.remove("show");
+  }
+}
+
+// Restore desktop sidebar collapsed state on load
+if(window.innerWidth > 900 && localStorage.getItem("ymb_sidebar_collapsed") === "1"){
+  document.body.classList.add("sidebar-collapsed");
+}
+
 function showTab(name){
+  if(window.innerWidth <= 900){
+    closeMobileSidebar();
+  }
   _currentTab=name;
   const tList=["dashboard","daily","transactions","shifts","cash","products","stock","opname","members","ads","users","system"];
   tList.forEach(t=>{
