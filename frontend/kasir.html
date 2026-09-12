@@ -2196,7 +2196,9 @@ loadProducts();
 loadPPN();
 connectWS();
 checkSyncStatus();
-setInterval(checkSyncStatus, 10000);
+setInterval(checkSyncStatus, 5000);
+window.addEventListener("online", checkSyncStatus);
+window.addEventListener("offline", checkSyncStatus);
 setTimeout(function(){
   var s = document.getElementById("search");
   if(s) s.focus();

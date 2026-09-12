@@ -272,9 +272,9 @@ tr:hover td{background:#f8fafc}
         <span class="topbar-current-crumb" id="topbar-title">Dashboard Eksekutif</span>
       </div>
       <div class="topbar-right">
-        <div class="status-indicator">
-          <span class="status-dot"></span>
-          <span>Server Online</span>
+        <div class="status-indicator" id="admin-sync-badge" onclick="triggerManualSyncAdmin()" title="Status sinkronisasi (Klik untuk sinkronkan manual)" style="cursor:pointer;transition:all .2s">
+          <span class="status-dot" id="admin-sync-dot"></span>
+          <span id="admin-sync-text">Cek Koneksi...</span>
         </div>
         <div class="topbar-clock" id="topbar-clock">--</div>
         <button class="btn btn-secondary-subtle btn-sm" onclick="showChangeAdminPassword()">
@@ -972,6 +972,62 @@ function updateTopbarClock(){
 }
 setInterval(updateTopbarClock,1000);
 updateTopbarClock();
+
+// Real-time Cloud Sync & Connection Monitor
+async function checkAdminSyncStatus(){
+  var badge = document.getElementById("admin-sync-badge");
+  var dot = document.getElementById("admin-sync-dot");
+  var txt = document.getElementById("admin-sync-text");
+  if(!badge || !dot || !txt) return;
+
+  try {
+    var r = await fetch("/api/sync/status");
+    if(!r.ok){
+      badge.style.background = "#fee2e2"; badge.style.color = "#991b1b";
+      dot.style.background = "#ef4444";
+      txt.textContent = "Server Offline";
+      return;
+    }
+    var s = await r.json();
+    if(s.is_syncing){
+      badge.style.background = "#dbeafe"; badge.style.color = "#1e40af";
+      dot.style.background = "#3b82f6";
+      txt.textContent = "🔄 Sinkronisasi...";
+    } else if(s.is_online){
+      if(s.pending_count > 0){
+        badge.style.background = "#fef3c7"; badge.style.color = "#92400e";
+        dot.style.background = "#f59e0b";
+        txt.textContent = "Online (" + s.pending_count + " pending)";
+      } else {
+        badge.style.background = "#dcfce7"; badge.style.color = "#166534";
+        dot.style.background = "#16a34a";
+        txt.textContent = "Online (Tersinkron)";
+      }
+    } else {
+      badge.style.background = "#fef3c7"; badge.style.color = "#b45309";
+      dot.style.background = "#f59e0b";
+      txt.textContent = "Offline (" + (s.pending_count || 0) + " pending)";
+    }
+  } catch(e) {
+    badge.style.background = "#fee2e2"; badge.style.color = "#991b1b";
+    dot.style.background = "#ef4444";
+    txt.textContent = "Server Offline";
+  }
+}
+
+async function triggerManualSyncAdmin(){
+  var txt = document.getElementById("admin-sync-text");
+  if(txt) txt.textContent = "🔄 Menyinkronkan...";
+  try {
+    await fetch("/api/sync/trigger", { method: "POST" });
+    setTimeout(checkAdminSyncStatus, 1500);
+  } catch(e){}
+}
+
+setInterval(checkAdminSyncStatus, 8000);
+checkAdminSyncStatus();
+window.addEventListener("online", checkAdminSyncStatus);
+window.addEventListener("offline", checkAdminSyncStatus);
 
 var _currentReportMode = "today";
 
