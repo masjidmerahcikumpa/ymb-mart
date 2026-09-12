@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net"
+	"os"
 	"sync"
 	"time"
 )
@@ -77,6 +78,18 @@ func TriggerSync() {
 }
 
 func GetSyncStatus() SyncStatus {
+	// If running on Vercel serverless (direct cloud mode)
+	if os.Getenv("VERCEL") == "1" {
+		return SyncStatus{
+			IsOnline:     true,
+			LastSync:     "Cloud Live (Turso)",
+			PendingCount: 0,
+			IsSyncing:    false,
+			LastError:    "",
+			Mode:         "cloud_direct",
+		}
+	}
+
 	syncMu.Lock()
 	defer syncMu.Unlock()
 
@@ -328,10 +341,10 @@ func pushLocalTransactionsToCloud() error {
 	}
 
 	for _, u := range pendingUsers {
-		_, cErr := cloudDB.Exec(`INSERT INTO users (username, password, display_name, role, active, password_changed)
-			VALUES (?, ?, ?, ?, ?, ?)
+		_, cErr := cloudDB.Exec(`INSERT INTO users (username, password, display_name, role, active, password_changed, sync_status)
+			VALUES (?, ?, ?, ?, ?, ?, 'synced')
 			ON CONFLICT(username) DO UPDATE SET password=excluded.password, display_name=excluded.display_name,
-			role=excluded.role, active=excluded.active, password_changed=excluded.password_changed`,
+			role=excluded.role, active=excluded.active, password_changed=excluded.password_changed, sync_status='synced'`,
 			u.Username, u.Password, u.DisplayName, u.Role, u.Active, u.PasswordChanged)
 		if cErr == nil {
 			db.Exec("UPDATE users SET sync_status = 'synced' WHERE id = ?", u.ID)
@@ -362,11 +375,11 @@ func pushLocalTransactionsToCloud() error {
 		if s.clAt != "" {
 			closedAtVal = s.clAt
 		}
-		_, cErr := cloudDB.Exec(`INSERT INTO shifts (id, shift_name, cashier, opened_at, closed_at, opening_cash, closing_cash, expected_cash, cash_sales, cash_out, cash_discrepancy, total_sales, total_tx, status)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		_, cErr := cloudDB.Exec(`INSERT INTO shifts (id, shift_name, cashier, opened_at, closed_at, opening_cash, closing_cash, expected_cash, cash_sales, cash_out, cash_discrepancy, total_sales, total_tx, status, sync_status)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')
 			ON CONFLICT(id) DO UPDATE SET closed_at=excluded.closed_at, closing_cash=excluded.closing_cash,
 			expected_cash=excluded.expected_cash, cash_sales=excluded.cash_sales, cash_out=excluded.cash_out,
-			cash_discrepancy=excluded.cash_discrepancy, total_sales=excluded.total_sales, total_tx=excluded.total_tx, status=excluded.status`,
+			cash_discrepancy=excluded.cash_discrepancy, total_sales=excluded.total_sales, total_tx=excluded.total_tx, status=excluded.status, sync_status='synced'`,
 			s.id, s.shName, s.cashier, s.opAt, closedAtVal, s.opCash, s.clCash, s.expCash, s.csSales, s.csOut, s.csDisc, s.totSales, s.totTx, s.status)
 		if cErr == nil {
 			db.Exec("UPDATE shifts SET sync_status = 'synced' WHERE id = ?", s.id)
@@ -388,9 +401,9 @@ func pushLocalTransactionsToCloud() error {
 
 	// Push Cash Logs
 	for _, c := range cashLogs {
-		_, cErr := cloudDB.Exec(`INSERT INTO cash_log (id, shift_id, type, amount, description, created_at)
-			VALUES (?, ?, ?, ?, ?, ?)
-			ON CONFLICT(id) DO NOTHING`,
+		_, cErr := cloudDB.Exec(`INSERT INTO cash_log (id, shift_id, type, amount, description, created_at, sync_status)
+			VALUES (?, ?, ?, ?, ?, ?, 'synced')
+			ON CONFLICT(id) DO UPDATE SET sync_status='synced'`,
 			c.id, c.shiftID, c.logType, c.amount, c.desc, c.createdAt)
 		if cErr == nil {
 			db.Exec("UPDATE cash_log SET sync_status = 'synced' WHERE id = ?", c.id)
@@ -437,9 +450,9 @@ func pushLocalTransactionsToCloud() error {
 			mVal = t.memberID.String
 		}
 
-		_, cErr := cloudDB.Exec(`INSERT INTO transactions (tx_id, shift_id, total, discount, tax, grand_total, payment, amount_paid, change_amount, customer_name, member_id, cashier, notes, status, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-			ON CONFLICT(tx_id) DO NOTHING`,
+		_, cErr := cloudDB.Exec(`INSERT INTO transactions (tx_id, shift_id, total, discount, tax, grand_total, payment, amount_paid, change_amount, customer_name, member_id, cashier, notes, status, created_at, sync_status)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')
+			ON CONFLICT(tx_id) DO UPDATE SET sync_status='synced'`,
 			t.txID, shVal, t.total, t.discount, t.tax, t.grandTotal, t.payment, t.amountPaid, t.changeAmount, t.customerName, mVal, t.cashier, t.notes, t.status, t.createdAt)
 		if cErr != nil {
 			fmt.Printf("[Sync] Error inserting transaction %s to cloud: %v\n", t.txID, cErr)
@@ -477,13 +490,20 @@ func pushLocalTransactionsToCloud() error {
 
 	// Push Inventory Movements
 	for _, im := range invMovements {
-		_, cErr := cloudDB.Exec(`INSERT INTO inventory_movements (product_id, movement_type, quantity, stock_before, stock_after, reference_type, reference_id, source, reason, user, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		_, cErr := cloudDB.Exec(`INSERT INTO inventory_movements (product_id, movement_type, quantity, stock_before, stock_after, reference_type, reference_id, source, reason, user, created_at, sync_status)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')`,
 			im.pid, im.movType, im.qty, im.stBefore, im.stAfter, im.refType, im.refID, im.source, im.reason, im.invUser, im.createdAt)
 		if cErr == nil {
 			db.Exec("UPDATE inventory_movements SET sync_status = 'synced' WHERE id = ?", im.id)
 		}
 	}
+
+	// Clean up any stray pending flags in cloudDB
+	cloudDB.Exec("UPDATE transactions SET sync_status = 'synced' WHERE sync_status != 'synced'")
+	cloudDB.Exec("UPDATE shifts SET sync_status = 'synced' WHERE sync_status != 'synced'")
+	cloudDB.Exec("UPDATE cash_log SET sync_status = 'synced' WHERE sync_status != 'synced'")
+	cloudDB.Exec("UPDATE inventory_movements SET sync_status = 'synced' WHERE sync_status != 'synced'")
+	cloudDB.Exec("UPDATE users SET sync_status = 'synced' WHERE sync_status != 'synced'")
 
 	return nil
 }

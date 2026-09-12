@@ -2150,7 +2150,11 @@ async function checkSyncStatus(){
     var txt=document.getElementById('sync-text');
     var badge=document.getElementById('sync-badge');
     if(!dot||!txt||!badge)return;
-    if(s.is_syncing){
+    if(s.mode === 'cloud_direct'){
+      badge.style.background='#dcfce7';badge.style.color='#166534';
+      dot.style.background='#22c55e';
+      txt.textContent='🟢 Cloud Live (Turso)';
+    }else if(s.is_syncing){
       badge.style.background='#dbeafe';badge.style.color='#1e40af';
       dot.style.background='#3b82f6';
       txt.textContent='🔄 Sinkronisasi...';
@@ -2165,8 +2169,8 @@ async function checkSyncStatus(){
         txt.textContent='🟢 Online (Tersinkron)';
       }
     }else{
-      badge.style.background='#fef3c7';badge.style.color='#b45309';
-      dot.style.background='#f59e0b';
+      badge.style.background='#fee2e2';badge.style.color='#991b1b';
+      dot.style.background='#ef4444';
       txt.textContent='🟡 Offline ('+(s.pending_count||0)+' pending)';
     }
   }catch(e){

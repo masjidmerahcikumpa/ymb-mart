@@ -3140,6 +3140,10 @@ func handleTriggerSync(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if os.Getenv("VERCEL") == "1" {
+		jsonResponse(w, map[string]interface{}{"status": "cloud_direct", "message": "Database Turso Cloud aktif langsung"}, 200)
+		return
+	}
 	go DoSync()
 	jsonResponse(w, map[string]interface{}{"status": "sync_triggered"}, 200)
 }

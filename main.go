@@ -339,6 +339,13 @@ func initDB() {
 		} else {
 			db.SetMaxOpenConns(10)
 			fmt.Printf("[POS] DB: Turso Cloud active (Vercel Serverless: %s)\n", tursoURL)
+			go func() {
+				db.Exec("UPDATE transactions SET sync_status = 'synced' WHERE sync_status != 'synced'")
+				db.Exec("UPDATE shifts SET sync_status = 'synced' WHERE sync_status != 'synced'")
+				db.Exec("UPDATE cash_log SET sync_status = 'synced' WHERE sync_status != 'synced'")
+				db.Exec("UPDATE inventory_movements SET sync_status = 'synced' WHERE sync_status != 'synced'")
+				db.Exec("UPDATE users SET sync_status = 'synced' WHERE sync_status != 'synced'")
+			}()
 		}
 	}
 
