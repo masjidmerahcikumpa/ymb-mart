@@ -608,13 +608,14 @@ func handleAddProduct(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, map[string]string{"error": "Nama dan SKU wajib diisi"}, 400)
 		return
 	}
-	_, err := db.Exec("INSERT INTO products (sku,name,description,price,cost,category,stock,min_stock,unit,barcode,tax_rate) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+	_, err := db.Exec("INSERT INTO products (sku,name,description,price,cost,category,stock,min_stock,unit,barcode,tax_rate,sync_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,'pending')",
 		p.SKU, p.Name, p.Description, p.Price, p.Cost, p.Category, p.Stock, p.MinStock, p.Unit, p.Barcode, p.TaxRate)
 	if err != nil {
 		logError("handleAddProduct", err)
 		jsonResponse(w, map[string]string{"error": "Gagal tambah produk"}, 500)
 		return
 	}
+	TriggerSync()
 	jsonResponse(w, map[string]string{"status": "ok"}, 200)
 }
 
@@ -629,13 +630,14 @@ func handleUpdateProduct(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, map[string]string{"error": "Invalid request"}, 400)
 		return
 	}
-	_, err := db.Exec("UPDATE products SET name=?,description=?,price=?,cost=?,category=?,stock=?,min_stock=?,unit=?,barcode=?,promo_price=?,promo_active=?,tax_rate=? WHERE id=?",
+	_, err := db.Exec("UPDATE products SET name=?,description=?,price=?,cost=?,category=?,stock=?,min_stock=?,unit=?,barcode=?,promo_price=?,promo_active=?,tax_rate=?,sync_status='pending' WHERE id=?",
 		p.Name, p.Description, p.Price, p.Cost, p.Category, p.Stock, p.MinStock, p.Unit, p.Barcode, p.PromoPrice, p.PromoActive, p.TaxRate, id)
 	if err != nil {
 		logError("handleUpdateProduct", err)
 		jsonResponse(w, map[string]string{"error": "Gagal update produk"}, 500)
 		return
 	}
+	TriggerSync()
 	jsonResponse(w, map[string]string{"status": "ok"}, 200)
 }
 
@@ -645,12 +647,13 @@ func handleDeleteProduct(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, map[string]string{"error": "Invalid ID"}, 400)
 		return
 	}
-	_, err := db.Exec("UPDATE products SET active=0 WHERE id=?", id)
+	_, err := db.Exec("UPDATE products SET active=0,sync_status='pending' WHERE id=?", id)
 	if err != nil {
 		logError("handleDeleteProduct", err)
 		jsonResponse(w, map[string]string{"error": "Gagal hapus produk"}, 500)
 		return
 	}
+	TriggerSync()
 	jsonResponse(w, map[string]string{"status": "ok"}, 200)
 }
 

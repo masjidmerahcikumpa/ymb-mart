@@ -95,12 +95,13 @@ func GetSyncStatus() SyncStatus {
 
 	// Update pending count from local DB
 	if db != nil {
-		var txCount, shiftCount, cashCount, userCount int
+		var txCount, shiftCount, cashCount, userCount, prodCount int
 		db.QueryRow("SELECT COUNT(*) FROM transactions WHERE sync_status = 'pending'").Scan(&txCount)
 		db.QueryRow("SELECT COUNT(*) FROM shifts WHERE sync_status = 'pending'").Scan(&shiftCount)
 		db.QueryRow("SELECT COUNT(*) FROM cash_log WHERE sync_status = 'pending'").Scan(&cashCount)
 		db.QueryRow("SELECT COUNT(*) FROM users WHERE sync_status = 'pending'").Scan(&userCount)
-		currentSyncStatus.PendingCount = txCount + shiftCount + cashCount + userCount
+		db.QueryRow("SELECT COUNT(*) FROM products WHERE sync_status = 'pending'").Scan(&prodCount)
+		currentSyncStatus.PendingCount = txCount + shiftCount + cashCount + userCount + prodCount
 	}
 
 	return currentSyncStatus
@@ -166,16 +167,22 @@ func DoSync() {
 	currentSyncStatus.LastError = ""
 	syncMu.Unlock()
 
-	// 2. PULL Master Data from Turso Cloud to Local SQLite
-	pullErr := pullMasterDataFromCloud()
-	if pullErr != nil {
-		fmt.Printf("[Sync] Pull error: %v\n", pullErr)
+	// 2. PUSH Pending Local Products to Turso Cloud (New / Edited products)
+	prodPushErr := pushLocalProductsToCloud()
+	if prodPushErr != nil {
+		fmt.Printf("[Sync] Product push error: %v\n", prodPushErr)
 	}
 
 	// 3. PUSH Pending Local Transactions & Shifts to Turso Cloud
 	pushErr := pushLocalTransactionsToCloud()
 	if pushErr != nil {
 		fmt.Printf("[Sync] Push error: %v\n", pushErr)
+	}
+
+	// 4. PULL Master Data from Turso Cloud to Local SQLite
+	pullErr := pullMasterDataFromCloud()
+	if pullErr != nil {
+		fmt.Printf("[Sync] Pull error: %v\n", pullErr)
 	}
 
 	syncMu.Lock()
@@ -251,24 +258,31 @@ func pullMasterDataFromCloud() error {
 			var sku, name, desc, cat, unit, barcode string
 			var taxRate float64
 			if err := pRows.Scan(&id, &sku, &name, &desc, &price, &cost, &cat, &stock, &minStock, &unit, &barcode, &promoPrice, &promoActive, &taxRate, &active); err == nil {
-				if pendingTx > 0 {
-					// Don't overwrite local stock if there are pending offline transactions that haven't been pushed
-					db.Exec(`INSERT INTO products (id, sku, name, description, price, cost, category, min_stock, unit, barcode, promo_price, promo_active, tax_rate, active, stock) 
-						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-						ON CONFLICT(id) DO UPDATE SET sku=excluded.sku, name=excluded.name, description=excluded.description,
-						price=excluded.price, cost=excluded.cost, category=excluded.category, min_stock=excluded.min_stock,
-						unit=excluded.unit, barcode=excluded.barcode, promo_price=excluded.promo_price, promo_active=excluded.promo_active,
-						tax_rate=excluded.tax_rate, active=excluded.active`,
-						id, sku, name, desc, price, cost, cat, minStock, unit, barcode, promoPrice, promoActive, taxRate, active, stock)
-				} else {
-					// Fully sync including stock
-					db.Exec(`INSERT INTO products (id, sku, name, description, price, cost, category, stock, min_stock, unit, barcode, promo_price, promo_active, tax_rate, active) 
-						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-						ON CONFLICT(id) DO UPDATE SET sku=excluded.sku, name=excluded.name, description=excluded.description,
-						price=excluded.price, cost=excluded.cost, category=excluded.category, stock=excluded.stock, min_stock=excluded.min_stock,
-						unit=excluded.unit, barcode=excluded.barcode, promo_price=excluded.promo_price, promo_active=excluded.promo_active,
-						tax_rate=excluded.tax_rate, active=excluded.active`,
+				// Protect local pending changes from being overwritten
+				var localSyncStatus string
+				db.QueryRow("SELECT sync_status FROM products WHERE sku = ?", sku).Scan(&localSyncStatus)
+				if localSyncStatus == "pending" {
+					continue
+				}
+
+				var localID int
+				checkErr := db.QueryRow("SELECT id FROM products WHERE sku = ?", sku).Scan(&localID)
+				if checkErr == sql.ErrNoRows {
+					// Not found locally, insert new with cloud ID
+					db.Exec(`INSERT INTO products (id, sku, name, description, price, cost, category, stock, min_stock, unit, barcode, promo_price, promo_active, tax_rate, active, sync_status) 
+						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')`,
 						id, sku, name, desc, price, cost, cat, stock, minStock, unit, barcode, promoPrice, promoActive, taxRate, active)
+				} else {
+					// Already exists locally, update existing row
+					if pendingTx > 0 {
+						// Don't overwrite local stock if there are pending offline transactions that haven't been pushed
+						db.Exec(`UPDATE products SET name=?, description=?, price=?, cost=?, category=?, min_stock=?, unit=?, barcode=?, promo_price=?, promo_active=?, tax_rate=?, active=?, sync_status='synced' WHERE id=?`,
+							name, desc, price, cost, cat, minStock, unit, barcode, promoPrice, promoActive, taxRate, active, localID)
+					} else {
+						// Fully sync including stock
+						db.Exec(`UPDATE products SET name=?, description=?, price=?, cost=?, category=?, stock=?, min_stock=?, unit=?, barcode=?, promo_price=?, promo_active=?, tax_rate=?, active=?, sync_status='synced' WHERE id=?`,
+							name, desc, price, cost, cat, stock, minStock, unit, barcode, promoPrice, promoActive, taxRate, active, localID)
+					}
 				}
 			}
 		}
@@ -320,6 +334,66 @@ type pendingTx struct {
 type pendingInvMovement struct {
 	id, pid, qty, stBefore, stAfter int
 	movType, refType, refID, source, reason, invUser, createdAt string
+}
+
+func pushLocalProductsToCloud() error {
+	if cloudDB == nil || db == nil {
+		return nil
+	}
+
+	var pendingProducts []Product
+	rows, err := db.Query(`SELECT id, sku, name, description, price, cost, category, stock, min_stock, unit, barcode, promo_price, promo_active, tax_rate, active 
+		FROM products WHERE sync_status = 'pending'`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var p Product
+		if err := rows.Scan(&p.ID, &p.SKU, &p.Name, &p.Description, &p.Price, &p.Cost, &p.Category, &p.Stock, &p.MinStock, &p.Unit, &p.Barcode, &p.PromoPrice, &p.PromoActive, &p.TaxRate, &p.Active); err == nil {
+			pendingProducts = append(pendingProducts, p)
+		}
+	}
+
+	for _, p := range pendingProducts {
+		_, cErr := cloudDB.Exec(`INSERT INTO products (sku, name, description, price, cost, category, stock, min_stock, unit, barcode, promo_price, promo_active, tax_rate, active)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(sku) DO UPDATE SET
+				name=excluded.name,
+				description=excluded.description,
+				price=excluded.price,
+				cost=excluded.cost,
+				category=excluded.category,
+				stock=excluded.stock,
+				min_stock=excluded.min_stock,
+				unit=excluded.unit,
+				barcode=excluded.barcode,
+				promo_price=excluded.promo_price,
+				promo_active=excluded.promo_active,
+				tax_rate=excluded.tax_rate,
+				active=excluded.active`,
+			p.SKU, p.Name, p.Description, p.Price, p.Cost, p.Category, p.Stock, p.MinStock, p.Unit, p.Barcode, p.PromoPrice, p.PromoActive, p.TaxRate, p.Active)
+
+		if cErr == nil {
+			var cloudID int
+			if err := cloudDB.QueryRow("SELECT id FROM products WHERE sku = ?", p.SKU).Scan(&cloudID); err == nil && cloudID > 0 {
+				if cloudID != p.ID {
+					db.Exec("UPDATE tx_items SET product_id = ? WHERE product_id = ?", cloudID, p.ID)
+					db.Exec("UPDATE inventory_movements SET product_id = ? WHERE product_id = ?", cloudID, p.ID)
+					db.Exec("UPDATE products SET id = ?, sync_status = 'synced' WHERE id = ?", cloudID, p.ID)
+				} else {
+					db.Exec("UPDATE products SET sync_status = 'synced' WHERE id = ?", p.ID)
+				}
+			} else {
+				db.Exec("UPDATE products SET sync_status = 'synced' WHERE id = ?", p.ID)
+			}
+			fmt.Printf("[Sync] Product %s (%s) successfully pushed to Turso Cloud\n", p.Name, p.SKU)
+		} else {
+			fmt.Printf("[Sync] Error pushing product %s to cloud: %v\n", p.SKU, cErr)
+		}
+	}
+	return nil
 }
 
 func pushLocalTransactionsToCloud() error {
@@ -504,6 +578,7 @@ func pushLocalTransactionsToCloud() error {
 	cloudDB.Exec("UPDATE cash_log SET sync_status = 'synced' WHERE sync_status != 'synced'")
 	cloudDB.Exec("UPDATE inventory_movements SET sync_status = 'synced' WHERE sync_status != 'synced'")
 	cloudDB.Exec("UPDATE users SET sync_status = 'synced' WHERE sync_status != 'synced'")
+	cloudDB.Exec("UPDATE products SET sync_status = 'synced' WHERE sync_status != 'synced'")
 
 	return nil
 }

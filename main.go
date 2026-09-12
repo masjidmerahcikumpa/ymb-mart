@@ -345,6 +345,7 @@ func initDB() {
 				db.Exec("UPDATE cash_log SET sync_status = 'synced' WHERE sync_status != 'synced'")
 				db.Exec("UPDATE inventory_movements SET sync_status = 'synced' WHERE sync_status != 'synced'")
 				db.Exec("UPDATE users SET sync_status = 'synced' WHERE sync_status != 'synced'")
+				db.Exec("UPDATE products SET sync_status = 'synced' WHERE sync_status != 'synced'")
 			}()
 		}
 	}
@@ -488,6 +489,7 @@ func initDB() {
 	db.Exec("ALTER TABLE products ADD COLUMN tax_rate REAL DEFAULT -1")
 	db.Exec("ALTER TABLE products ADD COLUMN description TEXT DEFAULT ''")
 	db.Exec("ALTER TABLE products ADD COLUMN min_stock INTEGER DEFAULT 0")
+	db.Exec("ALTER TABLE products ADD COLUMN sync_status TEXT DEFAULT 'pending'")
 	db.Exec("ALTER TABLE transactions ADD COLUMN sync_status TEXT DEFAULT 'pending'")
 	db.Exec("ALTER TABLE shifts ADD COLUMN sync_status TEXT DEFAULT 'pending'")
 	db.Exec("ALTER TABLE cash_log ADD COLUMN sync_status TEXT DEFAULT 'pending'")
