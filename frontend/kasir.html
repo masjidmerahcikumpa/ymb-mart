@@ -4,9 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>POS - Kasir</title>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:system-ui,-apple-system,sans-serif;height:100vh;overflow:hidden;background:#f1f5f9;color:#1e293b}
+.swal2-popup{font-family:system-ui,-apple-system,sans-serif!important;border-radius:16px!important;padding:22px!important}
+.swal2-title{font-size:18px!important;font-weight:700!important;color:#1e293b!important}
+.swal2-html-container{font-size:13px!important;color:#475569!important;line-height:1.5!important}
+.swal2-actions button{font-size:12px!important;font-weight:600!important;border-radius:8px!important;padding:8px 16px!important}
 input,select,button{font-family:inherit}
 
 /* LOGIN */
@@ -391,6 +396,66 @@ input,select,button{font-family:inherit}
 </div>
 
 <script>
+// SweetAlert2 Global Helpers & Alert Override
+var _nativeAlert = window.alert;
+var _nativeConfirm = window.confirm;
+
+function swalConfirm(text, title, confirmText, isDanger){
+  if(typeof Swal === "undefined"){
+    return Promise.resolve(_nativeConfirm(text));
+  }
+  title = title || "Konfirmasi";
+  confirmText = confirmText || "Ya, Lanjutkan";
+  isDanger = (isDanger !== false);
+  return Swal.fire({
+    title: title,
+    html: String(text).replace(/\n/g, "<br>"),
+    icon: isDanger ? "warning" : "question",
+    showCancelButton: true,
+    confirmButtonColor: isDanger ? "#dc2626" : "#2563eb",
+    cancelButtonColor: "#64748b",
+    confirmButtonText: confirmText,
+    cancelButtonText: "Batal",
+    reverseButtons: true,
+    focusCancel: isDanger
+  }).then(function(res){
+    return !!res.isConfirmed;
+  });
+}
+
+window.alert = function(msg){
+  if(typeof Swal === "undefined"){
+    _nativeAlert(msg);
+    return;
+  }
+  var s = String(msg || "").toLowerCase();
+  var icon = "info";
+  var title = "Informasi";
+  var btnColor = "#2563eb";
+
+  if(s.includes("berhasil") || s.includes("tersimpan") || s.includes("cocok") || s.includes("selamat") || s.includes("✅") || s.includes("🎉")){
+    icon = "success";
+    title = "Berhasil!";
+    btnColor = "#16a34a";
+  }else if(s.includes("gagal") || s.includes("error") || s.includes("wajib") || s.includes("tidak boleh") || s.includes("harus") || s.includes("habis")){
+    icon = "error";
+    title = "Perhatian";
+    btnColor = "#dc2626";
+  }else if(s.includes("peringatan") || s.includes("penting") || s.includes("perhatian")){
+    icon = "warning";
+    title = "Peringatan";
+    btnColor = "#d97706";
+  }
+
+  return Swal.fire({
+    title: title,
+    html: String(msg || "").replace(/\n/g, "<br>"),
+    icon: icon,
+    confirmButtonColor: btnColor,
+    confirmButtonText: "OK"
+  });
+};
+
 var cart=[],payment="CASH",ppnRate=0,currentUser="",currentDisplayName="",currentToken="",currentShiftId=null,activeMember=null,lastTxReceipt=null;
 var API="";
 var csrfToken="";
@@ -542,10 +607,10 @@ async function openShift(){
 }
 
 // CLOSE SHIFT & LOGOUT
-function showCloseShiftModal(){
+async function showCloseShiftModal(){
   var shiftId = currentShiftId || sessionStorage.getItem("kasir_shift_id");
   if(!shiftId){
-    if(confirm("Tidak ada shift aktif terdeteksi. Tetap logout?")){
+    if(await swalConfirm("Tidak ada shift aktif terdeteksi. Tetap logout?", "Konfirmasi Logout", "Tetap Logout", true)){
       doDirectLogout();
     }
     return;

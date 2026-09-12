@@ -1572,29 +1572,59 @@ func handleQuickAccess(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, products, 200)
 }
 
-// === Daily Report ===
+// === Daily / Period Report ===
 func handleDailyReport(w http.ResponseWriter, r *http.Request) {
+	startDate := r.URL.Query().Get("start_date")
+	endDate := r.URL.Query().Get("end_date")
 	date := r.URL.Query().Get("date")
-	if date == "" {
-		date = time.Now().Format("2006-01-02")
+	month := r.URL.Query().Get("month")
+	if month != "" && date == "" {
+		date = month
 	}
-	pattern := date + "%"
+
+	var dateCond string
+	var dateCondT string
+	var args []interface{}
+	isRange := false
+	labelDate := date
+
+	if startDate != "" && endDate != "" {
+		isRange = (startDate != endDate)
+		dateCond = "DATE(created_at) >= ? AND DATE(created_at) <= ?"
+		dateCondT = "DATE(t.created_at) >= ? AND DATE(t.created_at) <= ?"
+		args = []interface{}{startDate, endDate}
+		labelDate = startDate + " s/d " + endDate
+	} else if date != "" && len(date) == 7 { // Format: YYYY-MM
+		isRange = true
+		dateCond = "created_at LIKE ?"
+		dateCondT = "t.created_at LIKE ?"
+		args = []interface{}{date + "%"}
+		labelDate = date
+	} else {
+		if date == "" {
+			date = time.Now().Format("2006-01-02")
+		}
+		dateCond = "created_at LIKE ?"
+		dateCondT = "t.created_at LIKE ?"
+		args = []interface{}{date + "%"}
+		labelDate = date
+	}
 
 	var totalSales, totalTx, cashSales, qrisSales, tfSales, totalProfit, totalDiscount, totalTax int
-	db.QueryRow("SELECT COALESCE(SUM(grand_total),0), COUNT(*) FROM transactions WHERE created_at LIKE ? AND status='completed'", pattern).Scan(&totalSales, &totalTx)
-	db.QueryRow("SELECT COALESCE(SUM(grand_total),0) FROM transactions WHERE created_at LIKE ? AND payment='CASH' AND status='completed'", pattern).Scan(&cashSales)
-	db.QueryRow("SELECT COALESCE(SUM(grand_total),0) FROM transactions WHERE created_at LIKE ? AND payment='QRIS' AND status='completed'", pattern).Scan(&qrisSales)
-	db.QueryRow("SELECT COALESCE(SUM(grand_total),0) FROM transactions WHERE created_at LIKE ? AND payment='TRANSFER' AND status='completed'", pattern).Scan(&tfSales)
-	db.QueryRow("SELECT COALESCE(SUM(ti.subtotal - p.cost * ti.qty),0) FROM tx_items ti JOIN products p ON ti.product_id=p.id JOIN transactions t ON ti.tx_id=t.tx_id WHERE t.created_at LIKE ? AND t.status='completed'", pattern).Scan(&totalProfit)
-	db.QueryRow("SELECT COALESCE(SUM(discount),0) FROM transactions WHERE created_at LIKE ? AND status='completed'", pattern).Scan(&totalDiscount)
-	db.QueryRow("SELECT COALESCE(SUM(tax),0) FROM transactions WHERE created_at LIKE ? AND status='completed'", pattern).Scan(&totalTax)
+	db.QueryRow("SELECT COALESCE(SUM(grand_total),0), COUNT(*) FROM transactions WHERE "+dateCond+" AND status='completed'", args...).Scan(&totalSales, &totalTx)
+	db.QueryRow("SELECT COALESCE(SUM(grand_total),0) FROM transactions WHERE "+dateCond+" AND payment='CASH' AND status='completed'", args...).Scan(&cashSales)
+	db.QueryRow("SELECT COALESCE(SUM(grand_total),0) FROM transactions WHERE "+dateCond+" AND payment='QRIS' AND status='completed'", args...).Scan(&qrisSales)
+	db.QueryRow("SELECT COALESCE(SUM(grand_total),0) FROM transactions WHERE "+dateCond+" AND payment='TRANSFER' AND status='completed'", args...).Scan(&tfSales)
+	db.QueryRow("SELECT COALESCE(SUM(ti.subtotal - p.cost * ti.qty),0) FROM tx_items ti JOIN products p ON ti.product_id=p.id JOIN transactions t ON ti.tx_id=t.tx_id WHERE "+dateCondT+" AND t.status='completed'", args...).Scan(&totalProfit)
+	db.QueryRow("SELECT COALESCE(SUM(discount),0) FROM transactions WHERE "+dateCond+" AND status='completed'", args...).Scan(&totalDiscount)
+	db.QueryRow("SELECT COALESCE(SUM(tax),0) FROM transactions WHERE "+dateCond+" AND status='completed'", args...).Scan(&totalTax)
 
 	type itemReport struct {
 		Name    string `json:"name"`
 		Qty     int    `json:"qty"`
 		Revenue int    `json:"revenue"`
 	}
-	irRows, irErr := db.Query("SELECT p.name, SUM(ti.qty), SUM(ti.subtotal) FROM tx_items ti JOIN products p ON ti.product_id=p.id JOIN transactions t ON ti.tx_id=t.tx_id WHERE t.created_at LIKE ? AND t.status='completed' GROUP BY p.name ORDER BY SUM(ti.qty) DESC LIMIT 10", pattern)
+	irRows, irErr := db.Query("SELECT p.name, SUM(ti.qty), SUM(ti.subtotal) FROM tx_items ti JOIN products p ON ti.product_id=p.id JOIN transactions t ON ti.tx_id=t.tx_id WHERE "+dateCondT+" AND t.status='completed' GROUP BY p.name ORDER BY SUM(ti.qty) DESC LIMIT 10", args...)
 	var topItems []itemReport
 	if irErr == nil {
 		for irRows.Next() {
@@ -1613,7 +1643,14 @@ func handleDailyReport(w http.ResponseWriter, r *http.Request) {
 		TxCount int    `json:"tx_count"`
 		Sales   int    `json:"sales"`
 	}
-	hrRows, hrErr := db.Query("SELECT strftime('%H:00', created_at), COUNT(*), SUM(grand_total) FROM transactions WHERE created_at LIKE ? AND status='completed' GROUP BY strftime('%H:00', created_at) ORDER BY strftime('%H:00', created_at)", pattern)
+	var hrQuery string
+	if isRange {
+		hrQuery = "SELECT DATE(created_at), COUNT(*), SUM(grand_total) FROM transactions WHERE " + dateCond + " AND status='completed' GROUP BY DATE(created_at) ORDER BY DATE(created_at)"
+	} else {
+		hrQuery = "SELECT strftime('%H:00', created_at), COUNT(*), SUM(grand_total) FROM transactions WHERE " + dateCond + " AND status='completed' GROUP BY strftime('%H:00', created_at) ORDER BY strftime('%H:00', created_at)"
+	}
+
+	hrRows, hrErr := db.Query(hrQuery, args...)
 	var hourly []hourlyReport
 	if hrErr == nil {
 		for hrRows.Next() {
@@ -1646,7 +1683,8 @@ func handleDailyReport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonResponse(w, map[string]interface{}{
-		"date": date, "total_sales": totalSales, "total_tx": totalTx,
+		"date": labelDate, "is_range": isRange, "start_date": startDate, "end_date": endDate,
+		"total_sales": totalSales, "total_tx": totalTx,
 		"cash_sales": cashSales, "qris_sales": qrisSales, "tf_sales": tfSales,
 		"total_profit": totalProfit, "total_discount": totalDiscount, "total_tax": totalTax,
 		"top_items": topItems, "hourly": hourly, "low_stock": lowStock,
@@ -1681,25 +1719,39 @@ func handleSalesTrend(w http.ResponseWriter, r *http.Request) {
 		Sales   int    `json:"sales"`
 		TxCount int    `json:"tx_count"`
 	}
+
+	trendMap := make(map[string]*TrendPoint)
+	var dates []string
+	now := time.Now()
+	for i := 6; i >= 0; i-- {
+		d := now.AddDate(0, 0, -i).Format("2006-01-02")
+		dates = append(dates, d)
+		trendMap[d] = &TrendPoint{Date: d, Sales: 0, TxCount: 0}
+	}
+
 	rows, err := db.Query(`
 		SELECT DATE(created_at) as date, SUM(grand_total) as total, COUNT(*) as tx_count
-		FROM transactions WHERE status='completed' AND created_at >= date('now','-7 days')
+		FROM transactions WHERE status='completed' AND created_at >= date('now', 'localtime', '-8 days')
 		GROUP BY DATE(created_at) ORDER BY date
 	`)
-	if err != nil {
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var d string
+			var s, c int
+			rows.Scan(&d, &s, &c)
+			if tp, exists := trendMap[d]; exists {
+				tp.Sales = s
+				tp.TxCount = c
+			}
+		}
+	} else {
 		logError("handleSalesTrend", err)
-		jsonResponse(w, []TrendPoint{}, 200)
-		return
 	}
-	defer rows.Close()
+
 	var trend []TrendPoint
-	for rows.Next() {
-		var tp TrendPoint
-		rows.Scan(&tp.Date, &tp.Sales, &tp.TxCount)
-		trend = append(trend, tp)
-	}
-	if trend == nil {
-		trend = []TrendPoint{}
+	for _, d := range dates {
+		trend = append(trend, *trendMap[d])
 	}
 	jsonResponse(w, trend, 200)
 }
