@@ -253,6 +253,32 @@ func setupRouter() *http.ServeMux {
 		w.Header().Set("Content-Type", "application/javascript")
 		w.Write(data)
 	})
+	logoHandler := func(w http.ResponseWriter, r *http.Request) {
+		var data []byte
+		dir := getDataDir()
+		if d, e := os.ReadFile(filepath.Join(dir, "frontend", "logo.png")); e == nil {
+			data = d
+		} else if d, e := os.ReadFile(filepath.Join(dir, "LOGO-YMB.png")); e == nil {
+			data = d
+		} else if d, e := os.ReadFile("frontend/logo.png"); e == nil {
+			data = d
+		} else if d, e := os.ReadFile("LOGO-YMB.png"); e == nil {
+			data = d
+		} else {
+			data, _ = frontendFS.ReadFile("frontend/logo.png")
+		}
+		if len(data) == 0 {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		w.Write(data)
+	}
+	mux.HandleFunc("/logo.png", logoHandler)
+	mux.HandleFunc("/favicon.ico", logoHandler)
+	mux.HandleFunc("/LOGO-YMB.png", logoHandler)
+
 	mux.HandleFunc("/manifest.json", func(w http.ResponseWriter, r *http.Request) {
 		var data []byte
 		dir := getDataDir()

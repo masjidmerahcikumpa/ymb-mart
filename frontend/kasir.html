@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>POS — Terminal Kasir YMB Mart</title>
+<link rel="icon" type="image/png" href="/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -943,6 +944,9 @@ input, select, button { font-family: inherit; }
 <!-- LOGIN -->
 <div class="login-screen" id="login-screen">
   <div class="login-card">
+    <div style="text-align:center;margin-bottom:14px">
+      <img src="/logo.png" alt="Logo YMB" style="width:58px;height:58px;object-fit:contain;background:#ffffff;border-radius:14px;padding:3px;box-shadow:0 4px 16px rgba(0,0,0,0.3)">
+    </div>
     <div class="login-badge">
       <span>🛒 Terminal Kasir POS</span>
     </div>
@@ -1021,7 +1025,10 @@ input, select, button { font-family: inherit; }
 <div id="kasir-screen" style="display:none;height:100vh;flex-direction:column">
 <div class="navbar">
   <div class="nav-brand">
-    <div class="brand-name">🛒 YMB<span>Mart</span></div>
+    <div class="brand-name">
+      <img src="/logo.png" alt="YMB" style="width:28px;height:28px;object-fit:contain;background:#ffffff;border-radius:6px;padding:1.5px;vertical-align:middle">
+      YMB<span>Mart</span>
+    </div>
     <div class="nav-links">
       <a href="/">🏠 Portal</a>
       <a href="/kasir" class="active">🛒 Kasir</a>
