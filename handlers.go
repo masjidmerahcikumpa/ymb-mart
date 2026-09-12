@@ -49,6 +49,9 @@ func wsBroadcast(msg WSMessage) {
 
 func jsonResponse(w http.ResponseWriter, data interface{}, status int) {
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(data)
 }
@@ -1070,13 +1073,14 @@ func handleCheckout(w http.ResponseWriter, r *http.Request) {
 	txID := generateID("TX", 8)
 	total := 0
 	type checkoutItem struct {
-		Name     string  `json:"name"`
-		Qty      int     `json:"qty"`
-		Price    int     `json:"price"`
-		Discount float64 `json:"discount"`
-		Subtotal int     `json:"subtotal"`
-		TaxRate  float64 `json:"tax_rate"`
-		Notes    string  `json:"notes"`
+		ProductID int     `json:"product_id"`
+		Name      string  `json:"name"`
+		Qty       int     `json:"qty"`
+		Price     int     `json:"price"`
+		Discount  float64 `json:"discount"`
+		Subtotal  int     `json:"subtotal"`
+		TaxRate   float64 `json:"tax_rate"`
+		Notes     string  `json:"notes"`
 	}
 	// Prevent concurrent checkout
 	checkoutMu.Lock()
@@ -1124,7 +1128,16 @@ func handleCheckout(w http.ResponseWriter, r *http.Request) {
 		sub := effectivePrice*ci.Qty - itemDiscount
 		if sub < 0 { sub = 0 }
 		total += sub
-		items = append(items, checkoutItem{Name: p.Name, Qty: ci.Qty, Price: effectivePrice, Discount: float64(itemDiscount), Subtotal: sub, TaxRate: p.TaxRate, Notes: ci.Notes})
+		items = append(items, checkoutItem{
+			ProductID: ci.ProductID,
+			Name:      p.Name,
+			Qty:       ci.Qty,
+			Price:     effectivePrice,
+			Discount:  float64(itemDiscount),
+			Subtotal:  sub,
+			TaxRate:   p.TaxRate,
+			Notes:     ci.Notes,
+		})
 		sqlTx.Exec("INSERT INTO tx_items (tx_id,product_id,name,qty,price,discount,subtotal,notes) VALUES (?,?,?,?,?,?,?,?)",
 			txID, ci.ProductID, p.Name, ci.Qty, effectivePrice, ci.Discount, sub, ci.Notes)
 		sqlTx.Exec("UPDATE products SET stock=stock-? WHERE id=? AND stock>=?", ci.Qty, ci.ProductID, ci.Qty)

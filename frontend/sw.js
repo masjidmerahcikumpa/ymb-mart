@@ -1,5 +1,5 @@
-// POS Simulator Service Worker v3
-const CACHE_NAME = "pos-v3";
+// POS Simulator Service Worker v4
+const CACHE_NAME = "pos-v4";
 
 // Install - no pre-cache
 self.addEventListener("install", (e) => {

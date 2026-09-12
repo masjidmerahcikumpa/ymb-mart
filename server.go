@@ -211,19 +211,22 @@ func setupRouter() *http.ServeMux {
 	mux.HandleFunc("/ws", handleWebSocket)
 	mux.HandleFunc("/health", handleHealth)
 
-	// Frontend routes (embedded, with live disk fallback)
+	// Frontend routes (prefer embedded assets, fallback to live disk)
 	frontendHandler := func(name string) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			var data []byte
 			var err error
-			dir := getDataDir()
-			diskPath := filepath.Join(dir, "frontend", name)
-			if d, e := os.ReadFile(diskPath); e == nil {
-				data = d
-			} else if d, e := os.ReadFile(filepath.Join("frontend", name)); e == nil {
-				data = d
-			} else {
-				data, err = frontendFS.ReadFile("frontend/" + name)
+			data, err = frontendFS.ReadFile("frontend/" + name)
+			if err != nil || len(data) == 0 {
+				dir := getDataDir()
+				diskPath := filepath.Join(dir, "frontend", name)
+				if d, e := os.ReadFile(diskPath); e == nil {
+					data = d
+					err = nil
+				} else if d, e := os.ReadFile(filepath.Join("frontend", name)); e == nil {
+					data = d
+					err = nil
+				}
 			}
 			if err != nil && len(data) == 0 {
 				http.Error(w, "Not found", 404)
@@ -241,31 +244,32 @@ func setupRouter() *http.ServeMux {
 	mux.HandleFunc("/admin", frontendHandler("admin.html"))
 	mux.HandleFunc("/customer", frontendHandler("customer.html"))
 	mux.HandleFunc("/sw.js", func(w http.ResponseWriter, r *http.Request) {
-		var data []byte
-		dir := getDataDir()
-		if d, e := os.ReadFile(filepath.Join(dir, "frontend", "sw.js")); e == nil {
-			data = d
-		} else if d, e := os.ReadFile("frontend/sw.js"); e == nil {
-			data = d
-		} else {
-			data, _ = frontendFS.ReadFile("frontend/sw.js")
+		data, _ := frontendFS.ReadFile("frontend/sw.js")
+		if len(data) == 0 {
+			dir := getDataDir()
+			if d, e := os.ReadFile(filepath.Join(dir, "frontend", "sw.js")); e == nil {
+				data = d
+			} else if d, e := os.ReadFile("frontend/sw.js"); e == nil {
+				data = d
+			}
 		}
 		w.Header().Set("Content-Type", "application/javascript")
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		w.Write(data)
 	})
 	logoHandler := func(w http.ResponseWriter, r *http.Request) {
-		var data []byte
-		dir := getDataDir()
-		if d, e := os.ReadFile(filepath.Join(dir, "frontend", "logo.png")); e == nil {
-			data = d
-		} else if d, e := os.ReadFile(filepath.Join(dir, "LOGO-YMB.png")); e == nil {
-			data = d
-		} else if d, e := os.ReadFile("frontend/logo.png"); e == nil {
-			data = d
-		} else if d, e := os.ReadFile("LOGO-YMB.png"); e == nil {
-			data = d
-		} else {
-			data, _ = frontendFS.ReadFile("frontend/logo.png")
+		data, _ := frontendFS.ReadFile("frontend/logo.png")
+		if len(data) == 0 {
+			dir := getDataDir()
+			if d, e := os.ReadFile(filepath.Join(dir, "frontend", "logo.png")); e == nil {
+				data = d
+			} else if d, e := os.ReadFile(filepath.Join(dir, "LOGO-YMB.png")); e == nil {
+				data = d
+			} else if d, e := os.ReadFile("frontend/logo.png"); e == nil {
+				data = d
+			} else if d, e := os.ReadFile("LOGO-YMB.png"); e == nil {
+				data = d
+			}
 		}
 		if len(data) == 0 {
 			http.NotFound(w, r)
@@ -280,14 +284,14 @@ func setupRouter() *http.ServeMux {
 	mux.HandleFunc("/LOGO-YMB.png", logoHandler)
 
 	mux.HandleFunc("/manifest.json", func(w http.ResponseWriter, r *http.Request) {
-		var data []byte
-		dir := getDataDir()
-		if d, e := os.ReadFile(filepath.Join(dir, "frontend", "manifest.json")); e == nil {
-			data = d
-		} else if d, e := os.ReadFile("frontend/manifest.json"); e == nil {
-			data = d
-		} else {
-			data, _ = frontendFS.ReadFile("frontend/manifest.json")
+		data, _ := frontendFS.ReadFile("frontend/manifest.json")
+		if len(data) == 0 {
+			dir := getDataDir()
+			if d, e := os.ReadFile(filepath.Join(dir, "frontend", "manifest.json")); e == nil {
+				data = d
+			} else if d, e := os.ReadFile("frontend/manifest.json"); e == nil {
+				data = d
+			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(data)

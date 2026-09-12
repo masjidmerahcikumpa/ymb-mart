@@ -1774,16 +1774,18 @@ function renderProductGrid(){
 }
 
 async function loadProducts(search){
-  var url=API+"/api/products";
-  if(search) url+="?search="+encodeURIComponent(search);
-  var r=await fetch(url);
-  var products=await r.json();
-  if(!search) {
-    allProducts = products;
-  } else {
-    allProducts = products;
+  var url=API+"/api/products?_t="+Date.now();
+  if(search) url+="&search="+encodeURIComponent(search);
+  try {
+    var r=await fetch(url);
+    var products=await r.json();
+    if(Array.isArray(products)){
+      allProducts = products;
+      renderProductGrid();
+    }
+  } catch(e){
+    console.error("[loadProducts] error:", e);
   }
-  renderProductGrid();
 }
 function searchProducts(){loadProducts(document.getElementById("search").value)}
 
@@ -2018,6 +2020,7 @@ async function checkout(){
   if(discountType==="percent"){discount=Math.round(subtotal*discountInput/100)}
   else{discount=discountInput}
   var items=cart.map(function(i){return{product_id:i.product_id,qty:i.qty,discount:0,notes:""}});
+  var purchasedItems=cart.map(function(i){return{product_id:i.product_id,name:i.name,qty:i.qty}});
   // Auto-refresh CSRF if empty
   if(!csrfToken){await fetchCsrfToken(currentToken)}
   var r=await fetch(API+"/api/checkout",{method:"POST",headers:{"Content-Type":"application/json","Authorization":currentToken,"X-CSRF-Token":csrfToken},body:JSON.stringify({items:items,payment:payment,discount:discount,discount_type:discountType,amount_paid:paid,cashier:currentUser,shift_id:currentShiftId,member_id:activeMember?activeMember.member_id:""})});
@@ -2030,21 +2033,19 @@ async function checkout(){
     if(tx.warnings&&tx.warnings.length>0){alert("Perhatian:\n"+tx.warnings.join("\n"))}
     if(tx.change>0){document.getElementById("modal-change-row").style.display="block";document.getElementById("modal-change").textContent="Rp "+tx.change.toLocaleString("id-ID")}
     else{document.getElementById("modal-change-row").style.display="none"}
-    document.getElementById("modal-receipt").innerHTML="<b>Items:</b> "+tx.items.map(function(i){return esc(i.name)+" x"+i.qty}).join(", ");
+    document.getElementById("modal-receipt").innerHTML="<b>Items:</b> "+(tx.items||purchasedItems).map(function(i){return esc(i.name)+" x"+i.qty}).join(", ");
     document.getElementById("payment-modal").style.display="flex";
     cart=[];document.getElementById("amount-paid").value="";renderCart();
     fetch(API+"/api/ws-broadcast",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({type:"new_transaction",data:{...tx,cashier:currentDisplayName,member:activeMember?activeMember.name:""}})}).catch(function(){});
 
     // Kurangi stok seketika di memori & re-render kartu produk tanpa perlu refresh
-    if(tx.items && tx.items.length > 0){
-      tx.items.forEach(function(ti){
-        var found = allProducts.find(function(p){ return p.id === ti.product_id || p.name === ti.name; });
-        if(found){
-          found.stock = Math.max(0, found.stock - ti.qty);
-        }
-      });
-      renderProductGrid();
-    }
+    purchasedItems.forEach(function(pi){
+      var found = allProducts.find(function(p){ return Number(p.id) === Number(pi.product_id) || p.name === pi.name; });
+      if(found){
+        found.stock = Math.max(0, (parseInt(found.stock) || 0) - pi.qty);
+      }
+    });
+    renderProductGrid();
     loadProducts();
   }
   }catch(e){console.error("[checkout] error:",e);alert("Checkout error: "+e.message)}
