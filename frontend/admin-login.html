@@ -3,52 +3,338 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Admin Login</title>
+<title>Admin Login — YMB Mart Backoffice</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,sans-serif;background:linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#1d4ed8 100%)}
-.card{background:#fff;border-radius:24px;padding:40px;width:380px;box-shadow:0 25px 60px rgba(0,0,0,.3);text-align:center}
-.icon{width:64px;height:64px;background:#dc2626;border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px}
-.icon svg{width:32px;height:32px;color:#fff}
-h2{font-size:24px;font-weight:700;margin-bottom:4px}
-.sub{color:#64748b;font-size:14px;margin-bottom:24px}
-input{width:100%;border:2px solid #e2e8f0;border-radius:12px;padding:12px 16px;font-size:15px;margin-bottom:12px;outline:none;transition:border .2s}
-input:focus{border-color:#dc2626;box-shadow:0 0 0 3px rgba(220,38,38,.1)}
-button{width:100%;background:#dc2626;color:#fff;border:none;border-radius:12px;padding:14px;font-size:16px;font-weight:700;cursor:pointer;transition:background .2s}
-button:hover{background:#b91c1c}
-.error{color:#dc2626;font-size:13px;margin-top:12px;display:none}
-.back{color:#64748b;font-size:13px;text-decoration:none;display:inline-block;margin-bottom:16px}
-.back:hover{color:#1e293b}
+:root {
+  --maroon: #8b1538;
+  --maroon-dark: #660e28;
+  --maroon-light: #a91e48;
+  --gold: #d4af37;
+  --bg-dark: #090d16;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bg-dark);
+  background-image: 
+    radial-gradient(circle at 15% 20%, rgba(139, 21, 56, 0.35) 0%, transparent 45%),
+    radial-gradient(circle at 85% 80%, rgba(212, 175, 55, 0.15) 0%, transparent 40%),
+    radial-gradient(circle at 50% 50%, rgba(15, 23, 42, 0.7) 0%, transparent 100%);
+  color: #f8fafc;
+  padding: 24px 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+body::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 36px 36px;
+  pointer-events: none;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 420px;
+  background: rgba(18, 24, 38, 0.85);
+  border: 1px solid rgba(212, 175, 55, 0.22);
+  border-radius: 24px;
+  padding: 40px 36px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6), 0 0 30px rgba(139, 21, 56, 0.15);
+  backdrop-filter: blur(20px);
+  position: relative;
+  z-index: 1;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #94a3b8;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+  margin-bottom: 24px;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.back-link:hover {
+  color: #ffffff;
+  transform: translateX(-3px);
+}
+
+.card-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(139, 21, 56, 0.25);
+  border: 1px solid rgba(212, 175, 55, 0.3);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 16px;
+}
+
+.login-header h1 {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: #ffffff;
+  margin-bottom: 6px;
+}
+
+.login-header p {
+  font-size: 13px;
+  color: #94a3b8;
+  margin-bottom: 28px;
+}
+
+.form-group {
+  margin-bottom: 18px;
+  text-align: left;
+}
+
+.form-group label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #cbd5e1;
+  margin-bottom: 7px;
+}
+
+.input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-icon {
+  position: absolute;
+  left: 14px;
+  color: #64748b;
+  pointer-events: none;
+  display: flex;
+}
+
+.input-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.input-field {
+  width: 100%;
+  background: rgba(11, 15, 25, 0.7);
+  border: 1.5px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 12px 14px 12px 42px;
+  font-size: 14px;
+  color: #ffffff;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.input-field:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.15);
+}
+
+.input-field::placeholder {
+  color: #475569;
+}
+
+.btn-toggle-pwd {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+}
+
+.btn-toggle-pwd:hover {
+  color: #cbd5e1;
+}
+
+.btn-submit {
+  width: 100%;
+  background: linear-gradient(135deg, var(--maroon), var(--maroon-dark));
+  border: 1px solid rgba(212, 175, 55, 0.3);
+  color: #ffffff;
+  padding: 14px;
+  border-radius: 12px;
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  margin-top: 10px;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 16px rgba(139, 21, 56, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-submit:hover {
+  background: linear-gradient(135deg, var(--maroon-light), var(--maroon));
+  box-shadow: 0 6px 22px rgba(139, 21, 56, 0.45);
+  transform: translateY(-1px);
+}
+
+.btn-submit:active {
+  transform: translateY(0);
+}
+
+.error-alert {
+  background: rgba(220, 38, 38, 0.15);
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  color: #f87171;
+  margin-top: 16px;
+  display: none;
+  text-align: left;
+}
+
+.footer-note {
+  margin-top: 26px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 11px;
+  color: #64748b;
+  text-align: center;
+}
 </style>
 </head>
 <body>
-<div class="card">
-  <a href="/" class="back">← Kembali</a>
-  <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg></div>
-  <h2>Admin Login</h2>
-  <p class="sub">Masukkan kredensial admin</p>
+
+<div class="login-card">
+  <a href="/" class="back-link">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    <span>Kembali ke Portal</span>
+  </a>
+
+  <div class="login-header">
+    <div class="card-badge">
+      <span>🛡️ Executive Backoffice</span>
+    </div>
+    <h1>Admin Login</h1>
+    <p>Masukkan kredensial administrator untuk akses pembukuan dan pengaturan sistem toko.</p>
+  </div>
+
   <form onsubmit="doLogin(event)">
-    <input id="username" type="text" placeholder="Username" required>
-    <input id="password" type="password" placeholder="Password" required>
-    <button type="submit">Masuk</button>
+    <div class="form-group">
+      <label for="username">Username Administrator</label>
+      <div class="input-wrap">
+        <span class="input-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </span>
+        <input id="username" class="input-field" type="text" placeholder="Masukkan username" required autofocus autocomplete="username">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="password">Password</label>
+      <div class="input-wrap">
+        <span class="input-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </span>
+        <input id="password" class="input-field" type="password" placeholder="Masukkan password" required autocomplete="current-password">
+        <button type="button" class="btn-toggle-pwd" onclick="togglePasswordVisibility()" title="Lihat password">
+          <svg id="eye-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <button type="submit" class="btn-submit" id="btn-login">
+      <span>Masuk Backoffice</span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </button>
   </form>
-  <p id="error" class="error"></p>
+
+  <div id="error" class="error-alert"></div>
+
+  <div class="footer-note">
+    YMB Mart &bull; Masjid Jami' Merah Cikumpa
+  </div>
 </div>
+
 <script>
+function togglePasswordVisibility(){
+  var passInput = document.getElementById("password");
+  var icon = document.getElementById("eye-icon");
+  if(passInput.type === "password"){
+    passInput.type = "text";
+    icon.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>';
+  } else {
+    passInput.type = "password";
+    icon.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
+  }
+}
+
 async function doLogin(e){
   e.preventDefault();
-  const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:document.getElementById("username").value,password:document.getElementById("password").value})});
-  const d=await r.json();
-  if(d.status==="ok"&&d.role==="admin"){
-    sessionStorage.setItem("token",d.token);
-    sessionStorage.setItem("admin","1");
-    sessionStorage.setItem("display_name",d.display_name);
-    window.location.href="/admin";
-  }else{
-    document.getElementById("error").textContent=d.message||"Username atau password salah";
-    document.getElementById("error").style.display="block";
+  var btn = document.getElementById("btn-login");
+  var errEl = document.getElementById("error");
+  errEl.style.display = "none";
+  btn.disabled = true;
+  btn.style.opacity = "0.7";
+
+  try {
+    const r = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: document.getElementById("username").value,
+        password: document.getElementById("password").value
+      })
+    });
+    const d = await r.json();
+    if(d.status === "ok" && d.role === "admin"){
+      sessionStorage.setItem("token", d.token);
+      sessionStorage.setItem("admin", "1");
+      sessionStorage.setItem("display_name", d.display_name);
+      window.location.href = "/admin";
+    } else {
+      errEl.textContent = d.message || "Username atau password salah. Silakan coba kembali.";
+      errEl.style.display = "block";
+      btn.disabled = false;
+      btn.style.opacity = "1";
+    }
+  } catch(err) {
+    errEl.textContent = "Gagal terhubung ke server. Pastikan server aktif.";
+    errEl.style.display = "block";
+    btn.disabled = false;
+    btn.style.opacity = "1";
   }
 }
 </script>
+
 </body>
 </html>

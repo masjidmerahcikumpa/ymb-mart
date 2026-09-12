@@ -3,142 +3,489 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Customer Display</title>
+<title>Customer Display — YMB Mart</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
-*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,-apple-system,sans-serif}
-html,body{width:100%;height:100vh;overflow:hidden}
-body{display:flex;background:#1a0a0a}
-@media(max-width:1024px){
-  .left{width:60%}
-  .right{width:40%}
-  .r-total-amount{font-size:24px}
-  .ad-carousel-wrap{padding:16px 16px 0}
+:root {
+  --maroon: #8b1538;
+  --maroon-dark: #5c0d24;
+  --maroon-light: #ab1d47;
+  --gold: #d4af37;
+  --gold-light: #fef08a;
+  --bg-dark: #07090e;
+  --panel-right: #0b111e;
 }
-@media(max-width:768px){
-  body{flex-direction:column;height:auto;overflow-y:auto}
-  .left{width:100%;min-height:450px}
-  .right{width:100%;min-height:450px;border-left:none;border-top:2px solid rgba(212,175,55,.3)}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100vh; overflow: hidden; }
+body {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  display: flex;
+  background: var(--bg-dark);
+  color: #f8fafc;
 }
-@keyframes slideIn{from{opacity:0;transform:translateX(-20px)}to{opacity:1;transform:translateX(0)}}
-@keyframes pulseGlow{0%,100%{box-shadow:0 0 20px rgba(212,175,55,.3)}50%{box-shadow:0 0 40px rgba(212,175,55,.6)}}
-@keyframes marquee{0%{transform:translateX(100%)}100%{transform:translateX(-100%)}}
-@keyframes fadeIn{from{opacity:0}to{opacity:1}}
-.slide-in{animation:slideIn .3s ease-out}
-.pulse-glow{animation:pulseGlow 2s infinite}
-.marquee{animation:marquee 25s linear infinite}
-/* LEFT: Iklan (70%) */
-.left{width:70%;display:flex;flex-direction:column;background:linear-gradient(135deg,#8B0015 0%,#a5001a 30%,#c41230 60%,#d4243a 100%);position:relative;overflow:hidden}
-.left::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 30% 50%,rgba(212,175,55,.15) 0%,transparent 60%);pointer-events:none}
-.left::after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 70% 80%,rgba(212,175,55,.1) 0%,transparent 50%);pointer-events:none}
-/* Ad image area (16:9) */
-.ad-carousel-wrap{flex:1;display:flex;flex-direction:column;padding:24px 32px 0;position:relative;z-index:1}
-.ad-carousel{flex:1;border:2px solid rgba(212,175,55,.3);border-radius:16px;overflow:hidden;background:rgba(0,0,0,.3);position:relative}
-.ad-carousel img{width:100%;height:100%;object-fit:contain;animation:fadeIn .5s ease-out}
-.ad-carousel .ad-fallback{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fde68a}
-.ad-carousel .ad-fallback .icon{font-size:64px;margin-bottom:12px}
-.ad-carousel .ad-fallback h2{font-size:32px;font-weight:900;color:#fef3c7;margin-bottom:8px}
-.ad-carousel .ad-fallback p{font-size:16px;opacity:.8}
-.ad-dots{display:flex;justify-content:center;gap:8px;padding:8px}
-.ad-dot{width:10px;height:10px;border-radius:50%;background:rgba(212,175,55,.3);cursor:pointer;transition:background .2s}
-.ad-dot.active{background:#D4AF37}
-/* Running text bar */
-.ad-marquee-wrap{border:2px solid rgba(212,175,55,.3);border-radius:12px;padding:10px 16px;margin:12px 32px 20px;background:rgba(212,175,55,.08);overflow:hidden;position:relative;z-index:1}
-.ad-marquee-text{color:#fde68a;font-size:15px;font-weight:600;white-space:nowrap}
-.footer{position:relative;z-index:1;text-align:center;padding:8px;border-top:1px solid rgba(212,175,55,.15)}
-.footer p{color:rgba(253,230,138,.3);font-size:11px}
-/* RIGHT: Transaksi (30%) */
-.right{width:30%;display:flex;flex-direction:column;background:linear-gradient(to bottom,#1c1917,#292524);border-left:2px solid rgba(212,175,55,.3)}
-.r-header{background:rgba(28,25,23,.9);padding:16px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(212,175,55,.2)}
-.r-header h2{font-size:16px;font-weight:700;color:#fef3c7}
-.r-clock{font-size:16px;font-weight:700;color:#D4AF37;font-variant-numeric:tabular-nums}
-.r-status{padding:10px 20px;font-size:12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid rgba(255,255,255,.05)}
-.r-status .dot{width:8px;height:8px;border-radius:50%}
-.r-items{flex:1;overflow-y:auto;padding:12px 16px}
-.r-items::-webkit-scrollbar{width:3px}
-.r-items::-webkit-scrollbar-thumb{background:#78716c;border-radius:2px}
-.r-total{background:rgba(28,25,23,.9);padding:16px 20px;border-top:2px solid rgba(212,175,55,.3)}
-.r-total-label{color:#a8a29e;font-size:12px}
-.r-total-amount{font-size:32px;font-weight:900;color:#D4AF37;font-variant-numeric:tabular-nums}
-.r-total-sub{font-size:12px;color:#a8a29e;margin-top:4px}
-.item-row{background:rgba(41,37,36,.8);border-radius:10px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;border:1px solid rgba(120,113,108,.3);margin-bottom:6px}
-.item-num{width:24px;height:24px;background:linear-gradient(135deg,#8B0015,#a5001a);border-radius:6px;display:flex;align-items:center;justify-content:center;color:#D4AF37;font-weight:700;font-size:11px;flex-shrink:0}
-.item-info{flex:1;margin-left:10px}
-.item-name{color:#fef3c7;font-weight:600;font-size:13px}
-.item-qty{color:#a8a29e;font-size:11px}
-.item-price{color:#D4AF37;font-weight:700;font-variant-numeric:tabular-nums;font-size:13px}
+
+@keyframes slideIn { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes pulseGlow { 0%, 100% { box-shadow: 0 0 16px rgba(212, 175, 55, 0.25); } 50% { box-shadow: 0 0 32px rgba(212, 175, 55, 0.5); } }
+@keyframes marquee { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.slide-in { animation: slideIn 0.25s ease-out; }
+.pulse-glow { animation: pulseGlow 2.5s infinite; }
+.marquee { animation: marquee 24s linear infinite; }
+
+/* LEFT: IKLAN & PROMOSI (70%) */
+.left {
+  width: 70%;
+  display: flex;
+  flex-direction: column;
+  background-color: #08060c;
+  background-image: 
+    radial-gradient(circle at 25% 30%, rgba(139, 21, 56, 0.35) 0%, transparent 55%),
+    radial-gradient(circle at 80% 80%, rgba(212, 175, 55, 0.12) 0%, transparent 45%),
+    radial-gradient(circle at 50% 50%, rgba(15, 23, 42, 0.6) 0%, transparent 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.left::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+}
+
+.ad-carousel-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 32px 0;
+  position: relative;
+  z-index: 1;
+}
+
+.ad-carousel {
+  flex: 1;
+  border: 1.5px solid rgba(212, 175, 55, 0.3);
+  border-radius: 20px;
+  overflow: hidden;
+  background: rgba(14, 20, 32, 0.7);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), inset 0 0 40px rgba(0, 0, 0, 0.3);
+  position: relative;
+  backdrop-filter: blur(12px);
+}
+
+.ad-carousel img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  animation: fadeIn 0.4s ease-out;
+}
+
+.ad-carousel .ad-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px;
+}
+
+.ad-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  border-radius: 9999px;
+  background: rgba(139, 21, 56, 0.35);
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 20px;
+}
+
+.ad-fallback h2 {
+  font-size: 32px;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: -0.5px;
+  margin-bottom: 12px;
+  max-width: 600px;
+  line-height: 1.25;
+}
+
+.ad-fallback p {
+  font-size: 15px;
+  color: #94a3b8;
+  max-width: 520px;
+  line-height: 1.6;
+}
+
+.ad-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+}
+
+.ad-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ad-dot.active {
+  width: 24px;
+  border-radius: 4px;
+  background: var(--gold);
+}
+
+/* MARQUEE RUNNING TICKER */
+.ad-marquee-wrap {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid rgba(212, 175, 55, 0.25);
+  border-radius: 14px;
+  padding: 10px 18px;
+  margin: 14px 32px 18px;
+  background: rgba(11, 15, 25, 0.85);
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+  backdrop-filter: blur(12px);
+}
+
+.marquee-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--maroon);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.marquee-badge .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+}
+
+.marquee-scroll-area {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.ad-marquee-text {
+  color: var(--gold-light);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+}
+
+.footer {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 32px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 11.5px;
+  color: #64748b;
+}
+
+/* RIGHT: LIVE RECEIPT / TRANSAKSI (30%) */
+.right {
+  width: 30%;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-right);
+  border-left: 1.5px solid rgba(212, 175, 55, 0.22);
+  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.4);
+}
+
+.r-header {
+  background: rgba(15, 23, 42, 0.85);
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.2);
+}
+
+.r-header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.r-store-title {
+  font-size: 16px;
+  font-weight: 900;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.r-store-title span {
+  color: var(--gold);
+}
+
+.r-clock {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+}
+
+.r-header-sub {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11.5px;
+  color: #94a3b8;
+}
+
+.r-status {
+  padding: 10px 20px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.r-status .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+}
+
+.r-items {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 18px;
+}
+
+.r-items::-webkit-scrollbar { width: 4px; }
+.r-items::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+
+.item-row {
+  background: rgba(18, 26, 42, 0.7);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 8px;
+  transition: all 0.15s ease;
+}
+
+.item-num {
+  width: 24px;
+  height: 24px;
+  background: linear-gradient(135deg, var(--maroon), var(--maroon-dark));
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gold);
+  font-weight: 800;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.item-info {
+  flex: 1;
+  margin-left: 12px;
+  padding-right: 8px;
+}
+
+.item-name {
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 13.5px;
+  margin-bottom: 2px;
+  line-height: 1.3;
+}
+
+.item-qty {
+  color: #94a3b8;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.item-price {
+  color: var(--gold);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+}
+
+.r-total {
+  background: rgba(11, 17, 30, 0.95);
+  padding: 18px 22px;
+  border-top: 1.5px solid rgba(212, 175, 55, 0.3);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.r-total-label {
+  color: #94a3b8;
+  font-size: 11.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 4px;
+}
+
+.r-total-amount {
+  font-size: 36px;
+  font-weight: 900;
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+}
+
+.r-total-sub {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+
+/* RESPONSIVE */
+@media (max-width: 1024px) {
+  .left { width: 60%; }
+  .right { width: 40%; }
+  .r-total-amount { font-size: 28px; }
+  .ad-carousel-wrap { padding: 16px 16px 0; }
+  .ad-marquee-wrap { margin: 12px 16px 14px; }
+}
+
+@media (max-width: 768px) {
+  body { flex-direction: column; height: auto; overflow-y: auto; }
+  .left { width: 100%; min-height: 480px; }
+  .right { width: 100%; min-height: 480px; border-left: none; border-top: 2px solid rgba(212, 175, 55, 0.3); }
+}
 </style>
 </head>
 <body>
-<!-- LEFT: Iklan (70%) -->
+
+<!-- LEFT: Iklan & Promosi (70%) -->
 <div class="left">
   <div class="ad-carousel-wrap">
-    <!-- Carousel 16:9 -->
     <div class="ad-carousel" id="ad-carousel">
       <div class="ad-fallback" id="ad-fallback">
-        <div class="icon pulse-glow">🛍️</div>
-        <h2 id="ad-title">Promo Spesial Hari Ini!</h2>
-        <p id="ad-desc">Dapatkan diskon menarik untuk semua produk pilihan</p>
+        <div class="ad-badge">
+          <span>✨ Promo Pilihan YMB Mart</span>
+        </div>
+        <h2 id="ad-title">Belanja Berkah & Hemat Setiap Hari</h2>
+        <p id="ad-desc">Dapatkan aneka produk kebutuhan harian dengan harga terjangkau dan kualitas terjamin di Masjid Jami' Merah Cikumpa.</p>
       </div>
     </div>
     <div class="ad-dots" id="ad-dots"></div>
   </div>
-  <!-- Running Text -->
+
+  <!-- RUNNING TICKER -->
   <div class="ad-marquee-wrap">
-    <p class="ad-marquee-text marquee" id="ad-marquee">🎉 Promo Spesial! 🎉</p>
+    <div class="marquee-badge">
+      <span class="dot"></span>
+      <span>INFO PROMO</span>
+    </div>
+    <div class="marquee-scroll-area">
+      <p class="ad-marquee-text marquee" id="ad-marquee">🎉 Selamat datang di YMB Mart! Belanja berkah & nyaman setiap hari 🎉</p>
+    </div>
   </div>
-  <div class="footer"><p>POS Simulator v2.2</p></div>
+
+  <div class="footer">
+    <span>Masjid Jami' Merah Cikumpa &bull; YMB Mart</span>
+    <span>Customer Display v2.2</span>
+  </div>
 </div>
 
-<!-- RIGHT: Transaksi (30%) -->
+<!-- RIGHT: Transaksi Belanja (30%) -->
 <div class="right">
-  <div class="r-header" style="flex-direction:column;gap:4px;padding:12px 16px">
-    <div style="display:flex;justify-content:space-between;align-items:center;width:100%">
-      <h2 style="font-size:14px;font-weight:700;color:#fef3c7" id="store-name-header">🛒 Belanjaan</h2>
-      <div class="r-clock" id="clock">--:--</div>
+  <div class="r-header">
+    <div class="r-header-top">
+      <h2 class="r-store-title" id="store-name-header">🛒 YMB<span>Mart</span></h2>
+      <div class="r-clock" id="clock">--:--:--</div>
     </div>
-    <div style="display:flex;justify-content:space-between;width:100%;font-size:11px">
-      <span style="color:#D4AF37" id="kasir-display">Kasir: --</span>
-      <span style="color:#a8a29e" id="member-display"></span>
+    <div class="r-header-sub">
+      <span id="kasir-display" style="color:#d4af37;font-weight:700">Kasir: --</span>
+      <span id="member-display" style="color:#94a3b8"></span>
     </div>
   </div>
+
   <div class="r-status" id="r-status">
-    <div class="dot" style="background:#22c55e"></div>
-    <span style="color:#4ade80;font-weight:600" id="status-text">Menunggu...</span>
+    <div class="dot" id="status-dot" style="background:#22c55e"></div>
+    <span id="status-text" style="color:#4ade80;font-weight:700">Siap melayani</span>
   </div>
+
   <div class="r-items" id="items-list">
-    <div style="text-align:center;padding:60px 0"><p style="color:#78716c;font-size:14px">Menunggu transaksi...</p></div>
+    <div style="text-align:center;padding:80px 20px;color:#64748b">
+      <p style="font-size:36px;margin-bottom:8px;opacity:0.5">🛒</p>
+      <p style="font-size:13.5px;font-weight:600">Menunggu scan barang kasir...</p>
+    </div>
   </div>
+
   <div class="r-total">
-    <div class="r-total-label">Total Belanja</div>
+    <div class="r-total-label">Total Tagihan Belanja</div>
     <div class="r-total-amount" id="grand-total">Rp 0</div>
-    <div id="payment-details" style="display:none;margin-top:10px;padding-top:8px;border-top:1px dashed rgba(212,175,55,.3)">
-      <div style="display:flex;justify-content:space-between;font-size:13px;color:#d6d3d1;margin-bottom:4px">
-        <span>Tunai / Bayar:</span>
-        <span id="cash-paid-display" style="font-weight:700;color:#fff">Rp 0</span>
+    <div id="payment-details" style="display:none;margin-top:10px;padding-top:10px;border-top:1px dashed rgba(212,175,55,0.3)">
+      <div style="display:flex;justify-content:space-between;font-size:13px;color:#cbd5e1;margin-bottom:4px">
+        <span>Tunai Diterima:</span>
+        <span id="cash-paid-display" style="font-weight:800;color:#ffffff">Rp 0</span>
       </div>
-      <div style="display:flex;justify-content:space-between;font-size:18px;color:#4ade80;font-weight:800">
-        <span>Kembali:</span>
+      <div style="display:flex;justify-content:space-between;font-size:18px;color:#4ade80;font-weight:900">
+        <span>Kembalian:</span>
         <span id="change-display">Rp 0</span>
       </div>
     </div>
-    <div class="r-total-sub" id="payment-info" style="margin-top:6px"></div>
+    <div class="r-total-sub" id="payment-info"></div>
   </div>
 </div>
 
 <!-- CUSTOMER QRIS SCAN OVERLAY -->
-<div id="customer-qris-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.92);backdrop-filter:blur(8px);z-index:9999;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center">
-  <div style="background:#ffffff;border-radius:24px;padding:32px 36px;max-width:480px;width:92%;box-shadow:0 25px 50px -12px rgba(0,0,0,0.5);border:2px solid #d4af37;animation:slideIn 0.3s ease-out">
+<div id="customer-qris-overlay" style="display:none;position:fixed;inset:0;background:rgba(9,13,22,0.92);backdrop-filter:blur(10px);z-index:9999;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center">
+  <div style="background:#ffffff;border-radius:24px;padding:34px 38px;max-width:480px;width:92%;box-shadow:0 25px 60px rgba(0,0,0,0.6);border:2px solid #d4af37;animation:slideIn 0.3s ease-out">
     <div style="display:inline-flex;align-items:center;gap:8px;background:#fdf2f4;padding:6px 14px;border-radius:20px;border:1px solid #f8c9d2;margin-bottom:12px">
       <span style="font-size:16px">⚡</span>
       <span style="font-size:13px;font-weight:800;color:#8b1538;text-transform:uppercase;letter-spacing:0.5px">Pembayaran QRIS</span>
     </div>
-    <h2 style="font-size:18px;font-weight:800;color:#0f172a;margin-bottom:4px" id="c-qris-store">YMB Mart</h2>
-    <p style="font-size:12px;color:#64748b;margin-bottom:18px">Scan QR di bawah ini menggunakan aplikasi mobile banking atau e-wallet Anda</p>
+    <h2 style="font-size:19px;font-weight:800;color:#0f172a;margin-bottom:4px" id="c-qris-store">YMB Mart</h2>
+    <p style="font-size:12.5px;color:#64748b;margin-bottom:18px">Scan kode QR di bawah ini dengan aplikasi mobile banking atau e-wallet Anda</p>
 
     <!-- Nominal Tagihan -->
     <div style="background:#f8fafc;border:2px dashed #cbd5e1;border-radius:14px;padding:12px 16px;margin-bottom:18px">
       <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px">Total Tagihan Belanja</div>
-      <div style="font-size:34px;font-weight:900;color:#8b1538;font-variant-numeric:tabular-nums;margin-top:2px" id="c-qris-amount">Rp 0</div>
+      <div style="font-size:36px;font-weight:900;color:#8b1538;font-variant-numeric:tabular-nums;margin-top:2px" id="c-qris-amount">Rp 0</div>
     </div>
 
     <!-- QR Code Container -->
@@ -155,57 +502,77 @@ body{display:flex;background:#1a0a0a}
 
 <script>
 // Clock
-function updateClock(){var n=new Date();document.getElementById("clock").textContent=n.toLocaleTimeString("id-ID",{hour12:false})}
-setInterval(updateClock,1000);updateClock();
+function updateClock(){
+  var n = new Date();
+  document.getElementById("clock").textContent = n.toLocaleTimeString("id-ID", {hour12: false});
+}
+setInterval(updateClock, 1000);
+updateClock();
 
 // Carousel state
-var _adImages=[];
-var _adIdx=0;
-var _carouselTimer=null;
+var _adImages = [];
+var _adIdx = 0;
+var _carouselTimer = null;
 
 // Load ads + images from settings
 async function loadAds(){
-  try{
-    var r=await fetch("/api/settings?include_ads=1");var s=await r.json();
-    if(s.ad_title)document.getElementById("ad-title").textContent=s.ad_title;
-    if(s.ad_desc)document.getElementById("ad-desc").textContent=s.ad_desc;
-    if(s.ad_marquee)document.getElementById("ad-marquee").textContent=s.ad_marquee;
-    // Load images
-    _adImages=JSON.parse(s.ad_images||"[]");
+  try {
+    var r = await fetch("/api/settings?include_ads=1");
+    var s = await r.json();
+    if(s.ad_title) document.getElementById("ad-title").textContent = s.ad_title;
+    if(s.ad_desc) document.getElementById("ad-desc").textContent = s.ad_desc;
+    if(s.ad_marquee) document.getElementById("ad-marquee").textContent = s.ad_marquee;
+    _adImages = JSON.parse(s.ad_images || "[]");
     renderCarousel();
-  }catch(e){}
+  } catch(e){}
 }
+
 function renderCarousel(){
-  var el=document.getElementById("ad-carousel");
-  var dots=document.getElementById("ad-dots");
+  var el = document.getElementById("ad-carousel");
+  var dots = document.getElementById("ad-dots");
   if(!_adImages.length){
-    // Show fallback (no images uploaded)
-    el.innerHTML='<div class="ad-fallback" id="ad-fallback"><div class="icon pulse-glow">🛍️</div><h2 id="ad-title">Promo Spesial Hari Ini!</h2><p id="ad-desc">Dapatkan diskon menarik untuk semua produk pilihan</p></div>';
-    dots.innerHTML='';
-    if(_carouselTimer)clearInterval(_carouselTimer);
+    el.innerHTML = '<div class="ad-fallback" id="ad-fallback">' +
+      '<div class="ad-badge"><span>✨ Promo Pilihan YMB Mart</span></div>' +
+      '<h2 id="ad-title">Belanja Berkah & Hemat Setiap Hari</h2>' +
+      '<p id="ad-desc">Dapatkan aneka produk kebutuhan harian dengan harga terjangkau dan kualitas terjamin di Masjid Jami\' Merah Cikumpa.</p>' +
+    '</div>';
+    dots.innerHTML = '';
+    if(_carouselTimer) clearInterval(_carouselTimer);
     return;
   }
-  // Show image carousel
-  el.innerHTML='<img src="'+_adImages[_adIdx]+'" alt="Iklan">';
-  dots.innerHTML=_adImages.map(function(_,i){
-    return '<div class="ad-dot'+(i===_adIdx?' active':'')+'" onclick="goSlide('+i+')"></div>';
+  el.innerHTML = '<img src="' + _adImages[_adIdx] + '" alt="Iklan">';
+  dots.innerHTML = _adImages.map(function(_, i){
+    return '<div class="ad-dot' + (i === _adIdx ? ' active' : '') + '" onclick="goSlide(' + i + ')"></div>';
   }).join("");
-  // Auto-rotate
-  if(_adImages.length>1){
-    if(_carouselTimer)clearInterval(_carouselTimer);
-    _carouselTimer=setInterval(function(){_adIdx=(_adIdx+1)%_adImages.length;renderCarousel()},4000);
+  if(_adImages.length > 1){
+    if(_carouselTimer) clearInterval(_carouselTimer);
+    _carouselTimer = setInterval(function(){
+      _adIdx = (_adIdx + 1) % _adImages.length;
+      renderCarousel();
+    }, 4500);
   }
 }
-function goSlide(i){_adIdx=i;renderCarousel()}
+
+function goSlide(i){ _adIdx = i; renderCarousel(); }
 loadAds();
-async function loadStoreName(){try{var r=await fetch("/api/settings");var s=await r.json();if(s.store_name)document.getElementById("store-name-header").textContent="🛒 "+s.store_name;}catch(e){}}
+
+async function loadStoreName(){
+  try {
+    var r = await fetch("/api/settings");
+    var s = await r.json();
+    if(s.store_name){
+      document.getElementById("store-name-header").innerHTML = "🛒 " + esc(s.store_name);
+    }
+  } catch(e){}
+}
+function esc(s){ return (s||"").replace(/[&<>"']/g, function(m){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]; }); }
 loadStoreName();
 
-// Active Cashier state
+// Active Cashier
 var currentCashier = "";
 
 async function loadActiveCashier(){
-  try{
+  try {
     var r = await fetch("/api/shifts/active");
     var shifts = await r.json();
     if(shifts && shifts.length > 0){
@@ -220,41 +587,42 @@ async function loadActiveCashier(){
     if(!currentCashier){
       document.getElementById("kasir-display").textContent = "Kasir: --";
     }
-  }catch(e){}
+  } catch(e){}
 }
 loadActiveCashier();
 
 // WebSocket
-var liveItems=[];
-var isCheckoutDone=false;
-var WS_URL="ws://"+location.host+"/ws";
+var liveItems = [];
+var isCheckoutDone = false;
+var WS_URL = "ws://" + location.host + "/ws";
+
 function connectWS(){
-  try{
-    var ws=new WebSocket(WS_URL);
-    ws.onopen=function(){
-      document.getElementById("status-text").textContent="Terhubung";
-      document.getElementById("status-text").style.color="#4ade80";
-      document.querySelector("#r-status .dot").style.background="#22c55e";
+  try {
+    var ws = new WebSocket(WS_URL);
+    ws.onopen = function(){
+      document.getElementById("status-text").textContent = "Siap melayani";
+      document.getElementById("status-text").style.color = "#4ade80";
+      document.getElementById("status-dot").style.background = "#22c55e";
       loadActiveCashier();
     };
-    ws.onmessage=function(e){
-      var msg=JSON.parse(e.data);
-      if(msg.type==="cart_update")handleCartUpdate(msg.data);
-      if(msg.type==="new_transaction")handleNewTx(msg.data);
-      if(msg.type==="reset_display"){isCheckoutDone=false;closeTransaction(msg.data);}
-      if(msg.type==="shift_open")handleShiftOpen(msg.data);
-      if(msg.type==="shift_close")handleShiftClose(msg.data);
-      if(msg.type==="show_qris")handleShowQris(msg.data);
-      if(msg.type==="hide_qris")handleHideQris();
+    ws.onmessage = function(e){
+      var msg = JSON.parse(e.data);
+      if(msg.type === "cart_update") handleCartUpdate(msg.data);
+      if(msg.type === "new_transaction") handleNewTx(msg.data);
+      if(msg.type === "reset_display"){ isCheckoutDone = false; closeTransaction(msg.data); }
+      if(msg.type === "shift_open") handleShiftOpen(msg.data);
+      if(msg.type === "shift_close") handleShiftClose(msg.data);
+      if(msg.type === "show_qris") handleShowQris(msg.data);
+      if(msg.type === "hide_qris") handleHideQris();
     };
-    ws.onclose=function(){
-      document.getElementById("status-text").textContent="Disconnected...";
-      document.getElementById("status-text").style.color="#dc2626";
-      document.querySelector("#r-status .dot").style.background="#dc2626";
-      setTimeout(connectWS,3000);
+    ws.onclose = function(){
+      document.getElementById("status-text").textContent = "Menghubungkan kembali...";
+      document.getElementById("status-text").style.color = "#f87171";
+      document.getElementById("status-dot").style.background = "#dc2626";
+      setTimeout(connectWS, 3000);
     };
-    ws.onerror=function(){};
-  }catch(e){}
+    ws.onerror = function(){};
+  } catch(e){}
 }
 
 function handleShiftOpen(data){
@@ -273,42 +641,48 @@ function handleShiftClose(data){
 }
 
 function handleCartUpdate(data){
-  if(isCheckoutDone)return;
-  liveItems=data.items||[];
-  var total=data.total||0;
+  if(isCheckoutDone) return;
+  liveItems = data.items || [];
+  var total = data.total || 0;
   renderLiveItems();
-  document.getElementById("payment-details").style.display="none";
-  document.getElementById("grand-total").textContent="Rp "+total.toLocaleString("id-ID");
-  document.getElementById("payment-info").textContent=liveItems.length+" item dipilih";
-  document.getElementById("status-text").textContent="Memilih produk...";
-  document.getElementById("status-text").style.color="#fbbf24";
-  document.querySelector("#r-status .dot").style.background="#fbbf24";
+  document.getElementById("payment-details").style.display = "none";
+  document.getElementById("grand-total").textContent = "Rp " + total.toLocaleString("id-ID");
+  document.getElementById("payment-info").textContent = liveItems.length + " item belanjaan";
+  document.getElementById("status-text").textContent = "Memilih produk...";
+  document.getElementById("status-text").style.color = "#fbbf24";
+  document.getElementById("status-dot").style.background = "#fbbf24";
   if(data.cashier){
     currentCashier = data.cashier;
-    document.getElementById("kasir-display").textContent="Kasir: "+currentCashier;
+    document.getElementById("kasir-display").textContent = "Kasir: " + currentCashier;
   } else if(currentCashier){
-    document.getElementById("kasir-display").textContent="Kasir: "+currentCashier;
+    document.getElementById("kasir-display").textContent = "Kasir: " + currentCashier;
   }
-  if(data.member)document.getElementById("member-display").textContent="👤 "+data.member;
-  else document.getElementById("member-display").textContent="";
+  if(data.member) document.getElementById("member-display").textContent = "👤 " + data.member;
+  else document.getElementById("member-display").textContent = "";
 }
 
 function renderLiveItems(){
-  var el=document.getElementById("items-list");
+  var el = document.getElementById("items-list");
   if(!liveItems.length){
-    el.innerHTML='<div style="text-align:center;padding:60px 0"><p style="color:#78716c;font-size:14px">Menunggu transaksi...</p></div>';
+    el.innerHTML = '<div style="text-align:center;padding:80px 20px;color:#64748b">' +
+      '<p style="font-size:36px;margin-bottom:8px;opacity:0.5">🛒</p>' +
+      '<p style="font-size:13.5px;font-weight:600">Menunggu scan barang kasir...</p>' +
+    '</div>';
     return;
   }
-  var html="";
-  liveItems.forEach(function(item,i){
-    html+='<div class="item-row slide-in" style="animation-delay:'+i*30+'ms">';
-    html+='<div class="item-num">'+(i+1)+'</div>';
-    html+='<div class="item-info"><p class="item-name">'+item.name+'</p><p class="item-qty">'+item.qty+' x Rp '+item.price.toLocaleString("id-ID")+'</p></div>';
-    html+='<p class="item-price">Rp '+(item.price*item.qty).toLocaleString("id-ID")+'</p>';
-    html+='</div>';
+  var html = "";
+  liveItems.forEach(function(item, i){
+    html += '<div class="item-row slide-in" style="animation-delay:' + (i * 25) + 'ms">' +
+      '<div class="item-num">' + (i + 1) + '</div>' +
+      '<div class="item-info">' +
+        '<p class="item-name">' + esc(item.name) + '</p>' +
+        '<p class="item-qty">' + item.qty + ' x Rp ' + item.price.toLocaleString("id-ID") + '</p>' +
+      '</div>' +
+      '<p class="item-price">Rp ' + (item.price * item.qty).toLocaleString("id-ID") + '</p>' +
+    '</div>';
   });
-  el.innerHTML=html;
-  el.scrollTop=el.scrollHeight;
+  el.innerHTML = html;
+  el.scrollTop = el.scrollHeight;
 }
 
 function handleShowQris(data){
@@ -337,53 +711,54 @@ function handleHideQris(){
 
 function handleNewTx(tx){
   handleHideQris();
-  isCheckoutDone=true;
-  liveItems=(tx.items||[]).map(function(it){return{name:it.name,qty:it.qty,price:it.price}});
+  isCheckoutDone = true;
+  liveItems = (tx.items || []).map(function(it){ return { name: it.name, qty: it.qty, price: it.price }; });
   renderLiveItems();
-  document.getElementById("grand-total").textContent="Rp "+(tx.grand_total||0).toLocaleString("id-ID");
+  document.getElementById("grand-total").textContent = "Rp " + (tx.grand_total || 0).toLocaleString("id-ID");
   
-  if(tx.payment==="CASH" && (tx.amount_paid||0)>0){
-    document.getElementById("payment-details").style.display="block";
-    document.getElementById("cash-paid-display").textContent="Rp "+(tx.amount_paid||0).toLocaleString("id-ID");
-    document.getElementById("change-display").textContent="Rp "+(tx.change||0).toLocaleString("id-ID");
-  }else{
-    document.getElementById("payment-details").style.display="none";
+  if(tx.payment === "CASH" && (tx.amount_paid || 0) > 0){
+    document.getElementById("payment-details").style.display = "block";
+    document.getElementById("cash-paid-display").textContent = "Rp " + (tx.amount_paid || 0).toLocaleString("id-ID");
+    document.getElementById("change-display").textContent = "Rp " + (tx.change || 0).toLocaleString("id-ID");
+  } else {
+    document.getElementById("payment-details").style.display = "none";
   }
 
-  document.getElementById("payment-info").textContent="✅ "+(tx.payment||"CASH")+" — Selesai";
-  document.getElementById("status-text").textContent="Transaksi selesai!";
-  document.getElementById("status-text").style.color="#22c55e";
-  document.querySelector("#r-status .dot").style.background="#22c55e";
+  document.getElementById("payment-info").textContent = "✅ " + (tx.payment || "CASH") + " — Selesai";
+  document.getElementById("status-text").textContent = "Transaksi selesai!";
+  document.getElementById("status-text").style.color = "#22c55e";
+  document.getElementById("status-dot").style.background = "#22c55e";
   if(tx.cashier){
     currentCashier = tx.cashier;
-    document.getElementById("kasir-display").textContent="Kasir: "+currentCashier;
-  } else if(currentCashier){
-    document.getElementById("kasir-display").textContent="Kasir: "+currentCashier;
+    document.getElementById("kasir-display").textContent = "Kasir: " + currentCashier;
   }
-  if(tx.member)document.getElementById("member-display").textContent="👤 "+tx.member;
+  if(tx.member) document.getElementById("member-display").textContent = "👤 " + tx.member;
 }
 
 function closeTransaction(data){
   handleHideQris();
-  isCheckoutDone=false;
-  liveItems=[];
-  document.getElementById("items-list").innerHTML='<div style="text-align:center;padding:60px 0"><p style="color:#78716c;font-size:14px">Menunggu transaksi...</p></div>';
-  document.getElementById("grand-total").textContent="Rp 0";
-  document.getElementById("payment-details").style.display="none";
-  document.getElementById("payment-info").textContent="";
-  document.getElementById("status-text").textContent="Menunggu...";
-  document.getElementById("status-text").style.color="#4ade80";
-  document.querySelector("#r-status .dot").style.background="#22c55e";
+  isCheckoutDone = false;
+  liveItems = [];
+  document.getElementById("items-list").innerHTML = '<div style="text-align:center;padding:80px 20px;color:#64748b">' +
+    '<p style="font-size:36px;margin-bottom:8px;opacity:0.5">🛒</p>' +
+    '<p style="font-size:13.5px;font-weight:600">Menunggu scan barang kasir...</p>' +
+  '</div>';
+  document.getElementById("grand-total").textContent = "Rp 0";
+  document.getElementById("payment-details").style.display = "none";
+  document.getElementById("payment-info").textContent = "";
+  document.getElementById("status-text").textContent = "Siap melayani";
+  document.getElementById("status-text").style.color = "#4ade80";
+  document.getElementById("status-dot").style.background = "#22c55e";
   
   if(data && data.cashier){
     currentCashier = data.cashier;
   }
   if(currentCashier){
-    document.getElementById("kasir-display").textContent="Kasir: "+currentCashier;
+    document.getElementById("kasir-display").textContent = "Kasir: " + currentCashier;
   } else {
     loadActiveCashier();
   }
-  document.getElementById("member-display").textContent="";
+  document.getElementById("member-display").textContent = "";
 }
 
 connectWS();

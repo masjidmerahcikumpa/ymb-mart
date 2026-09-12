@@ -3,165 +3,938 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>POS - Kasir</title>
+<title>POS — Terminal Kasir YMB Mart</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:system-ui,-apple-system,sans-serif;height:100vh;overflow:hidden;background:#f1f5f9;color:#1e293b}
-.swal2-popup{font-family:system-ui,-apple-system,sans-serif!important;border-radius:16px!important;padding:22px!important}
-.swal2-title{font-size:18px!important;font-weight:700!important;color:#1e293b!important}
-.swal2-html-container{font-size:13px!important;color:#475569!important;line-height:1.5!important}
-.swal2-actions button{font-size:12px!important;font-weight:600!important;border-radius:8px!important;padding:8px 16px!important}
-input,select,button{font-family:inherit}
+:root {
+  --maroon: #8b1538;
+  --maroon-dark: #5c0d24;
+  --maroon-light: #ab1d47;
+  --gold: #d4af37;
+  --gold-dark: #b89628;
+  --emerald: #059669;
+  --emerald-dark: #047857;
+  --bg-slate: #f8fafc;
+  --dark-slate: #0f172a;
+}
 
-/* LOGIN */
-.login-screen{position:fixed;inset:0;background:linear-gradient(135deg,#1e293b 0%,#8B1538 50%,#D4AF37 100%);display:flex;align-items:center;justify-content:center;z-index:100}
-.login-card{background:#fff;border-radius:20px;padding:40px;width:400px;text-align:center;box-shadow:0 25px 60px rgba(0,0,0,.4)}
-.login-icon{width:72px;height:72px;background:linear-gradient(135deg,#8B1538,#D4AF37);border-radius:20px;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:32px}
-.login-card h2{font-size:22px;font-weight:800;margin-bottom:4px}
-.login-card p{color:#64748b;font-size:13px;margin-bottom:24px}
-.form-group{text-align:left;margin-bottom:16px}
-.form-group label{font-size:12px;font-weight:600;color:#475569;display:block;margin-bottom:6px}
-.form-group input,.form-group select{width:100%;border:2px solid #e2e8f0;border-radius:12px;padding:12px 14px;font-size:14px;outline:none;transition:border .2s}
-.form-group input:focus,.form-group select:focus{border-color:#D4AF37}
-.btn-primary{width:100%;background:linear-gradient(135deg,#D4AF37,#b8960c);color:#1e293b;border:none;border-radius:12px;padding:14px;font-size:16px;font-weight:800;cursor:pointer;transition:all .2s}
-.btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(212,175,55,.4)}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg-slate);
+  color: #0f172a;
+}
 
-/* NAVBAR */
-.navbar{background:#1e293b;color:#fff;padding:0 20px;display:flex;justify-content:space-between;align-items:center;height:48px;font-size:12px}
-.navbar a{color:#94a3b8;text-decoration:none;padding:4px 8px;border-radius:6px;transition:all .2s}
-.navbar a:hover{background:rgba(255,255,255,.1);color:#fff}
-.navbar .active{color:#D4AF37;font-weight:700}
-.nav-right{display:flex;align-items:center;gap:16px}
-.nav-info{color:#D4AF37;font-weight:600;font-size:11px}
-.btn-logout{background:#8B1538;color:#fff;border:none;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;transition:background .2s}
-.btn-logout:hover{background:#a01a45}
+.swal2-popup { font-family: inherit!important; border-radius: 18px!important; padding: 22px!important; }
+.swal2-title { font-size: 18px!important; font-weight: 800!important; color: #0f172a!important; }
+.swal2-html-container { font-size: 13.5px!important; color: #475569!important; line-height: 1.5!important; }
+.swal2-actions button { font-size: 12.5px!important; font-weight: 700!important; border-radius: 10px!important; padding: 10px 18px!important; }
+input, select, button { font-family: inherit; }
 
-/* HEADER */
-.header{background:#fff;padding:12px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e2e8f0}
-.header-title{font-size:18px;font-weight:800;color:#1e293b}
-.header-title span{color:#D4AF37}
-.search-box{border:2px solid #e2e8f0;border-radius:10px;padding:8px 16px;font-size:13px;width:300px;outline:none;transition:border .2s}
-.search-box:focus{border-color:#D4AF37}
+/* === LOGIN & SHIFT SCREENS === */
+.login-screen {
+  position: fixed;
+  inset: 0;
+  background-color: #090d16;
+  background-image: 
+    radial-gradient(circle at 15% 15%, rgba(139, 21, 56, 0.4) 0%, transparent 45%),
+    radial-gradient(circle at 85% 85%, rgba(212, 175, 55, 0.18) 0%, transparent 40%),
+    radial-gradient(circle at 50% 50%, rgba(15, 23, 42, 0.75) 0%, transparent 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
 
-/* PRODUCTS GRID */
-.products-area{flex:2;overflow-y:auto;padding:16px}
-.products-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
-.product-card{background:#fff;border-radius:14px;padding:16px;cursor:pointer;border:2px solid transparent;transition:all .2s;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-.product-card:hover{transform:translateY(-3px);box-shadow:0 8px 24px rgba(0,0,0,.12);border-color:#D4AF37}
-.product-card:active{transform:scale(.97)}
-.product-emoji{font-size:28px;margin-bottom:8px}
-.product-name{font-size:13px;font-weight:700;margin-bottom:4px;line-height:1.3}
-.product-price{font-size:15px;font-weight:800;color:#D4AF37}
-.product-stock{font-size:10px;color:#94a3b8;margin-top:4px}
-.product-stock.low{color:#ef4444;font-weight:600}
-.product-promo{font-size:10px;color:#22c55e;font-weight:600;margin-top:2px}
+.login-screen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 36px 36px;
+  pointer-events: none;
+}
 
-/* CART PANEL */
-.cart-panel{flex:1;background:#fff;display:flex;flex-direction:column;border-left:1px solid #e2e8f0;min-width:340px}
-.cart-header{background:linear-gradient(135deg,#1e293b,#334155);color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center}
-.cart-header h3{font-size:15px;font-weight:700}
-.cart-header .count{background:#D4AF37;color:#1e293b;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:800;margin-left:8px}
-.btn-clear{background:#8B1538;color:#fff;border:none;padding:5px 12px;border-radius:8px;cursor:pointer;font-size:11px;font-weight:600;transition:background .2s}
-.btn-clear:hover{background:#a01a45}
+.login-card {
+  background: rgba(18, 24, 38, 0.88);
+  border: 1px solid rgba(212, 175, 55, 0.25);
+  border-radius: 24px;
+  padding: 38px 34px;
+  width: 100%;
+  max-width: 420px;
+  text-align: center;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.65), 0 0 32px rgba(139, 21, 56, 0.2);
+  backdrop-filter: blur(20px);
+  position: relative;
+  z-index: 1;
+  color: #ffffff;
+}
+
+.login-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(139, 21, 56, 0.3);
+  border: 1px solid rgba(212, 175, 55, 0.3);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 14px;
+}
+
+.login-card h2 {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.4px;
+  margin-bottom: 4px;
+}
+
+.login-card p {
+  color: #94a3b8;
+  font-size: 13px;
+  margin-bottom: 22px;
+}
+
+.form-group {
+  text-align: left;
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #cbd5e1;
+  display: block;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.login-card input, .login-card select {
+  width: 100%;
+  background: rgba(11, 15, 25, 0.7);
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 14px;
+  color: #ffffff;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.login-card input:focus, .login-card select:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.15);
+}
+
+.login-card select option {
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.btn-primary {
+  width: 100%;
+  background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+  color: #090d16;
+  border: none;
+  border-radius: 12px;
+  padding: 14px;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 14px rgba(212, 175, 55, 0.35);
+  margin-top: 8px;
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(212, 175, 55, 0.45);
+}
+
+.quick-cash-chips {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.btn-chip {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #cbd5e1;
+  border-radius: 8px;
+  padding: 6px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-chip:hover {
+  background: rgba(212, 175, 55, 0.2);
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+/* === NAVBAR === */
+.navbar {
+  background: #0b111e;
+  color: #ffffff;
+  padding: 0 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 52px;
+  font-size: 12px;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.22);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.navbar .nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.navbar .brand-name {
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: -0.3px;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.navbar .brand-name span {
+  color: var(--gold);
+}
+
+.navbar .nav-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.navbar .nav-links a {
+  color: #94a3b8;
+  text-decoration: none;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 12.5px;
+  transition: all 0.2s ease;
+}
+
+.navbar .nav-links a:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.navbar .nav-links a.active {
+  color: var(--gold);
+  background: rgba(212, 175, 55, 0.12);
+  border: 1px solid rgba(212, 175, 55, 0.25);
+}
+
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.nav-info {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 4px 10px;
+  color: #e2e8f0;
+  font-weight: 600;
+  font-size: 11.5px;
+}
+
+.nav-info b {
+  color: var(--gold);
+}
+
+.btn-logout {
+  background: linear-gradient(135deg, var(--maroon), var(--maroon-dark));
+  border: 1px solid rgba(212, 175, 55, 0.3);
+  color: #ffffff;
+  padding: 6px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 700;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-logout:hover {
+  background: linear-gradient(135deg, var(--maroon-light), var(--maroon));
+  box-shadow: 0 2px 10px rgba(139, 21, 56, 0.4);
+}
+
+/* === HEADER & SEARCH === */
+.header {
+  background: #ffffff;
+  padding: 12px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #e2e8f0;
+  gap: 16px;
+}
+
+.header-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-box {
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-size: 13.5px;
+  width: 320px;
+  outline: none;
+  background: #f8fafc;
+  transition: all 0.2s ease;
+}
+
+.search-box:focus {
+  background: #ffffff;
+  border-color: var(--maroon);
+  box-shadow: 0 0 0 3px rgba(139, 21, 56, 0.1);
+}
+
+/* CATEGORY FILTER PILLS */
+.cat-filter-wrap {
+  display: flex;
+  gap: 8px;
+  padding: 10px 20px;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  overflow-x: auto;
+}
+
+.cat-filter-wrap::-webkit-scrollbar { height: 3px; }
+.cat-filter-wrap::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
+
+.cat-pill {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.cat-pill:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.cat-pill.active {
+  background: var(--maroon);
+  border-color: var(--maroon);
+  color: #ffffff;
+}
+
+/* === PRODUCTS GRID === */
+.products-area {
+  flex: 2;
+  overflow-y: auto;
+  padding: 18px 20px;
+}
+
+.products-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+.product-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 14px;
+  cursor: pointer;
+  border: 1.5px solid #e2e8f0;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.product-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 24px -6px rgba(0, 0, 0, 0.08);
+  border-color: var(--gold);
+}
+
+.product-card:active {
+  transform: scale(0.97);
+}
+
+.p-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.p-icon-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.stock-tag {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.3px;
+}
+
+.stock-ok { background: #dcfce7; color: #15803d; }
+.stock-warn { background: #fef3c7; color: #b45309; }
+.stock-out { background: #fee2e2; color: #b91c1c; }
+
+.product-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 6px;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 35px;
+}
+
+.product-price-row {
+  margin-top: auto;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.product-price {
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--maroon);
+  font-variant-numeric: tabular-nums;
+}
+
+.promo-pill {
+  font-size: 9.5px;
+  font-weight: 800;
+  color: #b45309;
+  background: #fef3c7;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+/* === CART PANEL === */
+.cart-panel {
+  flex: 1;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid #e2e8f0;
+  min-width: 360px;
+  max-width: 420px;
+  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.03);
+}
+
+.cart-header {
+  background: #0f172a;
+  color: #ffffff;
+  padding: 14px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid var(--maroon);
+}
+
+.cart-header h3 {
+  font-size: 14.5px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cart-header .count {
+  background: var(--gold);
+  color: #090d16;
+  padding: 2px 9px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.btn-clear {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #f87171;
+  padding: 5px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  transition: all 0.2s ease;
+}
+
+.btn-clear:hover {
+  background: #ef4444;
+  color: #ffffff;
+}
 
 /* MEMBER */
-.member-section{padding:8px 16px;background:#f8fafc;border-bottom:1px solid #e2e8f0;position:relative}
-.member-input-row{display:flex;gap:6px}
-.member-input{flex:1;border:2px solid #e2e8f0;border-radius:8px;padding:6px 10px;font-size:12px;outline:none;transition:border .2s}
-.member-input:focus{border-color:#D4AF37}
-.member-clear{background:#ef4444;color:#fff;border:none;padding:6px 10px;border-radius:8px;cursor:pointer;font-size:11px;font-weight:600}
-.member-dropdown{display:none;position:absolute;left:16px;right:16px;top:44px;background:#fff;border:2px solid #e2e8f0;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:10;max-height:180px;overflow-y:auto}
-.member-item{padding:10px 12px;cursor:pointer;border-bottom:1px solid #f1f5f5;display:flex;justify-content:space-between;align-items:center;transition:background .15s}
-.member-item:hover{background:#f8fafc}
-.member-item b{font-size:12px}
-.member-item .phone{color:#94a3b8;font-size:11px}
-.member-info{display:none;padding:6px 16px;background:#dcfce7;border-bottom:1px solid #bbf7d0;font-size:11px;color:#166534}
+.member-section {
+  padding: 10px 16px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  position: relative;
+}
+
+.member-input-row { display: flex; gap: 6px; }
+
+.member-input {
+  flex: 1;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 12px;
+  outline: none;
+  background: #ffffff;
+  transition: border-color 0.2s;
+}
+
+.member-input:focus { border-color: var(--maroon); }
+
+.member-clear {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.member-dropdown {
+  display: none;
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: 48px;
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  z-index: 20;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.member-item {
+  padding: 9px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+
+.member-item:hover { background: #f8fafc; }
+
+.member-info {
+  display: none;
+  padding: 7px 16px;
+  background: #f0fdf4;
+  border-bottom: 1px solid #bbf7d0;
+  font-size: 11px;
+  color: #166534;
+}
 
 /* CART ITEMS */
-.cart-items{flex:1;overflow-y:auto;padding:12px}
-.cart-empty{text-align:center;padding:40px 0;color:#94a3b8}
-.cart-empty .icon{font-size:40px;margin-bottom:8px}
-.cart-item{background:#f8fafc;border-radius:10px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;border:1px solid #e2e8f0;transition:border .2s}
-.cart-item:hover{border-color:#D4AF37}
-.cart-item-info{flex:1}
-.cart-item-name{font-size:12px;font-weight:700}
-.cart-item-price{font-size:11px;color:#64748b}
-.cart-qty{display:flex;align-items:center;gap:8px}
-.qty-btn{width:28px;height:28px;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .15s}
-.qty-minus{background:#e2e8f0;color:#475569}
-.qty-minus:hover{background:#cbd5e1}
-.qty-plus{background:#D4AF37;color:#1e293b}
-.qty-plus:hover{background:#c9a10a}
-.qty-value{font-size:13px;font-weight:700;min-width:20px;text-align:center}
-.cart-item-total{font-size:13px;font-weight:700;color:#1e293b;min-width:90px;text-align:right}
-.cart-item-remove{background:none;border:none;color:#ef4444;cursor:pointer;font-size:16px;padding:4px;border-radius:6px;transition:background .15s}
-.cart-item-remove:hover{background:#fef2f2}
+.cart-items {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px;
+}
 
-/* SUMMARY */
-.cart-summary{padding:12px 16px;background:#f8fafc;border-top:1px solid #e2e8f0}
-.summary-row{display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px}
-.summary-row .label{color:#64748b}
-.summary-row.total{font-size:18px;font-weight:900;border-top:2px solid #e2e8f0;padding-top:8px;margin-top:8px}
-.summary-row.total .value{color:#D4AF37}
+.cart-empty {
+  text-align: center;
+  padding: 50px 0;
+  color: #94a3b8;
+}
 
-/* PAYMENT */
-.payment-btns{display:flex;gap:8px;padding:8px 16px}
-.pay-btn{flex:1;border:none;border-radius:10px;padding:12px;font-weight:700;font-size:12px;cursor:pointer;transition:all .2s;color:#fff}
-.pay-cash{background:#22c55e}
-.pay-cash:hover{background:#16a34a}
-.pay-cash.active{background:#15803d;box-shadow:0 0 0 3px rgba(34,197,94,.3)}
-.pay-qris{background:#a855f7}
-.pay-qris:hover{background:#9333ea}
-.pay-qris.active{background:#7e22ce;box-shadow:0 0 0 3px rgba(168,85,247,.3)}
-.cash-row{display:none;padding:0 16px 8px;gap:8px}
-.cash-row.show{display:flex}
-.cash-input{flex:1;border:2px solid #93c5fd;border-radius:10px;padding:10px;font-size:16px;font-weight:700;outline:none}
-.cash-input:focus{border-color:#3b82f6}
-.change-box{text-align:right;min-width:90px}
-.change-box .label{font-size:10px;color:#94a3b8}
-.change-box .value{font-size:16px;font-weight:700;color:#22c55e}
-.btn-pay{width:calc(100% - 32px);margin:0 16px 16px;border:none;border-radius:14px;padding:16px;font-size:20px;font-weight:900;cursor:pointer;transition:all .2s;background:#D4AF37;color:#1e293b;box-shadow:0 4px 16px rgba(212,175,55,.3)}
-.btn-pay:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(212,175,55,.4)}
-.btn-pay:disabled{background:#e2e8f0;color:#94a3b8;cursor:not-allowed;box-shadow:none;transform:none}
+.cart-empty .icon {
+  font-size: 40px;
+  margin-bottom: 8px;
+  opacity: 0.6;
+}
+
+.cart-item {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  border: 1px solid #e2e8f0;
+  transition: all 0.15s ease;
+}
+
+.cart-item:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.cart-item-info { flex: 1; padding-right: 8px; }
+.cart-item-name { font-size: 12.5px; font-weight: 700; color: #0f172a; margin-bottom: 2px; }
+.cart-item-price { font-size: 11px; color: #64748b; font-variant-numeric: tabular-nums; }
+
+.cart-qty { display: flex; align-items: center; gap: 6px; }
+
+.qty-btn {
+  width: 26px;
+  height: 26px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  cursor: pointer;
+  font-weight: 800;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.qty-minus { background: #f8fafc; color: #475569; }
+.qty-minus:hover { background: #e2e8f0; }
+.qty-plus { background: #f8fafc; color: #0f172a; }
+.qty-plus:hover { background: var(--maroon); border-color: var(--maroon); color: #ffffff; }
+
+.qty-value { font-size: 13px; font-weight: 800; min-width: 22px; text-align: center; }
+.cart-item-total { font-size: 13px; font-weight: 800; color: #0f172a; min-width: 80px; text-align: right; font-variant-numeric: tabular-nums; }
+
+.cart-item-remove {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 15px;
+  padding: 4px;
+  margin-left: 6px;
+  border-radius: 6px;
+  transition: color 0.15s;
+}
+
+.cart-item-remove:hover { color: #ef4444; }
+
+/* SUMMARY & TOTAL */
+.cart-summary {
+  padding: 12px 18px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  margin-bottom: 5px;
+  color: #475569;
+}
+
+.summary-row .label { font-weight: 600; }
+
+.summary-total-box {
+  background: linear-gradient(135deg, rgba(139, 21, 56, 0.05), rgba(212, 175, 55, 0.08));
+  border: 1.5px dashed rgba(139, 21, 56, 0.3);
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.summary-total-box .total-label {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--maroon);
+}
+
+.summary-total-box .total-val {
+  font-size: 24px;
+  font-weight: 900;
+  color: var(--maroon);
+  font-variant-numeric: tabular-nums;
+}
+
+/* PAYMENT BUTTONS */
+.payment-btns {
+  display: flex;
+  gap: 8px;
+  padding: 10px 18px;
+  background: #f8fafc;
+}
+
+.pay-btn {
+  flex: 1;
+  border: 1.5px solid transparent;
+  border-radius: 10px;
+  padding: 11px;
+  font-weight: 800;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.pay-cash {
+  background: var(--emerald);
+}
+
+.pay-cash:hover {
+  background: var(--emerald-dark);
+}
+
+.pay-cash.active {
+  background: var(--emerald-dark);
+  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.25);
+  border-color: #a7f3d0;
+}
+
+.pay-qris {
+  background: var(--maroon);
+}
+
+.pay-qris:hover {
+  background: var(--maroon-dark);
+}
+
+.pay-qris.active {
+  background: var(--maroon-dark);
+  box-shadow: 0 0 0 3px rgba(139, 21, 56, 0.25);
+  border-color: #fecdd3;
+}
+
+/* CASH ROW */
+.cash-row {
+  display: none;
+  flex-direction: column;
+  padding: 0 18px 10px;
+  background: #f8fafc;
+  gap: 8px;
+}
+
+.cash-row.show { display: flex; }
+
+.cash-input-row { display: flex; gap: 8px; align-items: center; }
+
+.cash-input {
+  flex: 1;
+  border: 2px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 16px;
+  font-weight: 800;
+  outline: none;
+  background: #ffffff;
+  color: #0f172a;
+  transition: border-color 0.2s;
+}
+
+.cash-input:focus { border-color: var(--emerald); }
+
+.change-box {
+  text-align: right;
+  min-width: 95px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.change-box .label { font-size: 10px; font-weight: 700; color: #047857; text-transform: uppercase; }
+.change-box .value { font-size: 15px; font-weight: 900; color: var(--emerald); font-variant-numeric: tabular-nums; }
+
+.quick-cash-row { display: flex; gap: 6px; }
+
+.btn-quick-cash {
+  flex: 1;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 5px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-quick-cash:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+/* CHECKOUT BUTTON */
+.btn-pay {
+  width: calc(100% - 36px);
+  margin: 4px 18px 16px;
+  border: none;
+  border-radius: 14px;
+  padding: 15px;
+  font-size: 18px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: linear-gradient(135deg, var(--gold), var(--gold-dark));
+  color: #090d16;
+  box-shadow: 0 4px 16px rgba(212, 175, 55, 0.35);
+  letter-spacing: 0.5px;
+}
+
+.btn-pay:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(212, 175, 55, 0.45);
+}
+
+.btn-pay:disabled {
+  background: #e2e8f0;
+  color: #94a3b8;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
 
 /* MODALS */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:50;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
-.modal-card{background:#fff;border-radius:20px;padding:32px;width:400px;text-align:center;box-shadow:0 25px 60px rgba(0,0,0,.3);animation:slideUp .3s ease-out}
-@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-.modal-icon{font-size:56px;margin-bottom:12px}
-.modal-card h2{font-size:20px;font-weight:800;margin-bottom:4px}
-.modal-card .subtitle{color:#64748b;font-size:12px}
-.modal-card .total{font-size:36px;font-weight:900;color:#D4AF37;margin:12px 0}
-.modal-card .change{color:#22c55e;font-weight:700;font-size:14px}
-.modal-receipt{background:#f8fafc;border-radius:10px;padding:12px;margin:16px 0;font-size:11px;text-align:left;border:1px solid #e2e8f0}
-.btn-modal{width:100%;background:#1e293b;color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;margin-top:12px;transition:all .2s}
-.btn-modal:hover{background:#334155}
-.qris-img{width:220px;height:220px;border:2px solid #e2e8f0;border-radius:12px;margin:12px auto;display:block}
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.65);
+  z-index: 50;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(6px);
+}
 
-/* RESPONSIVE LAYOUT & MEDIA QUERIES */
-.kasir-body{display:flex;flex:1;overflow:hidden}
-@media(max-width:1280px){
-  .products-grid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
-  .search-box{width:200px}
-  .cart-panel{min-width:300px}
+.modal-card {
+  background: #ffffff;
+  border-radius: 22px;
+  padding: 32px 28px;
+  width: 100%;
+  max-width: 440px;
+  text-align: center;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.25);
+  animation: slideUp 0.25s ease-out;
 }
-@media(max-width:900px){
-  body{height:auto;overflow:auto}
-  #kasir-screen{height:auto!important;min-height:100vh}
-  .kasir-body{flex-direction:column;overflow:visible}
-  .products-area{overflow-y:visible;max-height:500px}
-  .cart-panel{min-width:100%;border-left:none;border-top:2px solid #e2e8f0}
-  .header{flex-direction:column;align-items:stretch;gap:8px}
-  .search-box{width:100%}
-  .login-card{width:90vw;padding:24px}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-@media(max-width:600px){
-  .products-grid{grid-template-columns:repeat(2,1fr);gap:8px}
-  .navbar{padding:0 10px;font-size:11px}
-  .nav-right{gap:8px}
-  .btn-pay{font-size:16px;padding:12px}
-  .modal-card{width:94vw;padding:20px}
+
+.modal-icon { font-size: 48px; margin-bottom: 12px; }
+.modal-card h2 { font-size: 20px; font-weight: 800; color: #0f172a; margin-bottom: 4px; }
+.modal-card .subtitle { color: #64748b; font-size: 12.5px; }
+.modal-card .total { font-size: 32px; font-weight: 900; color: var(--maroon); margin: 12px 0; font-variant-numeric: tabular-nums; }
+.modal-card .change { color: var(--emerald); font-weight: 800; font-size: 14px; }
+.modal-receipt { background: #f8fafc; border-radius: 12px; padding: 14px; margin: 16px 0; font-size: 11px; text-align: left; border: 1px solid #e2e8f0; }
+
+.btn-modal {
+  width: 100%;
+  background: #0f172a;
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  padding: 13px;
+  font-size: 14.5px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 10px;
+  transition: all 0.2s;
+}
+
+.btn-modal:hover { background: #1e293b; }
+.qris-img { width: 230px; height: 230px; border: 1.5px solid #e2e8f0; border-radius: 14px; margin: 14px auto; display: block; object-fit: contain; }
+
+/* RESPONSIVE */
+.kasir-body { display: flex; flex: 1; overflow: hidden; }
+
+@media (max-width: 1280px) {
+  .products-grid { grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .search-box { width: 220px; }
+  .cart-panel { min-width: 320px; }
+}
+
+@media (max-width: 900px) {
+  body { height: auto; overflow: auto; }
+  #kasir-screen { height: auto!important; min-height: 100vh; }
+  .kasir-body { flex-direction: column; overflow: visible; }
+  .products-area { overflow-y: visible; max-height: 480px; }
+  .cart-panel { min-width: 100%; max-width: 100%; border-left: none; border-top: 2px solid #e2e8f0; }
+  .header { flex-direction: column; align-items: stretch; gap: 8px; }
+  .search-box { width: 100%; }
+  .login-card { width: 92vw; padding: 24px; }
+}
+
+@media (max-width: 600px) {
+  .products-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .navbar { padding: 0 10px; font-size: 11px; }
+  .nav-right { gap: 8px; }
+  .btn-pay { font-size: 16px; padding: 12px; }
 }
 </style>
 </head>
@@ -170,75 +943,98 @@ input,select,button{font-family:inherit}
 <!-- LOGIN -->
 <div class="login-screen" id="login-screen">
   <div class="login-card">
-    <div class="login-icon">🛒</div>
-    <h2>Kasir Login</h2>
-    <p>Masukkan kredensial kasir untuk memulai</p>
-    <div class="form-group" style="text-align:left"><label>Username / ID Kasir</label>
-      <input id="login-user" placeholder="Contoh: kasir1, KSR01" autocomplete="username" onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('login-pass').focus()}">
+    <div class="login-badge">
+      <span>🛒 Terminal Kasir POS</span>
     </div>
-    <div class="form-group" style="text-align:left"><label>PIN Kasir (6 Angka)</label>
-      <input id="login-pass" type="password" maxlength="6" inputmode="numeric" placeholder="6 Digit Angka PIN" pattern="\d{6}" autocomplete="current-password" onkeydown="if(event.key==='Enter'){event.preventDefault();doLogin()}">
+    <h2>Login Kasir</h2>
+    <p>Masukkan identitas kasir dan PIN 6 angka</p>
+    <div class="form-group">
+      <label>ID Kasir / Username</label>
+      <input id="login-user" placeholder="Contoh: kasir1, akbar" autocomplete="username" autofocus onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('login-pass').focus()}">
     </div>
-    <button class="btn-primary" onclick="doLogin()">Masuk Kasir</button>
-    <p id="login-error" style="color:#ef4444;font-size:12px;margin-top:10px;display:none"></p>
-    <a href="/" style="color:#94a3b8;font-size:12px;display:inline-block;margin-top:12px;text-decoration:none">← Kembali ke Beranda</a>
+    <div class="form-group">
+      <label>PIN Kasir (6 Digit Angka)</label>
+      <input id="login-pass" type="password" maxlength="6" inputmode="numeric" placeholder="••••••" pattern="\d{6}" autocomplete="current-password" onkeydown="if(event.key==='Enter'){event.preventDefault();doLogin()}">
+    </div>
+    <button class="btn-primary" onclick="doLogin()">Masuk Terminal Kasir</button>
+    <p id="login-error" style="color:#f87171;font-size:12.5px;margin-top:12px;display:none"></p>
+    <a href="/" style="color:#94a3b8;font-size:12.5px;display:inline-block;margin-top:16px;text-decoration:none">← Kembali ke Beranda</a>
   </div>
 </div>
 
 <!-- FORCE CHANGE PIN -->
 <div class="login-screen" id="force-pin-screen" style="display:none">
-  <div class="login-card" style="width:360px">
-    <div class="login-icon" style="background:linear-gradient(135deg,#2563eb,#1d4ed8)">🔐</div>
+  <div class="login-card" style="max-width:380px">
+    <div class="login-badge">
+      <span>🔐 Keamanan Akun</span>
+    </div>
     <h2>Wajib Buat PIN Baru</h2>
-    <p style="font-size:12px;color:#64748b;margin-bottom:12px">Halo <b id="force-user-name"></b>! Ini login pertama Anda. Buat <b>PIN 6 angka baru</b> demi keamanan akun Anda.</p>
-    <div class="form-group" style="text-align:left">
+    <p style="font-size:12.5px;color:#94a3b8;margin-bottom:14px">Halo <b id="force-user-name" style="color:#ffffff"></b>! Buat <b>PIN 6 angka baru</b> untuk akun kasir Anda.</p>
+    <div class="form-group">
       <label>PIN Lama (Default: 123456)</label>
       <input id="force-old-pin" type="password" maxlength="6" inputmode="numeric" placeholder="123456">
     </div>
-    <div class="form-group" style="text-align:left">
+    <div class="form-group">
       <label>PIN Baru (Tepat 6 Angka)</label>
       <input id="force-new-pin" type="password" maxlength="6" inputmode="numeric" placeholder="Contoh: 829103" pattern="\d{6}" onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('force-confirm-pin').focus()}">
     </div>
-    <div class="form-group" style="text-align:left">
+    <div class="form-group">
       <label>Konfirmasi PIN Baru (6 Angka)</label>
       <input id="force-confirm-pin" type="password" maxlength="6" inputmode="numeric" placeholder="Ketik ulang PIN baru" pattern="\d{6}" onkeydown="if(event.key==='Enter'){event.preventDefault();submitForcePinChange()}">
     </div>
-    <button class="btn-primary" style="background:linear-gradient(135deg,#2563eb,#1d4ed8)" onclick="submitForcePinChange()">Simpan PIN Baru & Buka Shift</button>
-    <p id="force-pin-error" style="color:#ef4444;font-size:12px;margin-top:10px;display:none"></p>
-    <a href="javascript:void(0)" onclick="cancelForcePinChange()" style="color:#94a3b8;font-size:12px;display:inline-block;margin-top:12px;text-decoration:none">✕ Batal / Keluar</a>
+    <button class="btn-primary" onclick="submitForcePinChange()">Simpan PIN & Buka Shift</button>
+    <p id="force-pin-error" style="color:#f87171;font-size:12px;margin-top:10px;display:none"></p>
+    <a href="javascript:void(0)" onclick="cancelForcePinChange()" style="color:#94a3b8;font-size:12px;display:inline-block;margin-top:14px;text-decoration:none">✕ Batal / Keluar</a>
   </div>
 </div>
 
 <!-- SHIFT -->
 <div class="login-screen" id="shift-screen" style="display:none">
   <div class="login-card">
-    <div class="login-icon" style="background:linear-gradient(135deg,#D4AF37,#b8960c)">📋</div>
-    <h2>Buka Shift</h2>
-    <p>Selamat datang, <b id="shift-user-info"></b></p>
+    <div class="login-badge">
+      <span>📋 Presensi Kerja</span>
+    </div>
+    <h2>Buka Shift Kasir</h2>
+    <p>Selamat bertugas, <b id="shift-user-info" style="color:#ffffff"></b></p>
     <div class="form-group">
       <label>Pilih Shift Kerja</label>
-      <select id="shift-name" style="width:100%;padding:10px 14px;border:1px solid #cbd5e1;border-radius:10px;font-size:13.5px;font-weight:700;color:#0f172a;background:#fff;outline:none;cursor:pointer">
+      <select id="shift-name">
         <option value="Shift Pagi (08.00 - 15.00)">Shift Pagi (08.00 - 15.00)</option>
         <option value="Shift Siang (13.00 - 20.00)">Shift Siang (13.00 - 20.00)</option>
       </select>
     </div>
-    <div class="form-group"><label>Opening Cash (Rp)</label><input id="opening-cash" type="number" value="500000"></div>
-    <button class="btn-primary" style="background:linear-gradient(135deg,#D4AF37,#b8960c)" onclick="openShift()">Buka Shift</button>
+    <div class="form-group">
+      <label>Modal Kas Awal / Opening Cash (Rp)</label>
+      <input id="opening-cash" type="number" value="500000">
+      <div class="quick-cash-chips">
+        <button type="button" class="btn-chip" onclick="document.getElementById('opening-cash').value=200000">200rb</button>
+        <button type="button" class="btn-chip" onclick="document.getElementById('opening-cash').value=300000">300rb</button>
+        <button type="button" class="btn-chip" onclick="document.getElementById('opening-cash').value=500000">500rb</button>
+        <button type="button" class="btn-chip" onclick="document.getElementById('opening-cash').value=1000000">1 Jt</button>
+      </div>
+    </div>
+    <button class="btn-primary" onclick="openShift()">Mulai Buka Shift</button>
   </div>
 </div>
 
 <!-- MAIN -->
 <div id="kasir-screen" style="display:none;height:100vh;flex-direction:column">
 <div class="navbar">
-  <div><a href="/">🏠</a> <a href="/kasir" class="active">🛒 Kasir</a> <a href="/admin">⚙️ Admin</a></div>
+  <div class="nav-brand">
+    <div class="brand-name">🛒 YMB<span>Mart</span></div>
+    <div class="nav-links">
+      <a href="/">🏠 Portal</a>
+      <a href="/kasir" class="active">🛒 Kasir</a>
+      <a href="/admin">⚙️ Admin</a>
+    </div>
+  </div>
   <div class="nav-right">
-    <span id="sync-badge" onclick="triggerManualSync()" title="Klik untuk sinkronkan manual" style="cursor:pointer;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:5px;background:#e2e8f0;color:#475569">
+    <span id="sync-badge" onclick="triggerManualSync()" title="Klik untuk sinkronkan manual" style="cursor:pointer;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.08);color:#cbd5e1">
       <span id="sync-dot" style="width:7px;height:7px;border-radius:50%;background:#94a3b8"></span>
       <span id="sync-text">Cek Koneksi...</span>
     </span>
     <span class="nav-info" id="kasir-user-info">Kasir: -- | Shift: -</span>
-    <span style="color:#64748b;font-size:10px">POS v2.2</span>
-    <button class="btn-logout" onclick="showCloseShiftModal()" style="background:#dc2626;display:flex;align-items:center;gap:4px">🔒 Tutup Shift</button>
+    <button class="btn-logout" onclick="showCloseShiftModal()">🔒 Tutup Shift</button>
   </div>
 </div>
 <div class="kasir-body">
@@ -246,8 +1042,17 @@ input,select,button{font-family:inherit}
 <!-- LEFT: Products -->
 <div style="flex:2;display:flex;flex-direction:column;overflow:hidden">
   <div class="header">
-    <div class="header-title">🛒 <span>Kasir</span></div>
-    <input class="search-box" id="search" placeholder="🔍 Scan barcode / cari produk... (Enter)" oninput="searchProducts()" onkeydown="if(event.key==='Enter'){event.preventDefault();handleSearchEnter(this.value)}">
+    <div class="header-title">
+      <span>Katalog Produk</span>
+    </div>
+    <input class="search-box" id="search" placeholder="🔍 Scan barcode / cari nama produk... (Enter)" oninput="searchProducts()" onkeydown="if(event.key==='Enter'){event.preventDefault();handleSearchEnter(this.value)}">
+  </div>
+  <div class="cat-filter-wrap" id="cat-filter-bar">
+    <button type="button" class="cat-pill active" onclick="filterByCategory('ALL', this)">Semua Produk</button>
+    <button type="button" class="cat-pill" onclick="filterByCategory('Makanan', this)">🍜 Makanan</button>
+    <button type="button" class="cat-pill" onclick="filterByCategory('Minuman', this)">🥤 Minuman</button>
+    <button type="button" class="cat-pill" onclick="filterByCategory('Snack', this)">🍿 Snack</button>
+    <button type="button" class="cat-pill" onclick="filterByCategory('Lainnya', this)">📦 Lainnya</button>
   </div>
   <div class="products-area">
     <div id="products" class="products-grid"></div>
@@ -257,12 +1062,12 @@ input,select,button{font-family:inherit}
 <!-- RIGHT: Cart -->
 <div class="cart-panel">
   <div class="cart-header">
-    <h3>🛒 Keranjang <span class="count" id="cart-count">0</span></h3>
-    <button class="btn-clear" onclick="clearCart()">🗑 Clear</button>
+    <h3>🛒 Keranjang Belanja <span class="count" id="cart-count">0</span></h3>
+    <button class="btn-clear" onclick="clearCart()">🗑 Hapus Semua</button>
   </div>
   <div class="member-section">
     <div class="member-input-row">
-      <input class="member-input" id="member-id" placeholder="🔍 Nama atau no. telepon..." oninput="searchMember()" onkeydown="if(event.key==='Enter'){event.preventDefault();selectFirstMember()}">
+      <input class="member-input" id="member-id" placeholder="🔍 Cari Member (Nama / HP)..." oninput="searchMember()" onkeydown="if(event.key==='Enter'){event.preventDefault();selectFirstMember()}">
       <button class="member-clear" onclick="clearMember()">✕</button>
     </div>
     <div class="member-dropdown" id="member-dropdown"></div>
@@ -271,23 +1076,43 @@ input,select,button{font-family:inherit}
     <b id="member-name"></b> | <span id="member-tier" style="color:#2563eb"></span> | <span id="member-points" style="color:#d97706"></span> | <span id="member-phone" style="color:#64748b"></span>
   </div>
   <div class="cart-items" id="cart-items">
-    <div class="cart-empty"><div class="icon">🛒</div><p>Keranjang kosong</p></div>
+    <div class="cart-empty"><div class="icon">🛒</div><p>Keranjang masih kosong</p></div>
   </div>
   <div class="cart-summary">
-    <div class="summary-row"><span class="label">Subtotal</span><span id="subtotal">Rp 0</span></div>
+    <div class="summary-row"><span class="label">Subtotal Belanja</span><span id="subtotal" style="font-variant-numeric:tabular-nums;font-weight:700">Rp 0</span></div>
     <div class="summary-row" id="ppn-row" style="display:none"><span class="label" id="ppn-label">PPN</span><span id="tax-display">Rp 0</span></div>
-    <div class="summary-row" style="display:flex;align-items:center;gap:8px"><span class="label" style="flex:1">Diskon</span><input id="discount-input" type="number" value="0" min="0" style="width:80px;border:1px solid #d1d5db;border-radius:6px;padding:4px 8px;font-size:12px;text-align:right" onchange="updateTotal()"><select id="discount-type" style="border:1px solid #d1d5db;border-radius:6px;padding:4px;font-size:11px" onchange="updateTotal()"><option value="nominal">Rp</option><option value="percent">%</option></select></div>
-    <div class="summary-row total"><span>TOTAL</span><span class="value" id="cart-total">Rp 0</span></div>
+    <div class="summary-row" style="display:flex;align-items:center;gap:8px">
+      <span class="label" style="flex:1">Potongan Diskon</span>
+      <input id="discount-input" type="number" value="0" min="0" style="width:80px;border:1.5px solid #cbd5e1;border-radius:6px;padding:4px 8px;font-size:12px;text-align:right" onchange="updateTotal()">
+      <select id="discount-type" style="border:1.5px solid #cbd5e1;border-radius:6px;padding:4px;font-size:11.5px" onchange="updateTotal()">
+        <option value="nominal">Rp</option>
+        <option value="percent">%</option>
+      </select>
+    </div>
+    <div class="summary-total-box">
+      <span class="total-label">Total Tagihan</span>
+      <span class="total-val" id="cart-total">Rp 0</span>
+    </div>
   </div>
   <div class="payment-btns">
-    <button class="pay-btn pay-cash active" onclick="setPayment('CASH')" id="btn-cash">💵 TUNAI</button>
-    <button class="pay-btn pay-qris" onclick="setPayment('QRIS');showQrisModal()" id="btn-qris">⚡ QRIS</button>
+    <button type="button" class="pay-btn pay-cash active" onclick="setPayment('CASH')" id="btn-cash">💵 TUNAI</button>
+    <button type="button" class="pay-btn pay-qris" onclick="setPayment('QRIS');showQrisModal()" id="btn-qris">⚡ QRIS</button>
   </div>
   <div class="cash-row show" id="cash-row">
-    <input class="cash-input" id="amount-paid" type="number" placeholder="Uang diterima" oninput="updateTotal()">
-    <div class="change-box"><div class="label">Kembali</div><div class="value" id="change">Rp 0</div></div>
+    <div class="cash-input-row">
+      <input class="cash-input" id="amount-paid" type="number" placeholder="Nominal uang diterima..." oninput="updateTotal()">
+      <div class="change-box">
+        <div class="label">Kembalian</div>
+        <div class="value" id="change">Rp 0</div>
+      </div>
+    </div>
+    <div class="quick-cash-row">
+      <button type="button" class="btn-quick-cash" onclick="setQuickCash('exact')">Uang Pas</button>
+      <button type="button" class="btn-quick-cash" onclick="setQuickCash(50000)">50.000</button>
+      <button type="button" class="btn-quick-cash" onclick="setQuickCash(100000)">100.000</button>
+    </div>
   </div>
-  <button class="btn-pay" id="btn-pay" onclick="checkout()" disabled>BAYAR</button>
+  <button class="btn-pay" id="btn-pay" onclick="checkout()" disabled>SELESAIKAN BAYAR</button>
 </div>
 </div>
 </div>
@@ -898,6 +1723,48 @@ function showScanToast(msg, bg){
   }, 2200);
 }
 
+var activeCategory = "ALL";
+
+function filterByCategory(cat, btn){
+  activeCategory = cat;
+  if(btn){
+    document.querySelectorAll(".cat-pill").forEach(function(p){ p.classList.remove("active"); });
+    btn.classList.add("active");
+  }
+  renderProductGrid();
+}
+
+function renderProductGrid(){
+  var el = document.getElementById("products");
+  if(!el) return;
+  var items = allProducts || [];
+  if(activeCategory !== "ALL"){
+    items = items.filter(function(p){ return p.category === activeCategory; });
+  }
+  var cats = {"Makanan":"🍜","Minuman":"🥤","Snack":"🍿","Lainnya":"📦"};
+  if(!items.length){
+    el.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:50px 20px;color:#94a3b8;font-size:13px">Tidak ada produk dalam kategori ini.</div>';
+    return;
+  }
+  el.innerHTML = items.map(function(p){
+    var price = p.promo_active && p.promo_price > 0 ? p.promo_price : p.price;
+    var stockClass = p.stock <= 0 ? "stock-out" : (p.stock <= (p.min_stock || 5) ? "stock-warn" : "stock-ok");
+    var stockLabel = p.stock <= 0 ? "Habis" : (p.stock <= (p.min_stock || 5) ? "Sisa " + p.stock + "!" : "Stok: " + p.stock);
+    var promoBadge = p.promo_active && p.promo_price > 0 ? '<span class="promo-pill">Promo</span>' : '';
+    return '<div class="product-card" data-id="'+p.id+'" data-name="'+esc(p.name).replace(/"/g,'&quot;')+'" data-price="'+price+'" data-stock="'+p.stock+'" onclick="addFromCard(this)">' +
+      '<div class="p-top-row">' +
+        '<div class="p-icon-box">'+(cats[p.category] || "📦")+'</div>' +
+        '<span class="stock-tag '+stockClass+'">'+stockLabel+'</span>' +
+      '</div>' +
+      '<div class="product-name">'+esc(p.name)+'</div>' +
+      '<div class="product-price-row">' +
+        '<div class="product-price">Rp '+price.toLocaleString("id-ID")+'</div>' +
+        promoBadge +
+      '</div>' +
+    '</div>';
+  }).join("");
+}
+
 async function loadProducts(search){
   var url=API+"/api/products";
   if(search) url+="?search="+encodeURIComponent(search);
@@ -905,15 +1772,10 @@ async function loadProducts(search){
   var products=await r.json();
   if(!search) {
     allProducts = products;
+  } else {
+    allProducts = products;
   }
-  var el=document.getElementById("products");
-  var cats={"Makanan":"🍜","Minuman":"🥤","Snack":"🍿","Lainnya":"📦"};
-  el.innerHTML=products.map(function(p){
-    var price=p.promo_active&&p.promo_price>0?p.promo_price:p.price;
-    var stockClass=p.min_stock>0&&p.stock<=p.min_stock?"low":p.stock<10?"low":"";
-    var promoHtml=p.promo_active&&p.promo_price>0?'<div class="product-promo">Promo!</div>':'';
-    return '<div class="product-card" data-id="'+p.id+'" data-name="'+esc(p.name).replace(/"/g,'&quot;')+'" data-price="'+price+'" data-stock="'+p.stock+'" onclick="addFromCard(this)"><div class="product-emoji">'+(cats[p.category]||"📦")+'</div><div class="product-name">'+esc(p.name)+'</div><div class="product-price">Rp '+price.toLocaleString("id-ID")+'</div><div class="product-stock '+stockClass+'">Stok: '+p.stock+'</div>'+promoHtml+'</div>';
-  }).join("");
+  renderProductGrid();
 }
 function searchProducts(){loadProducts(document.getElementById("search").value)}
 
@@ -1040,6 +1902,25 @@ function updateTotal(){
   var change=paid>grand?paid-grand:0;
   document.getElementById("change").textContent="Rp "+change.toLocaleString("id-ID");
   document.getElementById("btn-pay").disabled=cart.length===0;
+}
+
+function setQuickCash(val){
+  var subtotal=cart.reduce(function(s,i){return s+i.price*i.qty},0);
+  var discountInput=parseInt(document.getElementById("discount-input").value)||0;
+  var discountType=document.getElementById("discount-type").value;
+  var discount=0;
+  if(discountType==="percent"){discount=Math.round(subtotal*discountInput/100)}
+  else{discount=discountInput}
+  var grand=Math.max(0, subtotal-discount);
+
+  var inp = document.getElementById("amount-paid");
+  if(!inp) return;
+  if(val === 'exact'){
+    inp.value = grand;
+  } else {
+    inp.value = val;
+  }
+  updateTotal();
 }
 
 // PAYMENT

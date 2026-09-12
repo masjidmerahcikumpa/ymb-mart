@@ -3,64 +3,430 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>POS Simulator</title>
+<title>YMB Mart — Portal Sistem Kasir & Manajemen Ritel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-*{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,-apple-system,sans-serif}
-body{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#0c1222 0%,#111827 40%,#1e3a5f 100%);overflow:hidden}
-.logo{width:56px;height:56px;background:linear-gradient(135deg,#2563eb,#1d4ed8);border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;box-shadow:0 8px 32px rgba(37,99,235,.4)}
-.logo svg{width:28px;height:28px;color:#fff}
-.card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-radius:20px;padding:40px 32px;text-align:center;cursor:pointer;transition:all .35s cubic-bezier(.4,0,.2,1);text-decoration:none;display:block;backdrop-filter:blur(12px)}
-.card:hover{transform:translateY(-12px);background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.15);box-shadow:0 24px 80px rgba(0,0,0,.4)}
-.icon-box{width:72px;height:72px;border-radius:20px;display:flex;align-items:center;justify-content:center;margin:0 auto 24px;transition:transform .35s ease}
-.card:hover .icon-box{transform:scale(1.08)}
-.icon-box svg{width:36px;height:36px;color:#fff}
-h1{font-size:32px;font-weight:900;color:#fff;letter-spacing:-0.5px;margin-bottom:8px}
-.sub{color:#64748b;font-size:14px}
-.card h2{font-size:18px;font-weight:700;color:#fff;margin-bottom:8px}
-.card p{color:#94a3b8;font-size:13px;line-height:1.5;margin-bottom:4px}
-.btn{display:inline-flex;align-items:center;gap:6px;font-size:14px;font-weight:600;margin-top:16px;transition:color .2s}
-.btn svg{width:16px;height:16px}
-.portal-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
-@media(max-width:900px){.portal-grid{grid-template-columns:repeat(2,1fr);gap:16px}body{overflow-y:auto;padding:32px 0}}
-@media(max-width:600px){.portal-grid{grid-template-columns:1fr;gap:16px}.card{padding:24px 20px}}
+:root {
+  --maroon: #8b1538;
+  --maroon-dark: #5c0d24;
+  --maroon-light: #ab1d47;
+  --gold: #d4af37;
+  --gold-hover: #b89628;
+  --bg-dark: #090d16;
+  --card-bg: rgba(18, 24, 38, 0.75);
+  --card-border: rgba(212, 175, 55, 0.15);
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bg-dark);
+  background-image: 
+    radial-gradient(circle at 20% 15%, rgba(139, 21, 56, 0.28) 0%, transparent 45%),
+    radial-gradient(circle at 80% 85%, rgba(212, 175, 55, 0.14) 0%, transparent 40%),
+    radial-gradient(circle at 50% 50%, rgba(15, 23, 42, 0.6) 0%, transparent 100%);
+  color: var(--text-main);
+  padding: 32px 20px;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Subtle architectural grid pattern */
+body::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: 
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.container {
+  max-width: 1060px;
+  width: 100%;
+  position: relative;
+  z-index: 1;
+}
+
+/* HEADER */
+.header {
+  text-align: center;
+  margin-bottom: 48px;
+}
+
+.badge-system {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  background: rgba(139, 21, 56, 0.2);
+  border: 1px solid rgba(212, 175, 55, 0.3);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 16px;
+  backdrop-filter: blur(8px);
+}
+
+.badge-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 8px #22c55e;
+  animation: pulseDot 2s infinite;
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+.brand-title {
+  font-size: 38px;
+  font-weight: 800;
+  letter-spacing: -0.8px;
+  color: #ffffff;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.brand-title .highlight {
+  background: linear-gradient(135deg, #ffffff 40%, var(--gold) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.brand-desc {
+  font-size: 14.5px;
+  color: var(--text-muted);
+  max-width: 540px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+/* GRID CARDS */
+.portal-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 22px;
+  margin-bottom: 44px;
+}
+
+@media (max-width: 920px) {
+  .portal-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 620px) {
+  .portal-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.portal-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 20px;
+  padding: 30px 26px;
+  display: flex;
+  flex-direction: column;
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  backdrop-filter: blur(16px);
+  position: relative;
+  overflow: hidden;
+}
+
+.portal-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: transparent;
+  transition: background 0.3s ease;
+}
+
+.portal-card:hover {
+  transform: translateY(-6px);
+  background: rgba(22, 30, 48, 0.9);
+  border-color: rgba(212, 175, 55, 0.45);
+  box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.5), 0 0 24px rgba(139, 21, 56, 0.2);
+}
+
+.card-kasir:hover::before {
+  background: linear-gradient(90deg, var(--gold), #fbbf24);
+}
+
+.card-admin:hover::before {
+  background: linear-gradient(90deg, var(--maroon-light), #e11d48);
+}
+
+.card-customer:hover::before {
+  background: linear-gradient(90deg, #38bdf8, #0ea5e9);
+}
+
+.card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 22px;
+}
+
+.card-icon-wrap {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.3s ease;
+}
+
+.portal-card:hover .card-icon-wrap {
+  transform: scale(1.06);
+}
+
+.icon-kasir {
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.2), rgba(212, 175, 55, 0.05));
+  border: 1px solid rgba(212, 175, 55, 0.4);
+  color: var(--gold);
+}
+
+.icon-admin {
+  background: linear-gradient(135deg, rgba(139, 21, 56, 0.25), rgba(139, 21, 56, 0.08));
+  border: 1px solid rgba(139, 21, 56, 0.45);
+  color: #fb7185;
+}
+
+.icon-customer {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.2), rgba(14, 165, 233, 0.05));
+  border: 1px solid rgba(14, 165, 233, 0.35);
+  color: #38bdf8;
+}
+
+.card-icon-wrap svg {
+  width: 26px;
+  height: 26px;
+}
+
+.card-tag {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+}
+
+.portal-card h2 {
+  font-size: 19px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 8px;
+  letter-spacing: -0.3px;
+}
+
+.portal-card p {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.55;
+  margin-bottom: 24px;
+  flex: 1;
+}
+
+.card-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 700;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  transition: gap 0.2s ease, color 0.2s ease;
+}
+
+.card-kasir .card-action { color: var(--gold); }
+.card-admin .card-action { color: #f43f5e; }
+.card-customer .card-action { color: #38bdf8; }
+
+.portal-card:hover .card-action {
+  gap: 12px;
+}
+
+.card-action svg {
+  width: 15px;
+  height: 15px;
+  transition: transform 0.2s ease;
+}
+
+.portal-card:hover .card-action svg {
+  transform: translateX(3px);
+}
+
+/* FOOTER */
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 20px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+@media (max-width: 620px) {
+  .footer {
+    flex-direction: column;
+    gap: 10px;
+    text-align: center;
+  }
+}
+
+.footer-store {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.footer-store .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gold);
+}
 </style>
 </head>
 <body>
-<div style="max-width:960px;width:100%;padding:0 32px">
-  <div style="text-align:center;margin-bottom:56px">
-    <div class="logo">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z"/></svg>
+
+<div class="container">
+  <!-- HEADER -->
+  <header class="header">
+    <div class="badge-system">
+      <span class="badge-pulse"></span>
+      <span>YMB Mart &bull; Sistem POS Ritel Terpadu</span>
     </div>
-    <h1>POS Simulator</h1>
-    <p class="sub">Sistem Point of Sale Indonesia</p>
-  </div>
+    <h1 class="brand-title">
+      <span class="highlight">YMB Mart</span>
+    </h1>
+    <p class="brand-desc">
+      Gerbang akses operasional kasir penjualan langsung, pembukuan backoffice eksekutif, dan monitor ganda interaktif pelanggan.
+    </p>
+  </header>
+
+  <!-- PORTAL CARDS -->
   <div class="portal-grid">
-    <a href="/admin-login" class="card">
-      <div class="icon-box" style="background:linear-gradient(135deg,#ef4444,#dc2626)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+    <!-- 1. TERMINAL KASIR -->
+    <a href="/kasir" class="portal-card card-kasir">
+      <div class="card-header-row">
+        <div class="card-icon-wrap icon-kasir">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="4" width="20" height="16" rx="2"/>
+            <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M7 16h10"/>
+          </svg>
+        </div>
+        <span class="card-tag">Frontline</span>
       </div>
-      <h2>Dashboard Admin</h2>
-      <p>Kelola produk, laporan, dan pengaturan sistem</p>
-      <div class="btn" style="color:#f87171">Masuk <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg></div>
+      <h2>Terminal Kasir POS</h2>
+      <p>Akses kasir langsung dengan autentikasi PIN, buka/tutup shift kerja, scan barcode, dan cetak struk.</p>
+      <div class="card-action">
+        <span>Buka Terminal Kasir</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </div>
     </a>
-    <a href="/kasir" class="card">
-      <div class="icon-box" style="background:linear-gradient(135deg,#22c55e,#16a34a)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/></svg>
+
+    <!-- 2. DASHBOARD ADMIN -->
+    <a href="/admin-login" class="portal-card card-admin">
+      <div class="card-header-row">
+        <div class="card-icon-wrap icon-admin">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+          </svg>
+        </div>
+        <span class="card-tag">Backoffice</span>
       </div>
-      <h2>Dashboard Kasir</h2>
-      <p>Transaksi penjualan langsung tanpa login</p>
-      <div class="btn" style="color:#4ade80">Buka <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg></div>
+      <h2>Backoffice & Eksekutif</h2>
+      <p>Laporan omzet & laba rugi, rekap multi-periode, stok opname, data produk, dan konfigurasi QRIS toko.</p>
+      <div class="card-action">
+        <span>Masuk Backoffice</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </div>
     </a>
-    <a href="/customer" target="_blank" class="card">
-      <div class="icon-box" style="background:linear-gradient(135deg,#3b82f6,#2563eb)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+
+    <!-- 3. CUSTOMER DISPLAY -->
+    <a href="/customer" target="_blank" class="portal-card card-customer">
+      <div class="card-header-row">
+        <div class="card-icon-wrap icon-customer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2"/>
+            <line x1="8" y1="21" x2="16" y2="21"/>
+            <line x1="12" y1="17" x2="12" y2="21"/>
+          </svg>
+        </div>
+        <span class="card-tag">Dual Screen</span>
       </div>
-      <h2>Dashboard Customer</h2>
-      <p>Tampilan produk + promosi untuk pelanggan</p>
-      <div class="btn" style="color:#60a5fa">Tampilan <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg></div>
+      <h2>Layar Pelanggan</h2>
+      <p>Monitor hadap pembeli dengan rincian belanja live, banner promosi toko, serta tayangan scan QRIS.</p>
+      <div class="card-action">
+        <span>Buka Layar Pelanggan</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>
+      </div>
     </a>
   </div>
-  <div style="text-align:center;margin-top:48px"><p style="color:#475569;font-size:12px">POS Simulator v2.2 — Built with Go + HTML</p></div>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="footer-store">
+      <span class="dot"></span>
+      <span>Masjid Jami' Merah Cikumpa &bull; YMB Mart</span>
+    </div>
+    <div id="live-clock" style="font-variant-numeric: tabular-nums; font-weight: 600; color: #94a3b8;">--:--:-- WIB</div>
+    <div>POS System v2.2</div>
+  </footer>
 </div>
+
+<script>
+function updatePortalClock(){
+  var now = new Date();
+  var el = document.getElementById("live-clock");
+  if(el){
+    el.textContent = now.toLocaleTimeString("id-ID", {hour12: false}) + " WIB";
+  }
+}
+setInterval(updatePortalClock, 1000);
+updatePortalClock();
+</script>
+
 </body>
 </html>
