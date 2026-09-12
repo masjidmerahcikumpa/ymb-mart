@@ -125,6 +125,34 @@ body{display:flex;background:#1a0a0a}
   </div>
 </div>
 
+<!-- CUSTOMER QRIS SCAN OVERLAY -->
+<div id="customer-qris-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.92);backdrop-filter:blur(8px);z-index:9999;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center">
+  <div style="background:#ffffff;border-radius:24px;padding:32px 36px;max-width:480px;width:92%;box-shadow:0 25px 50px -12px rgba(0,0,0,0.5);border:2px solid #d4af37;animation:slideIn 0.3s ease-out">
+    <div style="display:inline-flex;align-items:center;gap:8px;background:#fdf2f4;padding:6px 14px;border-radius:20px;border:1px solid #f8c9d2;margin-bottom:12px">
+      <span style="font-size:16px">⚡</span>
+      <span style="font-size:13px;font-weight:800;color:#8b1538;text-transform:uppercase;letter-spacing:0.5px">Pembayaran QRIS</span>
+    </div>
+    <h2 style="font-size:18px;font-weight:800;color:#0f172a;margin-bottom:4px" id="c-qris-store">YMB Mart</h2>
+    <p style="font-size:12px;color:#64748b;margin-bottom:18px">Scan QR di bawah ini menggunakan aplikasi mobile banking atau e-wallet Anda</p>
+
+    <!-- Nominal Tagihan -->
+    <div style="background:#f8fafc;border:2px dashed #cbd5e1;border-radius:14px;padding:12px 16px;margin-bottom:18px">
+      <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px">Total Tagihan Belanja</div>
+      <div style="font-size:34px;font-weight:900;color:#8b1538;font-variant-numeric:tabular-nums;margin-top:2px" id="c-qris-amount">Rp 0</div>
+    </div>
+
+    <!-- QR Code Container -->
+    <div style="background:#ffffff;padding:12px;border:2px solid #e2e8f0;border-radius:16px;display:inline-block;box-shadow:0 4px 14px rgba(0,0,0,0.06);margin-bottom:18px">
+      <img id="c-qris-img" src="" alt="Scan QRIS" style="width:260px;height:260px;object-fit:contain;display:block;border-radius:8px">
+    </div>
+
+    <div style="display:flex;align-items:center;justify-content:center;gap:8px;color:#16a34a;font-weight:700;font-size:13px">
+      <span class="dot pulse-glow" style="width:10px;height:10px;background:#22c55e;border-radius:50%;display:inline-block"></span>
+      <span>Menunggu konfirmasi pembayaran kasir...</span>
+    </div>
+  </div>
+</div>
+
 <script>
 // Clock
 function updateClock(){var n=new Date();document.getElementById("clock").textContent=n.toLocaleTimeString("id-ID",{hour12:false})}
@@ -216,6 +244,8 @@ function connectWS(){
       if(msg.type==="reset_display"){isCheckoutDone=false;closeTransaction(msg.data);}
       if(msg.type==="shift_open")handleShiftOpen(msg.data);
       if(msg.type==="shift_close")handleShiftClose(msg.data);
+      if(msg.type==="show_qris")handleShowQris(msg.data);
+      if(msg.type==="hide_qris")handleHideQris();
     };
     ws.onclose=function(){
       document.getElementById("status-text").textContent="Disconnected...";
@@ -281,7 +311,32 @@ function renderLiveItems(){
   el.scrollTop=el.scrollHeight;
 }
 
+function handleShowQris(data){
+  var overlay = document.getElementById("customer-qris-overlay");
+  if(!overlay) return;
+  var total = (data && data.total) || 0;
+  var qrUrl = (data && data.qr_url) || "";
+  var store = (data && data.store_name) || "YMB Mart";
+  
+  var amtEl = document.getElementById("c-qris-amount");
+  if(amtEl) amtEl.textContent = "Rp " + Number(total).toLocaleString("id-ID");
+
+  var imgEl = document.getElementById("c-qris-img");
+  if(imgEl && qrUrl) imgEl.src = qrUrl;
+
+  var stEl = document.getElementById("c-qris-store");
+  if(stEl) stEl.textContent = store;
+
+  overlay.style.display = "flex";
+}
+
+function handleHideQris(){
+  var overlay = document.getElementById("customer-qris-overlay");
+  if(overlay) overlay.style.display = "none";
+}
+
 function handleNewTx(tx){
+  handleHideQris();
   isCheckoutDone=true;
   liveItems=(tx.items||[]).map(function(it){return{name:it.name,qty:it.qty,price:it.price}});
   renderLiveItems();
@@ -309,6 +364,7 @@ function handleNewTx(tx){
 }
 
 function closeTransaction(data){
+  handleHideQris();
   isCheckoutDone=false;
   liveItems=[];
   document.getElementById("items-list").innerHTML='<div style="text-align:center;padding:60px 0"><p style="color:#78716c;font-size:14px">Menunggu transaksi...</p></div>';

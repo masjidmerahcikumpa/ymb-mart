@@ -778,6 +778,20 @@ tr:hover td{background:#f8fafc}
         <div class="form-group"><label>Alamat Toko</label><input id="s-address" value=""></div>
         <div class="form-group"><label>Nomor Telepon / WhatsApp</label><input id="s-phone" value=""></div>
         <div class="form-group" style="display:none"><label>PPN (%)</label><input id="s-ppn" type="number" value="0" min="0" max="100" step="0.5"></div>
+        <div class="form-group">
+          <label>QRIS Statis Toko (Gambar / File QRIS)</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="s-qris" placeholder="URL gambar atau unggah foto QR..." style="flex:1" oninput="updateQrisPreview(this.value)">
+            <label class="btn btn-secondary-subtle btn-sm" style="cursor:pointer;white-space:nowrap;padding:7px 12px">
+              📷 Unggah File QR
+              <input type="file" accept="image/*" style="display:none" onchange="uploadQrisImage(this)">
+            </label>
+          </div>
+          <div id="s-qris-preview-box" style="display:none;margin-top:8px">
+            <img id="s-qris-preview" src="" style="width:120px;height:120px;object-fit:contain;border:1px solid #cbd5e1;border-radius:8px;background:#fff;padding:4px">
+          </div>
+          <p style="font-size:11px;color:#64748b;margin-top:4px">QRIS ini otomatis tampil di layar kasir & monitor customer saat metode bayar QRIS dipilih.</p>
+        </div>
         <button class="btn btn-primary" onclick="saveSettings()">Simpan Pengaturan</button>
       </div>
     </div>
@@ -2971,8 +2985,77 @@ async function submitChangeAdminPassword(){
     errEl.style.display="block";
   }
 }
-async function loadSettings(){const r=await authFetch("/api/settings");const s=await r.json();document.getElementById("s-name").value=s.store_name||"";document.getElementById("s-address").value=s.store_address||"";document.getElementById("s-phone").value=s.store_phone||"";document.getElementById("s-ppn").value=s.ppn_rate||"0"}
-async function saveSettings(){await authFetch("/api/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({store_name:document.getElementById("s-name").value,store_address:document.getElementById("s-address").value,store_phone:document.getElementById("s-phone").value,ppn_rate:document.getElementById("s-ppn").value})});alert("Pengaturan tersimpan!")}
+function updateQrisPreview(url){
+  var box=document.getElementById("s-qris-preview-box");
+  var img=document.getElementById("s-qris-preview");
+  if(box && img){
+    if(url){
+      img.src=url;
+      box.style.display="block";
+    }else{
+      box.style.display="none";
+    }
+  }
+}
+function uploadQrisImage(input){
+  if(input.files && input.files[0]){
+    var file=input.files[0];
+    if(file.size > 8 * 1024 * 1024){
+      alert("Ukuran file gambar QRIS maksimal 8MB.");
+      return;
+    }
+    var reader=new FileReader();
+    reader.onload=function(e){
+      var img=new Image();
+      img.onload=function(){
+        var canvas=document.createElement("canvas");
+        var maxDim=600;
+        var w=img.width, h=img.height;
+        if(w > maxDim || h > maxDim){
+          if(w > h){
+            h = Math.round(h * (maxDim / w));
+            w = maxDim;
+          } else {
+            w = Math.round(w * (maxDim / h));
+            h = maxDim;
+          }
+        }
+        canvas.width=w;
+        canvas.height=h;
+        var ctx=canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, w, h);
+        var base64=canvas.toDataURL("image/png");
+        document.getElementById("s-qris").value=base64;
+        updateQrisPreview(base64);
+      };
+      img.src=e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+}
+async function loadSettings(){
+  const r=await authFetch("/api/settings");
+  const s=await r.json();
+  document.getElementById("s-name").value=s.store_name||"";
+  document.getElementById("s-address").value=s.store_address||"";
+  document.getElementById("s-phone").value=s.store_phone||"";
+  document.getElementById("s-ppn").value=s.ppn_rate||"0";
+  if(document.getElementById("s-qris")){
+    document.getElementById("s-qris").value=s.qris_image||"";
+    updateQrisPreview(s.qris_image||"");
+  }
+}
+async function saveSettings(){
+  var body={
+    store_name:document.getElementById("s-name").value,
+    store_address:document.getElementById("s-address").value,
+    store_phone:document.getElementById("s-phone").value,
+    ppn_rate:document.getElementById("s-ppn").value,
+    qris_image:document.getElementById("s-qris")?document.getElementById("s-qris").value:""
+  };
+  await authFetch("/api/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  alert("Pengaturan dan QRIS berhasil disimpan!");
+}
 async function backupDB(){
   const token=sessionStorage.getItem("token")||"";
   if(!token){ alert("Sesi login berakhir. Silakan login ulang."); return; }

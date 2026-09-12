@@ -215,7 +215,13 @@ input,select,button{font-family:inherit}
     <div class="login-icon" style="background:linear-gradient(135deg,#D4AF37,#b8960c)">📋</div>
     <h2>Buka Shift</h2>
     <p>Selamat datang, <b id="shift-user-info"></b></p>
-    <div class="form-group"><label>Nama Shift</label><input id="shift-name" value="Shift Pagi"></div>
+    <div class="form-group">
+      <label>Pilih Shift Kerja</label>
+      <select id="shift-name" style="width:100%;padding:10px 14px;border:1px solid #cbd5e1;border-radius:10px;font-size:13.5px;font-weight:700;color:#0f172a;background:#fff;outline:none;cursor:pointer">
+        <option value="Shift Pagi (08.00 - 15.00)">Shift Pagi (08.00 - 15.00)</option>
+        <option value="Shift Siang (13.00 - 20.00)">Shift Siang (13.00 - 20.00)</option>
+      </select>
+    </div>
     <div class="form-group"><label>Opening Cash (Rp)</label><input id="opening-cash" type="number" value="500000"></div>
     <button class="btn-primary" style="background:linear-gradient(135deg,#D4AF37,#b8960c)" onclick="openShift()">Buka Shift</button>
   </div>
@@ -288,12 +294,16 @@ input,select,button{font-family:inherit}
 
 <!-- QRIS MODAL -->
 <div class="modal-overlay" id="qris-modal" onclick="closeQrisModal()">
-  <div class="modal-card" onclick="event.stopPropagation()">
+  <div class="modal-card" onclick="event.stopPropagation()" style="position:relative">
+    <button onclick="closeQrisModal()" style="position:absolute;top:14px;right:14px;background:none;border:none;font-size:22px;cursor:pointer;color:#94a3b8;line-height:1" title="Tutup">&times;</button>
     <h2>Scan QRIS</h2>
     <p class="subtitle" id="qris-amount-text">Rp 0</p>
     <img class="qris-img" id="qris-img" src="" alt="QR Code">
-    <p style="font-size:11px;color:#94a3b8">Tunjukkan QR ini ke customer</p>
-    <button class="btn-modal" onclick="closeQrisModal();checkout()">Selesai Bayar</button>
+    <p style="font-size:11px;color:#64748b">QRIS & nominal otomatis tampil di layar customer</p>
+    <div style="display:flex;gap:10px;margin-top:14px;width:100%">
+      <button type="button" class="btn-modal" style="background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;flex:1;margin-top:0" onclick="closeQrisModal()">Batal</button>
+      <button type="button" class="btn-modal" style="flex:2;margin-top:0" onclick="closeQrisModal();checkout()">Selesai Bayar</button>
+    </div>
   </div>
 </div>
 
@@ -506,8 +516,20 @@ async function doLogin(){
         return;
       }
 
+function initShiftSelect(){
+  var sel=document.getElementById("shift-name");
+  if(!sel)return;
+  var hr=new Date().getHours();
+  if(hr>=13){
+    sel.value="Shift Siang (13.00 - 20.00)";
+  }else{
+    sel.value="Shift Pagi (08.00 - 15.00)";
+  }
+}
+
       document.getElementById("login-screen").style.display="none";
       document.getElementById("shift-screen").style.display="flex";
+      initShiftSelect();
       document.getElementById("shift-user-info").textContent=d.display_name;
       console.log("[doLogin] login ok, showing shift screen");
     }else{
@@ -802,6 +824,7 @@ async function restoreKasirSession(){
       }catch(e){}
       document.getElementById("login-screen").style.display="none";
       document.getElementById("shift-screen").style.display="flex";
+      initShiftSelect();
       document.getElementById("shift-user-info").textContent=currentDisplayName;
     }
   }
@@ -1029,20 +1052,68 @@ function setPayment(m){
 }
 
 // QRIS
-function showQrisModal(){
-  var subtotal=cart.reduce(function(s,i){return s+i.price*i.qty},0);
-  var discountInput=parseInt(document.getElementById("discount-input").value)||0;
-  var discountType=document.getElementById("discount-type").value;
-  var discount=0;
-  if(discountType==="percent"){discount=Math.round(subtotal*discountInput/100)}
-  else{discount=discountInput}
-  var grand=Math.max(0, subtotal-discount);
-  document.getElementById("qris-amount-text").textContent="Rp "+grand.toLocaleString("id-ID");
-  var qrText="QRIS|POS|"+grand;
-  document.getElementById("qris-img").src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data="+encodeURIComponent(qrText);
-  document.getElementById("qris-modal").style.display="flex";
+var staticQrisImage = "";
+var currentStoreName = "YMB Mart";
+
+async function loadStoreSettingsForQris(){
+  try{
+    var r = await fetch(API + "/api/settings");
+    var s = await r.json();
+    if(s.store_name) currentStoreName = s.store_name;
+    if(s.qris_image) staticQrisImage = s.qris_image;
+  }catch(e){}
 }
-function closeQrisModal(){document.getElementById("qris-modal").style.display="none"}
+loadStoreSettingsForQris();
+
+function showQrisModal(){
+  var subtotal = cart.reduce(function(s,i){return s+i.price*i.qty},0);
+  var discountInput = parseInt(document.getElementById("discount-input").value)||0;
+  var discountType = document.getElementById("discount-type").value;
+  var discount = 0;
+  if(discountType === "percent"){discount = Math.round(subtotal*discountInput/100)}
+  else{discount = discountInput}
+  var grand = Math.max(0, subtotal-discount);
+
+  if(!cart.length || grand <= 0){
+    alert("Keranjang belanja masih kosong. Silakan pilih produk terlebih dahulu.");
+    setPayment("CASH");
+    return;
+  }
+
+  document.getElementById("qris-amount-text").textContent = "Rp " + grand.toLocaleString("id-ID");
+
+  // Gunakan gambar QRIS statis toko jika ada, atau generate QR code
+  var qrImgSrc = staticQrisImage || ("https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=" + encodeURIComponent("QRIS|" + currentStoreName + "|" + grand));
+  document.getElementById("qris-img").src = qrImgSrc;
+  document.getElementById("qris-modal").style.display = "flex";
+
+  // Broadcast ke Layar Customer via WebSocket
+  fetch(API + "/api/ws-broadcast", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      type: "show_qris",
+      data: {
+        total: grand,
+        qr_url: qrImgSrc,
+        store_name: currentStoreName,
+        cashier: currentDisplayName || currentUser
+      }
+    })
+  }).catch(function(){});
+}
+
+function closeQrisModal(){
+  document.getElementById("qris-modal").style.display = "none";
+  // Sembunyikan QRIS di layar customer
+  fetch(API + "/api/ws-broadcast", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      type: "hide_qris"
+    })
+  }).catch(function(){});
+}
 
 // CHECKOUT
 async function checkout(){
