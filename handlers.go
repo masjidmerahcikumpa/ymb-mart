@@ -2063,9 +2063,11 @@ func handleGetSettings(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 15<<20) // 15MB limit for banner ads and settings
 	var settings map[string]string
-	if err := decodeJSON(w,r, &settings); err != nil {
-		jsonResponse(w, map[string]string{"error": "Invalid request"}, 400)
+	if err := json.NewDecoder(r.Body).Decode(&settings); err != nil {
+		logError("handleUpdateSettings", err)
+		jsonResponse(w, map[string]string{"error": "Ukuran data terlalu besar atau format invalid"}, 400)
 		return
 	}
 	for k, v := range settings {

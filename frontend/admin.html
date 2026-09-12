@@ -3339,25 +3339,76 @@ var _adImages=[];
 var _adIdx=0;
 var _carouselTimer=null;
 
-function handleAdImageUpload(event){
-  var files=event.target.files;
-  if(!files||!files.length)return;
-  var count=files.length;
-  var loaded=0;
-  for(var i=0;i<count;i++){
-    var reader=new FileReader();
-    reader.onload=function(e){
-      _adImages.push(e.target.result);
-      loaded++;
-      if(loaded===count){
-        _adIdx=_adImages.length-1;
-        renderAdCarousel();
-        document.getElementById("ad-count-text").textContent=_adImages.length+" gambar";
-      }
+function compressImage(file, maxW, maxH, quality){
+  return new Promise(function(resolve){
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var img = new Image();
+      img.onload = function(){
+        var w = img.width, h = img.height;
+        if(w > maxW || h > maxH){
+          if(w / h > maxW / maxH){
+            h = Math.round((h * maxW) / w);
+            w = maxW;
+          } else {
+            w = Math.round((w * maxH) / h);
+            h = maxH;
+          }
+        }
+        var canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        var ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", quality || 0.82));
+      };
+      img.onerror = function(){ resolve(e.target.result); };
+      img.src = e.target.result;
     };
-    reader.readAsDataURL(files[i]);
+    reader.readAsDataURL(file);
+  });
+}
+
+function compressDataUrlIfNeeded(dataUrl, maxW, maxH, quality){
+  if(!dataUrl || typeof dataUrl !== "string" || !dataUrl.startsWith("data:image/") || dataUrl.length < 250000){
+    return Promise.resolve(dataUrl);
   }
-  event.target.value="";
+  return new Promise(function(resolve){
+    var img = new Image();
+    img.onload = function(){
+      var w = img.width, h = img.height;
+      if(w > maxW || h > maxH){
+        if(w / h > maxW / maxH){
+          h = Math.round((h * maxW) / w);
+          w = maxW;
+        } else {
+          w = Math.round((w * maxH) / h);
+          h = maxH;
+        }
+      }
+      var canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      var ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL("image/jpeg", quality || 0.82));
+    };
+    img.onerror = function(){ resolve(dataUrl); };
+    img.src = dataUrl;
+  });
+}
+
+async function handleAdImageUpload(event){
+  var files = event.target.files;
+  if(!files || !files.length) return;
+  for(var i = 0; i < files.length; i++){
+    var compressed = await compressImage(files[i], 1280, 720, 0.82);
+    _adImages.push(compressed);
+  }
+  _adIdx = _adImages.length - 1;
+  renderAdCarousel();
+  document.getElementById("ad-count-text").textContent = _adImages.length + " gambar";
+  event.target.value = "";
 }
 
 function deleteAdImage(idx){
@@ -3406,7 +3457,53 @@ function renderAdCarousel(){
 function goSlide(i){_adIdx=i;renderAdCarousel()}
 function updateMarqueePreview(){var v=document.getElementById("a-marquee").value||"Running text preview...";document.getElementById("ad-marquee-preview").textContent=v}
 async function loadAdsSettings(){try{var r=await fetch("/api/settings?include_ads=1");var s=await r.json();document.getElementById("a-marquee").value=s.ad_marquee||"🎉 Promo Spesial! Diskon menarik untuk semua produk! 🎉";updateMarqueePreview();_adImages=JSON.parse(s.ad_images||"[]");renderAdCarousel();document.getElementById("ad-count-text").textContent=_adImages.length+" gambar";}catch(e){}}
-async function saveAds(){await authFetch("/api/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({ad_marquee:document.getElementById("a-marquee").value,ad_images:JSON.stringify(_adImages)})});alert("Iklan tersimpan!")}
+async function saveAds(){
+  var btn = document.querySelector("#panel-ads button.btn-primary");
+  var origText = btn ? btn.textContent : "";
+  if(btn){ btn.disabled = true; btn.textContent = "Menyimpan Iklan..."; }
+
+  try {
+    for(var i = 0; i < _adImages.length; i++){
+      _adImages[i] = await compressDataUrlIfNeeded(_adImages[i], 1280, 720, 0.82);
+    }
+    var marqueeVal = document.getElementById("a-marquee").value;
+    var r = await authFetch("/api/settings", {
+      method: "PUT",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        ad_marquee: marqueeVal,
+        ad_images: JSON.stringify(_adImages)
+      })
+    });
+    if(!r.ok){
+      var err = await r.json().catch(function(){ return {}; });
+      throw new Error(err.error || ("Gagal menyimpan iklan (HTTP " + r.status + ")"));
+    }
+    if(typeof Swal !== "undefined"){
+      Swal.fire({
+        icon: "success",
+        title: "Iklan & Promo Tersimpan!",
+        text: "Teks promosi berjalan dan banner iklan monitor customer berhasil diperbarui.",
+        timer: 1500,
+        showConfirmButton: false
+      });
+    } else {
+      alert("Iklan & Promo tersimpan!");
+    }
+  } catch(e){
+    if(typeof Swal !== "undefined"){
+      Swal.fire({
+        icon: "error",
+        title: "Gagal Menyimpan Iklan",
+        text: e.message || "Koneksi terputus saat upload iklan."
+      });
+    } else {
+      alert("Gagal menyimpan: " + e.message);
+    }
+  } finally {
+    if(btn){ btn.disabled = false; btn.textContent = origText; }
+  }
+}
 
 
 // Table Sort
