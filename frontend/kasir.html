@@ -2034,12 +2034,25 @@ async function checkout(){
     document.getElementById("payment-modal").style.display="flex";
     cart=[];document.getElementById("amount-paid").value="";renderCart();
     fetch(API+"/api/ws-broadcast",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({type:"new_transaction",data:{...tx,cashier:currentDisplayName,member:activeMember?activeMember.name:""}})}).catch(function(){});
+
+    // Kurangi stok seketika di memori & re-render kartu produk tanpa perlu refresh
+    if(tx.items && tx.items.length > 0){
+      tx.items.forEach(function(ti){
+        var found = allProducts.find(function(p){ return p.id === ti.product_id || p.name === ti.name; });
+        if(found){
+          found.stock = Math.max(0, found.stock - ti.qty);
+        }
+      });
+      renderProductGrid();
+    }
+    loadProducts();
   }
   }catch(e){console.error("[checkout] error:",e);alert("Checkout error: "+e.message)}
   if(btn){btn.disabled=false;btn.textContent="BAYAR"}
 }
 function closePaymentModal(){
   document.getElementById("payment-modal").style.display="none";
+  loadProducts();
   fetch(API+"/api/ws-broadcast",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({type:"reset_display",data:{cashier:currentDisplayName}})}).catch(function(){});
 }
 function printReceipt(){
