@@ -50,3 +50,4 @@ Thumbs.db
 # ==========================================
 coverage.out
 *.test
+scratch/
