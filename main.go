@@ -347,6 +347,9 @@ func initDB() {
 				db.Exec("UPDATE users SET sync_status = 'synced' WHERE sync_status != 'synced'")
 				db.Exec("UPDATE products SET sync_status = 'synced' WHERE sync_status != 'synced'")
 				db.Exec("UPDATE attendance SET sync_status = 'synced' WHERE sync_status != 'synced'")
+				db.Exec("UPDATE stock_opname_sessions SET sync_status = 'synced' WHERE sync_status != 'synced'")
+				db.Exec("UPDATE stock_opname_items SET sync_status = 'synced' WHERE sync_status != 'synced'")
+				db.Exec("UPDATE members SET sync_status = 'synced' WHERE sync_status != 'synced'")
 			}()
 		}
 	}
@@ -511,6 +514,9 @@ func initDB() {
 	db.Exec("ALTER TABLE cash_log ADD COLUMN sync_status TEXT DEFAULT 'pending'")
 	db.Exec("ALTER TABLE inventory_movements ADD COLUMN sync_status TEXT DEFAULT 'pending'")
 	db.Exec("ALTER TABLE attendance ADD COLUMN sync_status TEXT DEFAULT 'pending'")
+	db.Exec("ALTER TABLE stock_opname_sessions ADD COLUMN sync_status TEXT DEFAULT 'pending'")
+	db.Exec("ALTER TABLE stock_opname_items ADD COLUMN sync_status TEXT DEFAULT 'pending'")
+	db.Exec("ALTER TABLE members ADD COLUMN sync_status TEXT DEFAULT 'pending'")
 
 	db.Exec(`CREATE TABLE IF NOT EXISTS audit_log (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,

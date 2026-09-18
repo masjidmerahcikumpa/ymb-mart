@@ -697,6 +697,7 @@ func handleOpenShift(w http.ResponseWriter, r *http.Request) {
 			"cashier":  dispName,
 		},
 	})
+	go TriggerSync()
 
 	jsonResponse(w, map[string]interface{}{"status": "ok", "shift_id": sid, "opening_cash": req.OpeningCash}, 200)
 }
@@ -1042,7 +1043,8 @@ func handleAddMember(w http.ResponseWriter, r *http.Request) {
 	}
 	decodeJSON(w,r, &req)
 	mid := generateID("MEM", 6)
-	db.Exec("INSERT INTO members (member_id,name,phone,email) VALUES (?,?,?,?)", mid, req.Name, req.Phone, req.Email)
+	db.Exec("INSERT INTO members (member_id,name,phone,email,sync_status) VALUES (?,?,?,?,'pending')", mid, req.Name, req.Phone, req.Email)
+	go TriggerSync()
 	jsonResponse(w, map[string]string{"status": "ok", "member_id": mid}, 200)
 }
 
@@ -1187,7 +1189,7 @@ func handleCheckout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if req.MemberID != "" {
-		sqlTx.Exec("UPDATE members SET points=points+? WHERE member_id=?", grandTotal/1000, req.MemberID)
+		sqlTx.Exec("UPDATE members SET points=points+?, sync_status='pending' WHERE member_id=?", grandTotal/1000, req.MemberID)
 	}
 
 	if err := sqlTx.Commit(); err != nil {
@@ -1363,22 +1365,22 @@ func handleVoidTransaction(w http.ResponseWriter, r *http.Request) {
 		voidedItems = append(voidedItems, item)
 		var currentStock int
 		voidTx.QueryRow("SELECT stock FROM products WHERE id=?", item.ProductID).Scan(&currentStock)
-		voidTx.Exec("UPDATE products SET stock=stock+? WHERE id=?", item.Qty, item.ProductID)
-		voidTx.Exec("INSERT INTO inventory_movements (product_id,movement_type,quantity,stock_before,stock_after,reference_type,reference_id,source,reason,user) VALUES (?,?,?,?,?,?,?,?,?,?)",
+		voidTx.Exec("UPDATE products SET stock=stock+?, sync_status='pending' WHERE id=?", item.Qty, item.ProductID)
+		voidTx.Exec("INSERT INTO inventory_movements (product_id,movement_type,quantity,stock_before,stock_after,reference_type,reference_id,source,reason,user,sync_status) VALUES (?,?,?,?,?,?,?,?,?,?,'pending')",
 			item.ProductID, "sale_reversal", item.Qty, currentStock, currentStock+item.Qty, "transaction", txID, "void", "Void reversal", "admin")
 	}
 	voidRows.Close()
 
 	// 3. Reverse member points
 	if txMemberID > 0 {
-		voidTx.Exec("UPDATE members SET points=points-? WHERE id=? AND points>=?", txGrandTotal/1000, txMemberID, txGrandTotal/1000)
+		voidTx.Exec("UPDATE members SET points=points-?, sync_status='pending' WHERE id=? AND points>=?", txGrandTotal/1000, txMemberID, txGrandTotal/1000)
 	}
 
 	// 4. Reverse cash/shift totals
 	var txShiftID int
 	db.QueryRow("SELECT shift_id FROM transactions WHERE tx_id=?", txID).Scan(&txShiftID)
 	if txShiftID > 0 {
-		voidTx.Exec("UPDATE shifts SET total_sales=total_sales-?, total_tx=total_tx-1 WHERE id=?", txGrandTotal, txShiftID)
+		voidTx.Exec("UPDATE shifts SET total_sales=total_sales-?, total_tx=total_tx-1, sync_status='pending' WHERE id=?", txGrandTotal, txShiftID)
 		if txPayment == "CASH" {
 			voidTx.Exec("UPDATE shifts SET cash_sales=cash_sales-? WHERE id=?", txGrandTotal, txShiftID)
 		}
@@ -1389,6 +1391,7 @@ func handleVoidTransaction(w http.ResponseWriter, r *http.Request) {
 		"void", "transaction", txID, "admin", fmt.Sprintf("Voided. Reversed stock for %d items, points %d, amount %d", len(voidedItems), txGrandTotal/1000, txGrandTotal))
 
 	voidTx.Commit()
+	go TriggerSync()
 	jsonResponse(w, map[string]interface{}{"status": "ok", "message": "Transaction voided with full reversal"}, 200)
 }
 func handleGetStats(w http.ResponseWriter, r *http.Request) {
@@ -2089,6 +2092,20 @@ func handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	for k, v := range settings {
 		db.Exec("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", k, v)
 	}
+
+	if cloudDB != nil {
+		go func(s map[string]string) {
+			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+			defer cancel()
+			for k, v := range s {
+				// Don't push giant ad images blob if empty
+				cloudDB.ExecContext(ctx, "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", k, v)
+			}
+			fmt.Println("[Sync] Settings pushed immediately to Turso Cloud")
+		}(settings)
+	}
+	go TriggerSync()
+
 	jsonResponse(w, map[string]string{"status": "ok"}, 200)
 }
 
@@ -2605,14 +2622,14 @@ func handleStockAdjustment(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	_, err = tx.Exec("UPDATE products SET stock=? WHERE id=?", newStock, req.ProductID)
+	_, err = tx.Exec("UPDATE products SET stock=?, sync_status='pending' WHERE id=?", newStock, req.ProductID)
 	if err != nil {
 		logError("handleStockAdjustment update stock", err)
 		jsonResponse(w, map[string]string{"error": "Failed to update stock"}, 500)
 		return
 	}
 
-	_, err = tx.Exec("INSERT INTO inventory_movements (product_id,movement_type,quantity,stock_before,stock_after,reference_type,source,reason,user) VALUES (?,?,?,?,?,?,?,?,?)",
+	_, err = tx.Exec("INSERT INTO inventory_movements (product_id,movement_type,quantity,stock_before,stock_after,reference_type,source,reason,user,sync_status) VALUES (?,?,?,?,?,?,?,?,?,'pending')",
 		req.ProductID, movementType, req.Quantity, currentStock, newStock, "manual", "admin", req.Reason, "admin")
 	if err != nil {
 		logError("handleStockAdjustment insert movement", err)
@@ -2634,6 +2651,8 @@ func handleStockAdjustment(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, map[string]string{"error": "Failed to commit transaction"}, 500)
 		return
 	}
+
+	go TriggerSync()
 
 	jsonResponse(w, map[string]interface{}{"status": "ok", "product_id": req.ProductID, "before": currentStock, "after": newStock, "type": movementType}, 200)
 }
@@ -2790,7 +2809,7 @@ func handleCreateStockOpname(w http.ResponseWriter, r *http.Request) {
 		req.OpnameDate = time.Now().Format("2006-01-02")
 	}
 
-	result, err := db.Exec("INSERT INTO stock_opname_sessions (created_by, status, opname_date, notes) VALUES (?, 'open', ?, ?)", username, req.OpnameDate, req.Notes)
+	result, err := db.Exec("INSERT INTO stock_opname_sessions (created_by, status, opname_date, notes, sync_status) VALUES (?, 'open', ?, ?, 'pending')", username, req.OpnameDate, req.Notes)
 	if err != nil {
 		logError("handleCreateStockOpname", err)
 		jsonResponse(w, map[string]string{"error": "Failed to create session"}, 500)
@@ -2799,8 +2818,8 @@ func handleCreateStockOpname(w http.ResponseWriter, r *http.Request) {
 	sessionID, _ := result.LastInsertId()
 
 	// Insert all active products into session using atomic INSERT ... SELECT to prevent database locks
-	_, err = db.Exec(`INSERT OR IGNORE INTO stock_opname_items (session_id, product_id, system_qty)
-		SELECT ?, id, stock FROM products WHERE active = 1`, sessionID)
+	_, err = db.Exec(`INSERT OR IGNORE INTO stock_opname_items (session_id, product_id, system_qty, sync_status)
+		SELECT ?, id, stock, 'pending' FROM products WHERE active = 1`, sessionID)
 	if err != nil {
 		logError("handleCreateStockOpname insert items", err)
 		jsonResponse(w, map[string]string{"error": "Failed to populate products into session"}, 500)
@@ -2808,6 +2827,7 @@ func handleCreateStockOpname(w http.ResponseWriter, r *http.Request) {
 	}
 
 	auditLog("stock_opname", "session", fmt.Sprintf("%d", sessionID), username, "Created stock opname session for "+req.OpnameDate)
+	go TriggerSync()
 	jsonResponse(w, map[string]interface{}{"session_id": sessionID, "status": "open", "opname_date": req.OpnameDate}, 201)
 }
 
@@ -2985,7 +3005,7 @@ func handleSubmitStockOpname(w http.ResponseWriter, r *http.Request) {
 		now := time.Now()
 
 		_, err = db.Exec(`UPDATE stock_opname_items 
-			SET physical_qty = ?, difference = ?, scanned_at = ?, user = ?
+			SET physical_qty = ?, difference = ?, scanned_at = ?, user = ?, sync_status = 'pending'
 			WHERE session_id = ? AND product_id = ?`,
 			item.PhysicalQty, difference, now, username, sessionID, item.ProductID)
 		if err != nil {
@@ -2994,6 +3014,9 @@ func handleSubmitStockOpname(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
+	db.Exec("UPDATE stock_opname_sessions SET sync_status = 'pending' WHERE id = ?", sessionID)
+	go TriggerSync()
 
 	auditLog("stock_opname", "session", fmt.Sprintf("%d", sessionID), username,
 		fmt.Sprintf("Submitted %d items for stock opname", len(req.Items)))
@@ -3063,7 +3086,7 @@ func handleApplyStockOpname(w http.ResponseWriter, r *http.Request) {
 
 	// Conditional close: only succeeds if status is still open
 	result, err := tx.Exec(
-		"UPDATE stock_opname_sessions SET status = 'closed', closed_at = ? WHERE id = ? AND status = 'open'",
+		"UPDATE stock_opname_sessions SET status = 'closed', closed_at = ?, sync_status = 'pending' WHERE id = ? AND status = 'open'",
 		time.Now(), sessionID)
 	if err != nil {
 		logError("handleApplyStockOpname close session", err)
@@ -3128,7 +3151,7 @@ func handleApplyStockOpname(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		_, err = tx.Exec("UPDATE products SET stock = ? WHERE id = ?", newStock, item.ProductID)
+		_, err = tx.Exec("UPDATE products SET stock = ?, sync_status = 'pending' WHERE id = ?", newStock, item.ProductID)
 		if err != nil {
 			logError("handleApplyStockOpname update stock", err)
 			tx.Rollback()
@@ -3139,7 +3162,7 @@ func handleApplyStockOpname(w http.ResponseWriter, r *http.Request) {
 		// P0.5: Unique reference per product per session
 		refID := fmt.Sprintf("opname:%d:%d", sessionID, item.ProductID)
 
-		_, err = tx.Exec(`INSERT INTO inventory_movements (product_id, movement_type, quantity, stock_before, stock_after, reference_type, reference_id, source, reason, user) VALUES (?, 'stock_adjustment', ?, ?, ?, 'stock_opname', ?, 'admin', ?, ?)`,
+		_, err = tx.Exec(`INSERT INTO inventory_movements (product_id, movement_type, quantity, stock_before, stock_after, reference_type, reference_id, source, reason, user, sync_status) VALUES (?, 'stock_adjustment', ?, ?, ?, 'stock_opname', ?, 'admin', ?, ?, 'pending')`,
 			item.ProductID, item.Difference, currentStock, newStock, refID,
 			fmt.Sprintf("Stock opname: %d -> %d", item.SystemQty, item.PhysicalQty), username)
 		if err != nil {
@@ -3174,6 +3197,8 @@ func handleApplyStockOpname(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, map[string]string{"error": "Failed to commit transaction"}, 500)
 		return
 	}
+
+	go TriggerSync()
 
 	jsonResponse(w, map[string]interface{}{
 		"status":              "ok",

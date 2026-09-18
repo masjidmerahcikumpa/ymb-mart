@@ -95,13 +95,16 @@ func GetSyncStatus() SyncStatus {
 
 	// Update pending count from local DB
 	if db != nil {
-		var txCount, shiftCount, cashCount, userCount, prodCount int
+		var txCount, shiftCount, cashCount, userCount, prodCount, opnCount, attCount, memCount int
 		db.QueryRow("SELECT COUNT(*) FROM transactions WHERE sync_status = 'pending'").Scan(&txCount)
 		db.QueryRow("SELECT COUNT(*) FROM shifts WHERE sync_status = 'pending'").Scan(&shiftCount)
 		db.QueryRow("SELECT COUNT(*) FROM cash_log WHERE sync_status = 'pending'").Scan(&cashCount)
 		db.QueryRow("SELECT COUNT(*) FROM users WHERE sync_status = 'pending'").Scan(&userCount)
 		db.QueryRow("SELECT COUNT(*) FROM products WHERE sync_status = 'pending'").Scan(&prodCount)
-		currentSyncStatus.PendingCount = txCount + shiftCount + cashCount + userCount + prodCount
+		db.QueryRow("SELECT COUNT(*) FROM stock_opname_sessions WHERE sync_status = 'pending'").Scan(&opnCount)
+		db.QueryRow("SELECT COUNT(*) FROM attendance WHERE sync_status = 'pending'").Scan(&attCount)
+		db.QueryRow("SELECT COUNT(*) FROM members WHERE sync_status = 'pending'").Scan(&memCount)
+		currentSyncStatus.PendingCount = txCount + shiftCount + cashCount + userCount + prodCount + opnCount + attCount + memCount
 	}
 
 	return currentSyncStatus
@@ -296,11 +299,89 @@ func pullMasterDataFromCloud() error {
 			var id, points, active int
 			var memberID, name, phone, email, tier string
 			if err := mRows.Scan(&id, &memberID, &name, &phone, &email, &points, &tier, &active); err == nil {
-				db.Exec(`INSERT INTO members (id, member_id, name, phone, email, points, tier, active)
-					VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-					ON CONFLICT(id) DO UPDATE SET member_id=excluded.member_id, name=excluded.name, phone=excluded.phone,
-					email=excluded.email, points=excluded.points, tier=excluded.tier, active=excluded.active`,
+				var localSync string
+				db.QueryRow("SELECT sync_status FROM members WHERE member_id = ?", memberID).Scan(&localSync)
+				if localSync == "pending" {
+					continue
+				}
+				db.Exec(`INSERT INTO members (id, member_id, name, phone, email, points, tier, active, sync_status)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'synced')
+					ON CONFLICT(member_id) DO UPDATE SET name=excluded.name, phone=excluded.phone,
+					email=excluded.email, points=excluded.points, tier=excluded.tier, active=excluded.active, sync_status='synced'`,
 					id, memberID, name, phone, email, points, tier, active)
+			}
+		}
+	}
+
+	// F. Pull Attendance from Cloud (e.g. submitted via mobile QR scan through Vercel)
+	attCloudRows, err := cloudDB.Query(`SELECT id, user_id, username, cashier_name, type, date, time, notes, device_info, created_at FROM attendance ORDER BY id DESC LIMIT 200`)
+	if err == nil {
+		defer attCloudRows.Close()
+		for attCloudRows.Next() {
+			var id int
+			var uID sql.NullInt64
+			var uname, cname, aType, aDate, aTime, notes, devInfo, cAt string
+			if err := attCloudRows.Scan(&id, &uID, &uname, &cname, &aType, &aDate, &aTime, &notes, &devInfo, &cAt); err == nil {
+				var uVal interface{} = nil
+				if uID.Valid { uVal = uID.Int64 }
+				var exists int
+				db.QueryRow("SELECT COUNT(*) FROM attendance WHERE username=? AND date=? AND time=? AND type=?", uname, aDate, aTime, aType).Scan(&exists)
+				if exists == 0 {
+					db.Exec(`INSERT INTO attendance (user_id, username, cashier_name, type, date, time, notes, device_info, created_at, sync_status)
+						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')`,
+						uVal, uname, cname, aType, aDate, aTime, notes, devInfo, cAt)
+				}
+			}
+		}
+	}
+
+	// G. Pull Stock Opname Sessions from Cloud (if created/managed on Vercel)
+	soRows, err := cloudDB.Query("SELECT id, created_by, status, COALESCE(opname_date,''), COALESCE(notes,''), created_at, closed_at FROM stock_opname_sessions")
+	if err == nil {
+		defer soRows.Close()
+		for soRows.Next() {
+			var id int
+			var cBy, st, opDate, notes, cAt string
+			var clAt sql.NullString
+			if err := soRows.Scan(&id, &cBy, &st, &opDate, &notes, &cAt, &clAt); err == nil {
+				var localSync string
+				db.QueryRow("SELECT sync_status FROM stock_opname_sessions WHERE id = ?", id).Scan(&localSync)
+				if localSync == "pending" {
+					continue
+				}
+				var clVal interface{} = nil
+				if clAt.Valid { clVal = clAt.String }
+				db.Exec(`INSERT INTO stock_opname_sessions (id, created_by, status, opname_date, notes, created_at, closed_at, sync_status)
+					VALUES (?, ?, ?, ?, ?, ?, ?, 'synced')
+					ON CONFLICT(id) DO UPDATE SET status=excluded.status, closed_at=excluded.closed_at, notes=excluded.notes, opname_date=excluded.opname_date, sync_status='synced'`,
+					id, cBy, st, opDate, notes, cAt, clVal)
+			}
+		}
+	}
+
+	// H. Pull Stock Opname Items from Cloud
+	soiRows, err := cloudDB.Query("SELECT session_id, product_id, system_qty, physical_qty, difference, scanned_at, user FROM stock_opname_items")
+	if err == nil {
+		defer soiRows.Close()
+		for soiRows.Next() {
+			var sessID, prodID, sysQty int
+			var pQty, diff sql.NullInt64
+			var scAt, usr sql.NullString
+			if err := soiRows.Scan(&sessID, &prodID, &sysQty, &pQty, &diff, &scAt, &usr); err == nil {
+				var localSync string
+				db.QueryRow("SELECT sync_status FROM stock_opname_items WHERE session_id = ? AND product_id = ?", sessID, prodID).Scan(&localSync)
+				if localSync == "pending" {
+					continue
+				}
+				var pVal, dVal, sVal, uVal interface{} = nil, nil, nil, nil
+				if pQty.Valid { pVal = pQty.Int64 }
+				if diff.Valid { dVal = diff.Int64 }
+				if scAt.Valid { sVal = scAt.String }
+				if usr.Valid { uVal = usr.String }
+				db.Exec(`INSERT INTO stock_opname_items (session_id, product_id, system_qty, physical_qty, difference, scanned_at, user, sync_status)
+					VALUES (?, ?, ?, ?, ?, ?, ?, 'synced')
+					ON CONFLICT(session_id, product_id) DO UPDATE SET system_qty=excluded.system_qty, physical_qty=excluded.physical_qty, difference=excluded.difference, scanned_at=excluded.scanned_at, user=excluded.user, sync_status='synced'`,
+					sessID, prodID, sysQty, pVal, dVal, sVal, uVal)
 			}
 		}
 	}
@@ -619,6 +700,147 @@ func pushLocalTransactionsToCloud() error {
 		}
 	}
 
+	// 6. Fetch and Push Pending Members into memory
+	type pendingMember struct {
+		id int
+		memberID, name, phone, email, tier string
+		points int
+		active int
+		joinedAt string
+	}
+	var pendingMembers []pendingMember
+	memRows, err := db.Query(`SELECT id, member_id, name, phone, email, points, tier, active, joined_at FROM members WHERE sync_status = 'pending'`)
+	if err == nil {
+		for memRows.Next() {
+			var m pendingMember
+			if err := memRows.Scan(&m.id, &m.memberID, &m.name, &m.phone, &m.email, &m.points, &m.tier, &m.active, &m.joinedAt); err == nil {
+				pendingMembers = append(pendingMembers, m)
+			}
+		}
+		memRows.Close()
+	}
+
+	cloudDB.Exec(`ALTER TABLE members ADD COLUMN sync_status TEXT DEFAULT 'pending'`)
+
+	for _, m := range pendingMembers {
+		_, cErr := cloudDB.Exec(`INSERT INTO members (member_id, name, phone, email, points, tier, active, joined_at, sync_status)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'synced')
+			ON CONFLICT(member_id) DO UPDATE SET
+				name=excluded.name,
+				phone=excluded.phone,
+				email=excluded.email,
+				points=excluded.points,
+				tier=excluded.tier,
+				active=excluded.active,
+				sync_status='synced'`,
+			m.memberID, m.name, m.phone, m.email, m.points, m.tier, m.active, m.joinedAt)
+		if cErr == nil {
+			db.Exec("UPDATE members SET sync_status = 'synced' WHERE id = ?", m.id)
+			fmt.Printf("[Sync] Member %s (%s) successfully pushed to Turso Cloud\n", m.name, m.memberID)
+		} else {
+			fmt.Printf("[Sync] Error pushing member %s to cloud: %v\n", m.memberID, cErr)
+		}
+	}
+
+	// 7. Fetch and Push Pending Stock Opname Sessions
+	type pendingOpnameSession struct {
+		id int
+		notes, status, createdBy, createdAt string
+		opnameDate sql.NullString
+		closedAt sql.NullString
+	}
+	var opnSessions []pendingOpnameSession
+	sRows, err := db.Query(`SELECT id, COALESCE(notes,''), status, opname_date, created_by, created_at, closed_at FROM stock_opname_sessions WHERE sync_status = 'pending'`)
+	if err == nil {
+		for sRows.Next() {
+			var s pendingOpnameSession
+			if err := sRows.Scan(&s.id, &s.notes, &s.status, &s.opnameDate, &s.createdBy, &s.createdAt, &s.closedAt); err == nil {
+				opnSessions = append(opnSessions, s)
+			}
+		}
+		sRows.Close()
+	}
+
+	cloudDB.Exec(`ALTER TABLE stock_opname_sessions ADD COLUMN sync_status TEXT DEFAULT 'pending'`)
+
+	for _, s := range opnSessions {
+		var opDateVal interface{} = nil
+		if s.opnameDate.Valid {
+			opDateVal = s.opnameDate.String
+		}
+		var clVal interface{} = nil
+		if s.closedAt.Valid && s.closedAt.String != "" {
+			clVal = s.closedAt.String
+		}
+		_, cErr := cloudDB.Exec(`INSERT INTO stock_opname_sessions (id, created_by, status, opname_date, notes, created_at, closed_at, sync_status)
+			VALUES (?, ?, ?, ?, ?, ?, ?, 'synced')
+			ON CONFLICT(id) DO UPDATE SET
+				status=excluded.status,
+				opname_date=excluded.opname_date,
+				notes=excluded.notes,
+				closed_at=excluded.closed_at,
+				sync_status='synced'`,
+			s.id, s.createdBy, s.status, opDateVal, s.notes, s.createdAt, clVal)
+		if cErr == nil {
+			db.Exec("UPDATE stock_opname_sessions SET sync_status = 'synced' WHERE id = ?", s.id)
+			fmt.Printf("[Sync] Stock Opname Session %d pushed to Turso Cloud\n", s.id)
+		} else {
+			fmt.Printf("[Sync] Error pushing stock opname session %d to cloud: %v\n", s.id, cErr)
+		}
+	}
+
+	// 8. Fetch and Push Pending Stock Opname Items
+	type pendingOpnameItem struct {
+		id, sessionID, productID, systemQty int
+		physicalQty, difference sql.NullInt64
+		scannedAt, user sql.NullString
+	}
+	var opnItems []pendingOpnameItem
+	iRows, err := db.Query(`SELECT id, session_id, product_id, system_qty, physical_qty, difference, scanned_at, user FROM stock_opname_items WHERE sync_status = 'pending'`)
+	if err == nil {
+		for iRows.Next() {
+			var it pendingOpnameItem
+			if err := iRows.Scan(&it.id, &it.sessionID, &it.productID, &it.systemQty, &it.physicalQty, &it.difference, &it.scannedAt, &it.user); err == nil {
+				opnItems = append(opnItems, it)
+			}
+		}
+		iRows.Close()
+	}
+
+	cloudDB.Exec(`ALTER TABLE stock_opname_items ADD COLUMN sync_status TEXT DEFAULT 'pending'`)
+
+	for _, it := range opnItems {
+		var pQtyVal, diffVal, scAtVal, usrVal interface{} = nil, nil, nil, nil
+		if it.physicalQty.Valid {
+			pQtyVal = it.physicalQty.Int64
+		}
+		if it.difference.Valid {
+			diffVal = it.difference.Int64
+		}
+		if it.scannedAt.Valid {
+			scAtVal = it.scannedAt.String
+		}
+		if it.user.Valid {
+			usrVal = it.user.String
+		}
+
+		_, cErr := cloudDB.Exec(`INSERT INTO stock_opname_items (session_id, product_id, system_qty, physical_qty, difference, scanned_at, user, sync_status)
+			VALUES (?, ?, ?, ?, ?, ?, ?, 'synced')
+			ON CONFLICT(session_id, product_id) DO UPDATE SET
+				system_qty=excluded.system_qty,
+				physical_qty=excluded.physical_qty,
+				difference=excluded.difference,
+				scanned_at=excluded.scanned_at,
+				user=excluded.user,
+				sync_status='synced'`,
+			it.sessionID, it.productID, it.systemQty, pQtyVal, diffVal, scAtVal, usrVal)
+		if cErr == nil {
+			db.Exec("UPDATE stock_opname_items SET sync_status = 'synced' WHERE id = ?", it.id)
+		} else {
+			fmt.Printf("[Sync] Error pushing stock opname item %d to cloud: %v\n", it.id, cErr)
+		}
+	}
+
 	// Clean up any stray pending flags in cloudDB
 	cloudDB.Exec("UPDATE transactions SET sync_status = 'synced' WHERE sync_status != 'synced'")
 	cloudDB.Exec("UPDATE shifts SET sync_status = 'synced' WHERE sync_status != 'synced'")
@@ -627,6 +849,9 @@ func pushLocalTransactionsToCloud() error {
 	cloudDB.Exec("UPDATE users SET sync_status = 'synced' WHERE sync_status != 'synced'")
 	cloudDB.Exec("UPDATE products SET sync_status = 'synced' WHERE sync_status != 'synced'")
 	cloudDB.Exec("UPDATE attendance SET sync_status = 'synced' WHERE sync_status != 'synced'")
+	cloudDB.Exec("UPDATE members SET sync_status = 'synced' WHERE sync_status != 'synced'")
+	cloudDB.Exec("UPDATE stock_opname_sessions SET sync_status = 'synced' WHERE sync_status != 'synced'")
+	cloudDB.Exec("UPDATE stock_opname_items SET sync_status = 'synced' WHERE sync_status != 'synced'")
 
 	return nil
 }
