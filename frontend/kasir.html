@@ -773,6 +773,36 @@ input, select, button { font-family: inherit; }
   font-variant-numeric: tabular-nums;
 }
 
+.tqty-input {
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 900;
+  width: 52px;
+  height: 30px;
+  text-align: center;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #0f172a;
+  outline: none;
+  font-variant-numeric: tabular-nums;
+  -moz-appearance: textfield;
+  padding: 0 4px;
+  transition: all 0.15s ease;
+}
+
+.tqty-input::-webkit-outer-spin-button,
+.tqty-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.tqty-input:focus {
+  border-color: var(--maroon);
+  box-shadow: 0 0 0 2px rgba(139, 21, 56, 0.15);
+  background: #ffffff;
+}
+
 .btn-tell-del {
   background: #fee2e2;
   color: #dc2626;
@@ -2470,7 +2500,55 @@ function addToCart(id,name,price,stock,barcode,sku){
   renderCart();broadcastCart();
 }
 function removeFromCart(i){cart.splice(i,1);renderCart();broadcastCart()}
-function changeQty(i,d){cart[i].qty+=d;if(cart[i].qty<=0)cart.splice(i,1);renderCart();broadcastCart()}
+function changeQty(i,d){
+  if(!cart[i]) return;
+  var newQ = cart[i].qty + d;
+  if(newQ <= 0){
+    cart.splice(i,1);
+  } else {
+    if(cart[i].stock > 0 && newQ > cart[i].stock){
+      alert("Stok tidak mencukupi! Sisa stok: " + cart[i].stock);
+      return;
+    }
+    cart[i].qty = newQ;
+  }
+  renderCart();
+  broadcastCart();
+}
+
+function setQty(i, val){
+  if(!cart[i]) return;
+  var q = parseInt(val);
+  if(isNaN(q) || q < 1) q = 1;
+  if(cart[i].stock > 0 && q > cart[i].stock){
+    alert("Stok tidak mencukupi! Sisa stok: " + cart[i].stock);
+    q = cart[i].stock;
+  }
+  cart[i].qty = q;
+  renderCart();
+  broadcastCart();
+}
+
+function handleQtyInput(i, input){
+  if(!cart[i]) return;
+  var q = parseInt(input.value);
+  if(!isNaN(q) && q >= 1){
+    if(cart[i].stock > 0 && q > cart[i].stock){
+      q = cart[i].stock;
+      input.value = q;
+    }
+    cart[i].qty = q;
+    document.getElementById("cart-count").textContent = cart.reduce(function(s,it){return s+it.qty},0);
+    var row = input.closest("tr");
+    if(row){
+      var subEl = row.querySelector(".tell-row-subtotal");
+      if(subEl) subEl.textContent = "Rp " + (cart[i].price * cart[i].qty).toLocaleString("id-ID");
+    }
+    updateTotal();
+    broadcastCart();
+  }
+}
+
 function clearCart(){cart=[];document.getElementById("amount-paid").value="";document.getElementById("discount-input").value="0";renderCart();broadcastCart()}
 
 // RENDER CART INTO FULL-SCREEN TELL TABLE
@@ -2497,13 +2575,17 @@ function renderCart(){
       '<td style="text-align:right;font-weight:700;font-variant-numeric:tabular-nums">Rp '+item.price.toLocaleString("id-ID")+'</td>' +
       '<td>' +
         '<div class="tell-qty-ctrl">' +
-          '<button type="button" class="tqty-btn" onclick="changeQty('+i+',-1)">-</button>' +
-          '<span class="tqty-val">'+item.qty+'</span>' +
-          '<button type="button" class="tqty-btn" onclick="changeQty('+i+',1)">+</button>' +
+          '<button type="button" class="tqty-btn" onclick="changeQty('+i+',-1)" title="Kurang 1">-</button>' +
+          '<input type="number" min="1" class="tqty-input" value="'+item.qty+'" ' +
+            'onfocus="this.select()" ' +
+            'oninput="handleQtyInput('+i+',this)" ' +
+            'onchange="setQty('+i+',this.value)" ' +
+            'onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();var s=document.getElementById(\'search\');if(s)s.focus();}" title="Ketik jumlah manual">' +
+          '<button type="button" class="tqty-btn" onclick="changeQty('+i+',1)" title="Tambah 1">+</button>' +
         '</div>' +
       '</td>' +
       '<td style="text-align:right;color:#64748b">Rp 0</td>' +
-      '<td style="text-align:right;font-weight:900;color:var(--maroon);font-size:16px;font-variant-numeric:tabular-nums">Rp '+subtotal.toLocaleString("id-ID")+'</td>' +
+      '<td style="text-align:right;font-weight:900;color:var(--maroon);font-size:16px;font-variant-numeric:tabular-nums" class="tell-row-subtotal">Rp '+subtotal.toLocaleString("id-ID")+'</td>' +
       '<td style="text-align:center"><button type="button" class="btn-tell-del" onclick="removeFromCart('+i+')" title="Hapus Item">&times;</button></td>' +
     '</tr>';
   });
