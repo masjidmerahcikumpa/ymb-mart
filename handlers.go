@@ -2754,26 +2754,49 @@ func handleListStockOpname(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	type SessionSummary struct {
-		ID              int64      `json:"id"`
-		CreatedAt       time.Time  `json:"created_at"`
-		OpnameDate      string     `json:"opname_date"`
-		Notes           string     `json:"notes"`
-		CreatedBy       string     `json:"created_by"`
-		Status          string     `json:"status"`
-		ClosedAt        *time.Time `json:"closed_at,omitempty"`
-		TotalItems      int        `json:"total_items"`
-		CountedItems    int        `json:"counted_items"`
-		RemainingItems  int        `json:"remaining_items"`
-		DifferenceItems int        `json:"difference_items"`
+		ID              int64   `json:"id"`
+		CreatedAt       string  `json:"created_at"`
+		OpnameDate      string  `json:"opname_date"`
+		Notes           string  `json:"notes"`
+		CreatedBy       string  `json:"created_by"`
+		Status          string  `json:"status"`
+		ClosedAt        *string `json:"closed_at,omitempty"`
+		TotalItems      int     `json:"total_items"`
+		CountedItems    int     `json:"counted_items"`
+		RemainingItems  int     `json:"remaining_items"`
+		DifferenceItems int     `json:"difference_items"`
 	}
 
 	var sessions []SessionSummary
 	for rows.Next() {
 		var s SessionSummary
-		rows.Scan(&s.ID, &s.CreatedAt, &s.OpnameDate, &s.Notes, &s.CreatedBy, &s.Status, &s.ClosedAt,
+		var createdAt, closedAt, opnameDate, notes, createdBy, status sql.NullString
+		err := rows.Scan(&s.ID, &createdAt, &opnameDate, &notes, &createdBy, &status, &closedAt,
 			&s.TotalItems, &s.CountedItems, &s.DifferenceItems)
-		if s.OpnameDate == "" {
-			s.OpnameDate = s.CreatedAt.Format("2006-01-02")
+		if err != nil {
+			logError("handleListStockOpname scan", err)
+			continue
+		}
+		if createdAt.Valid {
+			s.CreatedAt = createdAt.String
+		}
+		if closedAt.Valid && closedAt.String != "" {
+			cStr := closedAt.String
+			s.ClosedAt = &cStr
+		}
+		if opnameDate.Valid && opnameDate.String != "" {
+			s.OpnameDate = opnameDate.String
+		} else if len(s.CreatedAt) >= 10 {
+			s.OpnameDate = s.CreatedAt[:10]
+		}
+		if notes.Valid {
+			s.Notes = notes.String
+		}
+		if createdBy.Valid {
+			s.CreatedBy = createdBy.String
+		}
+		if status.Valid {
+			s.Status = status.String
 		}
 		s.RemainingItems = s.TotalItems - s.CountedItems
 		sessions = append(sessions, s)
@@ -2852,22 +2875,31 @@ func handleGetStockOpname(w http.ResponseWriter, r *http.Request) {
 
 	// Get session info
 	var session StockOpnameSession
-	var closedAt sql.NullTime
-	var opnameDate sql.NullString
-	var notes sql.NullString
+	var createdAt, createdBy, status, closedAt, opnameDate, notes sql.NullString
 	err = db.QueryRow("SELECT id, created_at, created_by, status, closed_at, COALESCE(opname_date, ''), COALESCE(notes, '') FROM stock_opname_sessions WHERE id = ?", sessionID).
-		Scan(&session.ID, &session.CreatedAt, &session.CreatedBy, &session.Status, &closedAt, &opnameDate, &notes)
+		Scan(&session.ID, &createdAt, &createdBy, &status, &closedAt, &opnameDate, &notes)
 	if err != nil {
+		logError("handleGetStockOpname get session", err)
 		jsonResponse(w, map[string]string{"error": "Session not found"}, 404)
 		return
 	}
-	if closedAt.Valid {
-		session.ClosedAt = &closedAt.Time
+	if createdAt.Valid {
+		session.CreatedAt = createdAt.String
+	}
+	if createdBy.Valid {
+		session.CreatedBy = createdBy.String
+	}
+	if status.Valid {
+		session.Status = status.String
+	}
+	if closedAt.Valid && closedAt.String != "" {
+		cStr := closedAt.String
+		session.ClosedAt = &cStr
 	}
 	if opnameDate.Valid && opnameDate.String != "" {
 		session.OpnameDate = opnameDate.String
-	} else {
-		session.OpnameDate = session.CreatedAt.Format("2006-01-02")
+	} else if len(session.CreatedAt) >= 10 {
+		session.OpnameDate = session.CreatedAt[:10]
 	}
 	if notes.Valid {
 		session.Notes = notes.String
@@ -2899,26 +2931,39 @@ func handleGetStockOpname(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	type ItemWithProduct struct {
-		ID          int64      `json:"id"`
-		SessionID   int64      `json:"session_id"`
-		ProductID   int64      `json:"product_id"`
-		ProductName string     `json:"product_name"`
-		ProductSKU  string     `json:"product_sku"`
-		Barcode     string     `json:"barcode"`
-		Category    string     `json:"category"`
-		SystemQty   int64      `json:"system_qty"`
-		PhysicalQty *int64     `json:"physical_qty,omitempty"`
-		Difference  *int64     `json:"difference,omitempty"`
-		ScannedAt   *time.Time `json:"scanned_at,omitempty"`
-		User        *string    `json:"user,omitempty"`
+		ID          int64   `json:"id"`
+		SessionID   int64   `json:"session_id"`
+		ProductID   int64   `json:"product_id"`
+		ProductName string  `json:"product_name"`
+		ProductSKU  string  `json:"product_sku"`
+		Barcode     string  `json:"barcode"`
+		Category    string  `json:"category"`
+		SystemQty   int64   `json:"system_qty"`
+		PhysicalQty *int64  `json:"physical_qty,omitempty"`
+		Difference  *int64  `json:"difference,omitempty"`
+		ScannedAt   *string `json:"scanned_at,omitempty"`
+		User        *string `json:"user,omitempty"`
 	}
 
 	var items []ItemWithProduct
 	for rows.Next() {
 		var item ItemWithProduct
-		rows.Scan(&item.ID, &item.SessionID, &item.ProductID, &item.ProductName,
+		var scAt, usr sql.NullString
+		err := rows.Scan(&item.ID, &item.SessionID, &item.ProductID, &item.ProductName,
 			&item.ProductSKU, &item.Barcode, &item.Category, &item.SystemQty, &item.PhysicalQty,
-			&item.Difference, &item.ScannedAt, &item.User)
+			&item.Difference, &scAt, &usr)
+		if err != nil {
+			logError("handleGetStockOpname scan item", err)
+			continue
+		}
+		if scAt.Valid && scAt.String != "" {
+			sVal := scAt.String
+			item.ScannedAt = &sVal
+		}
+		if usr.Valid && usr.String != "" {
+			uVal := usr.String
+			item.User = &uVal
+		}
 		items = append(items, item)
 	}
 

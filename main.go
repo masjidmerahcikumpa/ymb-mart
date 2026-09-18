@@ -255,24 +255,24 @@ type User struct {
 }
 
 type StockOpnameSession struct {
-	ID         int64      `json:"id"`
-	CreatedAt  time.Time  `json:"created_at"`
-	OpnameDate string     `json:"opname_date,omitempty"`
-	Notes      string     `json:"notes,omitempty"`
-	CreatedBy  string     `json:"created_by"`
-	Status     string     `json:"status"`
-	ClosedAt   *time.Time `json:"closed_at,omitempty"`
+	ID         int64   `json:"id"`
+	CreatedAt  string  `json:"created_at"`
+	OpnameDate string  `json:"opname_date,omitempty"`
+	Notes      string  `json:"notes,omitempty"`
+	CreatedBy  string  `json:"created_by"`
+	Status     string  `json:"status"`
+	ClosedAt   *string `json:"closed_at,omitempty"`
 }
 
 type StockOpnameItem struct {
-	ID          int64      `json:"id"`
-	SessionID   int64      `json:"session_id"`
-	ProductID   int64      `json:"product_id"`
-	SystemQty   int64      `json:"system_qty"`
-	PhysicalQty *int64     `json:"physical_qty,omitempty"`
-	Difference  *int64     `json:"difference,omitempty"`
-	ScannedAt   *time.Time `json:"scanned_at,omitempty"`
-	User        *string    `json:"user,omitempty"`
+	ID          int64   `json:"id"`
+	SessionID   int64   `json:"session_id"`
+	ProductID   int64   `json:"product_id"`
+	SystemQty   int64   `json:"system_qty"`
+	PhysicalQty *int64  `json:"physical_qty,omitempty"`
+	Difference  *int64  `json:"difference,omitempty"`
+	ScannedAt   *string `json:"scanned_at,omitempty"`
+	User        *string `json:"user,omitempty"`
 }
 
 type CartItemReq struct {

@@ -22,22 +22,40 @@
   --dark-slate: #0f172a;
 }
 
-* { margin: 0; padding: 0; box-sizing: border-box; }
+html {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
 body {
   font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-  height: 100vh;
+  height: 100%;
+  margin: 0;
+  padding: 0;
   overflow: hidden;
   background: var(--bg-slate);
   color: #0f172a;
+  display: flex;
+  flex-direction: column;
 }
 
-/* === AUTO-SCALE KHUSUS MONITOR KASIR FULL HD (1920x1080) === */
+/* === TAMPILAN LEBIH BESAR & JELAS KHUSUS MONITOR FULL HD (>= 1500px) === */
 @media screen and (min-width: 1500px) {
-  body {
-    zoom: 1.2;
-    width: calc(100vw / 1.2);
-    height: calc(100vh / 1.2);
-  }
+  .tell-top-bar { padding: 12px 24px; }
+  .scanner-input { font-size: 16px; padding: 11px 16px 11px 46px; border-radius: 12px; }
+  .scanner-icon { font-size: 18px; left: 16px; }
+  .btn-quick-tool { font-size: 13px; padding: 10px 16px; border-radius: 10px; }
+  .tell-table thead th { font-size: 12px; padding: 12px 14px; }
+  .tell-item-name { font-size: 16.5px; }
+  .plu-badge { font-size: 12.5px; padding: 4px 8px; }
+  .tell-row td { padding: 12px 10px; font-size: 14px; }
+  .tqty-input { width: 56px; height: 32px; font-size: 16px; }
+  .tqty-btn { width: 30px; height: 30px; font-size: 15px; }
+  .cbar-total-amount { font-size: 32px; }
+  .btn-checkout-giant { min-height: 76px; font-size: 17px; }
+  .cbar-cash-input { height: 42px; font-size: 15px; }
 }
 
 .nav-zoom-ctrl {
@@ -550,6 +568,7 @@ input, select, button { font-family: inherit; }
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-height: 0;
   overflow: hidden;
   background: #f8fafc;
 }
@@ -658,8 +677,9 @@ input, select, button { font-family: inherit; }
 /* MAIN TELL LIST TABLE (LARGE & SPACIOUS) */
 .tell-table-wrap {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 12px 20px;
+  padding: 10px 20px;
   background: #f8fafc;
 }
 
@@ -825,12 +845,13 @@ input, select, button { font-family: inherit; }
 
 /* BOTTOM CHECKOUT & PAYMENT BAR */
 .tell-checkout-bar {
+  flex-shrink: 0;
   background: #ffffff;
   border-top: 2px solid #cbd5e1;
-  padding: 12px 20px;
+  padding: 10px 18px;
   display: grid;
   grid-template-columns: 240px 190px 220px 1fr 220px;
-  gap: 16px;
+  gap: 14px;
   align-items: center;
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.05);
 }
@@ -2977,11 +2998,9 @@ async function triggerManualSync(){
 
 // ZOOM / SCALE KASIR
 function applyKasirZoom(scale) {
-  scale = Math.max(0.85, Math.min(1.5, Math.round(scale * 100) / 100));
+  scale = Math.max(0.85, Math.min(1.3, Math.round(scale * 100) / 100));
   localStorage.setItem("kasir_ui_zoom", scale);
-  document.body.style.zoom = scale;
-  document.body.style.width = "calc(100vw / " + scale + ")";
-  document.body.style.height = "calc(100vh / " + scale + ")";
+  document.documentElement.style.zoom = scale;
   var lbl = document.getElementById("kasir-zoom-label");
   if (lbl) lbl.textContent = Math.round(scale * 100) + "%";
 }
@@ -2989,7 +3008,7 @@ function applyKasirZoom(scale) {
 function adjustKasirZoom(delta) {
   var cur = parseFloat(localStorage.getItem("kasir_ui_zoom"));
   if (!cur || isNaN(cur)) {
-    cur = (window.innerWidth >= 1500) ? 1.2 : 1.0;
+    cur = 1.0;
   }
   applyKasirZoom(cur + delta);
 }
@@ -3000,10 +3019,77 @@ function adjustKasirZoom(delta) {
   if (saved) {
     applyKasirZoom(parseFloat(saved));
   } else {
-    var defaultScale = (window.innerWidth >= 1500) ? 1.2 : 1.0;
-    applyKasirZoom(defaultScale);
+    applyKasirZoom(1.0);
   }
 })();
+
+// GLOBAL BARCODE SCANNER LISTENER (Scan langsung tanpa harus fokus ke form search)
+var _scanBuffer = "";
+var _lastScanTime = 0;
+var _scanTimer = null;
+
+document.addEventListener("keydown", function(e){
+  if (e.ctrlKey || e.altKey || e.metaKey) return;
+  if (e.key.startsWith("F") && e.key.length > 1) return;
+  if (e.key === "Tab" || e.key === "Escape" || e.key === "Shift" || e.key === "CapsLock" || e.key === "Control" || e.key === "Alt") return;
+
+  var active = document.activeElement;
+  var isTypingInOther = active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.tagName === "SELECT") && active.id !== "search";
+
+  if (active && active.id === "search") {
+    return;
+  }
+
+  var now = Date.now();
+  var isScannerBurst = (now - _lastScanTime < 45); // Barcode scanner ketik < 45ms per digit
+  _lastScanTime = now;
+
+  if (isTypingInOther && !isScannerBurst && _scanBuffer.length === 0) {
+    return;
+  }
+
+  var s = document.getElementById("search");
+  if (!s) return;
+
+  if (e.key === "Enter") {
+    if (_scanBuffer.length > 0) {
+      e.preventDefault();
+      var code = _scanBuffer.trim();
+      _scanBuffer = "";
+      s.value = code;
+      handleSearchEnter(code);
+      s.focus();
+      return;
+    }
+    return;
+  }
+
+  if (e.key.length === 1) {
+    _scanBuffer += e.key;
+    clearTimeout(_scanTimer);
+    _scanTimer = setTimeout(function(){
+      _scanBuffer = "";
+    }, 150);
+
+    if (!isTypingInOther) {
+      e.preventDefault();
+      s.focus();
+      s.value = _scanBuffer;
+    }
+  }
+});
+
+// Otomatis kembalikan fokus ke form scan bila kasir mengklik area kosong / tabel
+document.addEventListener("click", function(e){
+  var tag = e.target.tagName;
+  if (tag !== "INPUT" && tag !== "SELECT" && tag !== "TEXTAREA" && tag !== "BUTTON" && tag !== "A" &&
+      !e.target.closest(".modal-overlay") && !e.target.closest(".swal2-container") && !e.target.closest(".member-dropdown")) {
+    var s = document.getElementById("search");
+    if (s && document.activeElement !== s) {
+      s.focus();
+    }
+  }
+});
 
 restoreKasirSession();
 loadProducts();
