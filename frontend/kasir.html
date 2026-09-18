@@ -31,6 +31,49 @@ body {
   color: #0f172a;
 }
 
+/* === AUTO-SCALE KHUSUS MONITOR KASIR FULL HD (1920x1080) === */
+@media screen and (min-width: 1500px) {
+  body {
+    zoom: 1.2;
+    width: calc(100vw / 1.2);
+    height: calc(100vh / 1.2);
+  }
+}
+
+.nav-zoom-ctrl {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 6px;
+  gap: 5px;
+  color: #e2e8f0;
+  font-size: 11px;
+  font-weight: 700;
+  user-select: none;
+}
+.btn-zoom-step {
+  background: rgba(255, 255, 255, 0.12);
+  border: none;
+  color: #ffffff;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: all 0.15s;
+}
+.btn-zoom-step:hover {
+  background: var(--gold);
+  color: #090d16;
+}
+
 .swal2-popup { font-family: inherit!important; border-radius: 18px!important; padding: 22px!important; }
 .swal2-title { font-size: 18px!important; font-weight: 800!important; color: #0f172a!important; }
 .swal2-html-container { font-size: 13.5px!important; color: #475569!important; line-height: 1.5!important; }
@@ -1287,6 +1330,11 @@ input, select, button { font-family: inherit; }
     </div>
   </div>
   <div class="nav-right">
+    <span class="nav-zoom-ctrl" title="Atur Ukuran Tampilan Kasir">
+      <button type="button" onclick="adjustKasirZoom(-0.05)" class="btn-zoom-step" title="Perkecil">−</button>
+      <span id="kasir-zoom-label">120%</span>
+      <button type="button" onclick="adjustKasirZoom(0.05)" class="btn-zoom-step" title="Perbesar">+</button>
+    </span>
     <span id="sync-badge" onclick="triggerManualSync()" title="Klik untuk sinkronkan manual" style="cursor:pointer;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.08);color:#cbd5e1">
       <span id="sync-dot" style="width:7px;height:7px;border-radius:50%;background:#94a3b8"></span>
       <span id="sync-text">Cek Koneksi...</span>
@@ -2845,7 +2893,36 @@ async function triggerManualSync(){
   }catch(e){}
 }
 
+// ZOOM / SCALE KASIR
+function applyKasirZoom(scale) {
+  scale = Math.max(0.85, Math.min(1.5, Math.round(scale * 100) / 100));
+  localStorage.setItem("kasir_ui_zoom", scale);
+  document.body.style.zoom = scale;
+  document.body.style.width = "calc(100vw / " + scale + ")";
+  document.body.style.height = "calc(100vh / " + scale + ")";
+  var lbl = document.getElementById("kasir-zoom-label");
+  if (lbl) lbl.textContent = Math.round(scale * 100) + "%";
+}
+
+function adjustKasirZoom(delta) {
+  var cur = parseFloat(localStorage.getItem("kasir_ui_zoom"));
+  if (!cur || isNaN(cur)) {
+    cur = (window.innerWidth >= 1500) ? 1.2 : 1.0;
+  }
+  applyKasirZoom(cur + delta);
+}
+
 // INIT
+(function initZoom() {
+  var saved = localStorage.getItem("kasir_ui_zoom");
+  if (saved) {
+    applyKasirZoom(parseFloat(saved));
+  } else {
+    var defaultScale = (window.innerWidth >= 1500) ? 1.2 : 1.0;
+    applyKasirZoom(defaultScale);
+  }
+})();
+
 restoreKasirSession();
 loadProducts();
 loadPPN();
