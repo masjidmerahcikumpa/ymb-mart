@@ -129,15 +129,31 @@ input, select, button { font-family: inherit; }
   background: rgba(18, 24, 38, 0.88);
   border: 1px solid rgba(212, 175, 55, 0.25);
   border-radius: 24px;
-  padding: 38px 34px;
+  padding: 40px 36px;
   width: 100%;
   max-width: 420px;
-  text-align: center;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.65), 0 0 32px rgba(139, 21, 56, 0.2);
   backdrop-filter: blur(20px);
   position: relative;
   z-index: 1;
   color: #ffffff;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #94a3b8;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+  margin-bottom: 20px;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.back-link:hover {
+  color: #ffffff;
+  transform: translateX(-3px);
 }
 
 .login-badge {
@@ -146,7 +162,7 @@ input, select, button { font-family: inherit; }
   gap: 6px;
   padding: 4px 10px;
   border-radius: 6px;
-  background: rgba(139, 21, 56, 0.3);
+  background: rgba(139, 21, 56, 0.25);
   border: 1px solid rgba(212, 175, 55, 0.3);
   font-size: 10.5px;
   font-weight: 800;
@@ -156,17 +172,24 @@ input, select, button { font-family: inherit; }
   margin-bottom: 14px;
 }
 
-.login-card h2 {
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: -0.4px;
-  margin-bottom: 4px;
+.login-header {
+  text-align: center;
+  margin-bottom: 20px;
 }
 
-.login-card p {
+.login-header h2 {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: #ffffff;
+  margin-bottom: 6px;
+}
+
+.login-header p {
   color: #94a3b8;
   font-size: 13px;
-  margin-bottom: 22px;
+  margin: 0;
+  line-height: 1.5;
 }
 
 .form-group {
@@ -179,21 +202,54 @@ input, select, button { font-family: inherit; }
   font-weight: 700;
   color: #cbd5e1;
   display: block;
-  margin-bottom: 6px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  margin-bottom: 7px;
+  letter-spacing: 0.3px;
 }
 
-.login-card input, .login-card select {
+.input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-icon {
+  position: absolute;
+  left: 14px;
+  color: #64748b;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+}
+
+.input-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.login-card .input-field,
+.login-card input, 
+.login-card select {
   width: 100%;
   background: rgba(11, 15, 25, 0.7);
   border: 1.5px solid rgba(255, 255, 255, 0.12);
   border-radius: 12px;
-  padding: 12px 14px;
+  padding: 12px 14px 12px 42px;
   font-size: 14px;
   color: #ffffff;
+  font-family: inherit;
   outline: none;
-  transition: all 0.2s ease;
+  box-sizing: border-box;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.login-card select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 36px;
+  cursor: pointer;
 }
 
 .login-card input:focus, .login-card select:focus {
@@ -206,49 +262,81 @@ input, select, button { font-family: inherit; }
   color: #ffffff;
 }
 
-.btn-primary {
-  width: 100%;
-  background: linear-gradient(135deg, var(--gold), var(--gold-dark));
-  color: #090d16;
+.btn-toggle-pwd {
+  position: absolute;
+  right: 12px;
+  background: none;
   border: none;
-  border-radius: 12px;
-  padding: 14px;
-  font-size: 15px;
-  font-weight: 800;
+  color: #64748b;
   cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 14px rgba(212, 175, 55, 0.35);
-  margin-top: 8px;
+  padding: 4px;
+  display: flex;
+  align-items: center;
 }
 
-.btn-primary:hover {
+.btn-toggle-pwd:hover {
+  color: #cbd5e1;
+}
+
+.btn-login-submit,
+.login-card .btn-primary {
+  width: 100%;
+  background: linear-gradient(135deg, var(--maroon), var(--maroon-dark));
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  color: #ffffff;
+  padding: 14px;
+  border-radius: 12px;
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  margin-top: 10px;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 16px rgba(139, 21, 56, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-login-submit:hover,
+.login-card .btn-primary:hover {
+  background: linear-gradient(135deg, var(--maroon-light), var(--maroon));
+  box-shadow: 0 6px 22px rgba(139, 21, 56, 0.45);
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(212, 175, 55, 0.45);
+}
+
+.btn-login-submit:active,
+.login-card .btn-primary:active {
+  transform: translateY(0);
 }
 
 .quick-cash-chips {
-  display: flex;
-  gap: 6px;
-  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .btn-chip {
-  flex: 1;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #cbd5e1;
-  border-radius: 8px;
-  padding: 6px 4px;
-  font-size: 11px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(212, 175, 55, 0.25);
+  color: #f1f5f9;
+  border-radius: 10px;
+  padding: 9px 4px;
+  font-size: 12.5px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
+  text-align: center;
 }
 
 .btn-chip:hover {
-  background: rgba(212, 175, 55, 0.2);
+  background: rgba(139, 21, 56, 0.45);
   border-color: var(--gold);
-  color: var(--gold);
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(139, 21, 56, 0.3);
 }
 
 /* === NAVBAR === */
@@ -848,26 +936,27 @@ input, select, button { font-family: inherit; }
   flex-shrink: 0;
   background: #ffffff;
   border-top: 2px solid #cbd5e1;
-  padding: 10px 18px;
+  padding: 12px 20px;
   display: grid;
-  grid-template-columns: 240px 190px 220px 1fr 220px;
-  gap: 14px;
+  grid-template-columns: 260px 185px 230px 1fr 220px;
+  gap: 20px;
   align-items: center;
   box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.05);
 }
 
 .cbar-member {
-  border-right: 1.5px solid #e2e8f0;
-  padding-right: 14px;
+  border-right: 1.5px solid #cbd5e1;
+  padding-right: 20px;
 }
 
 .cbar-member-input {
   width: 100%;
   border: 1.5px solid #cbd5e1;
   border-radius: 8px;
-  padding: 7px 10px;
-  font-size: 12px;
+  padding: 8px 10px;
+  font-size: 12.5px;
   outline: none;
+  box-sizing: border-box;
 }
 
 .cbar-member-input:focus {
@@ -897,14 +986,14 @@ input, select, button { font-family: inherit; }
 }
 
 .cbar-breakdown {
-  border-right: 1.5px solid #e2e8f0;
-  padding-right: 14px;
+  border-right: 1.5px solid #cbd5e1;
+  padding-right: 20px;
 }
 
 .cbar-row {
   display: flex;
   justify-content: space-between;
-  font-size: 12px;
+  font-size: 12.5px;
   color: #475569;
   margin-bottom: 3px;
 }
@@ -938,22 +1027,56 @@ input, select, button { font-family: inherit; }
 .cbar-payment-section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .cbar-pay-btns {
   display: flex;
-  gap: 6px;
+  gap: 8px;
 }
 
 .cbar-pay-btns .pay-btn {
-  padding: 7px 12px;
-  font-size: 11.5px;
+  height: 38px;
+  padding: 0 14px;
+  font-size: 13px;
   font-weight: 800;
   border-radius: 8px;
-  border: 1.5px solid transparent;
+  border: 1.5px solid #cbd5e1;
+  background: #f8fafc;
+  color: #475569;
   cursor: pointer;
   flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.cbar-pay-btns .pay-btn.pay-cash {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #166534;
+}
+
+.cbar-pay-btns .pay-btn.pay-cash.active {
+  background: #059669;
+  border-color: #047857;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(5, 150, 105, 0.3);
+}
+
+.cbar-pay-btns .pay-btn.pay-qris {
+  background: #f5f3ff;
+  border-color: #ddd6fe;
+  color: #6d28d9;
+}
+
+.cbar-pay-btns .pay-btn.pay-qris.active {
+  background: #7c3aed;
+  border-color: #6d28d9;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.3);
 }
 
 .cbar-cash-row {
@@ -966,36 +1089,50 @@ input, select, button { font-family: inherit; }
   display: flex;
 }
 
+.cbar-cash-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  align-items: stretch;
+}
+
 .cbar-cash-input {
-  width: 140px;
+  width: 100%;
+  box-sizing: border-box;
+  height: 44px;
   border: 2px solid #cbd5e1;
   border-radius: 8px;
-  padding: 7px 10px;
-  font-size: 15px;
+  padding: 8px 12px;
+  font-size: 16px;
   font-weight: 800;
+  color: #0f172a;
   outline: none;
+  transition: border-color 0.15s ease;
 }
 
 .cbar-cash-input:focus {
   border-color: var(--emerald);
+  box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.15);
 }
 
 .cbar-change-badge {
-  flex: 1;
+  box-sizing: border-box;
+  height: 44px;
   background: #ecfdf5;
-  border: 1.5px solid #a7f3d0;
+  border: 2px solid #a7f3d0;
   border-radius: 8px;
-  padding: 5px 10px;
+  padding: 0 12px;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
 .cbar-change-badge .change-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   color: #047857;
   text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .cbar-change-badge .change-val {
@@ -1007,7 +1144,7 @@ input, select, button { font-family: inherit; }
 
 .cbar-quick-chips {
   display: flex;
-  gap: 5px;
+  gap: 6px;
 }
 
 .chip-btn {
@@ -1282,49 +1419,87 @@ input, select, button { font-family: inherit; }
 <!-- LOGIN -->
 <div class="login-screen" id="login-screen">
   <div class="login-card">
-    <div style="text-align:center;margin-bottom:14px">
-      <img src="/logo.png" alt="Logo YMB" style="width:72px;height:72px;object-fit:contain;background:#ffffff;border-radius:50%;padding:4px;box-shadow:0 6px 20px rgba(0,0,0,0.4),0 0 16px rgba(212,175,55,0.2);border:2.5px solid rgba(212,175,55,0.4)">
+    <a href="/" class="back-link">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      <span>Kembali ke Beranda</span>
+    </a>
+    <div class="login-header">
+      <div style="text-align:center;margin-bottom:14px">
+        <img src="/logo.png" alt="Logo YMB" style="width:76px;height:76px;object-fit:contain;background:#ffffff;border-radius:50%;padding:4px;box-shadow:0 8px 24px rgba(0,0,0,0.4), 0 0 16px rgba(212,175,55,0.2);border:2.5px solid rgba(212,175,55,0.45)">
+      </div>
+      <div class="login-badge">
+        <span>🛒 Terminal Kasir POS</span>
+      </div>
+      <h2>Login Kasir</h2>
+      <p>Masukkan identitas kasir dan PIN 6 angka untuk memulai transaksi.</p>
     </div>
-    <div class="login-badge">
-      <span>🛒 Terminal Kasir POS</span>
-    </div>
-    <h2>Login Kasir</h2>
-    <p>Masukkan identitas kasir dan PIN 6 angka</p>
     <div class="form-group">
       <label>ID Kasir / Username</label>
-      <input id="login-user" placeholder="Contoh: kasir1, akbar" autocomplete="username" autofocus onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('login-pass').focus()}">
+      <div class="input-wrap">
+        <span class="input-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </span>
+        <input id="login-user" class="input-field" placeholder="Contoh: kasir1, akbar" autocomplete="username" autofocus onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('login-pass').focus()}">
+      </div>
     </div>
     <div class="form-group">
       <label>PIN Kasir (6 Digit Angka)</label>
-      <input id="login-pass" type="password" maxlength="6" inputmode="numeric" placeholder="••••••" pattern="\d{6}" autocomplete="current-password" onkeydown="if(event.key==='Enter'){event.preventDefault();doLogin()}">
+      <div class="input-wrap">
+        <span class="input-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </span>
+        <input id="login-pass" class="input-field" type="password" maxlength="6" inputmode="numeric" placeholder="••••••" pattern="\d{6}" autocomplete="current-password" onkeydown="if(event.key==='Enter'){event.preventDefault();doLogin()}">
+        <button type="button" class="btn-toggle-pwd" onclick="toggleKasirPin('login-pass','eye-login')" title="Lihat PIN">
+          <svg id="eye-login" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
     </div>
-    <button class="btn-primary" onclick="doLogin()">Masuk Terminal Kasir</button>
-    <p id="login-error" style="color:#f87171;font-size:12.5px;margin-top:12px;display:none"></p>
-    <a href="/" style="color:#94a3b8;font-size:12.5px;display:inline-block;margin-top:16px;text-decoration:none">← Kembali ke Beranda</a>
+    <button class="btn-login-submit" onclick="doLogin()">
+      <span>Masuk Terminal Kasir</span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </button>
+    <p id="login-error" style="color:#f87171;font-size:12.5px;margin-top:12px;display:none;background:rgba(220,38,38,0.15);border:1px solid rgba(220,38,38,0.3);padding:8px 12px;border-radius:8px"></p>
   </div>
 </div>
 
 <!-- FORCE CHANGE PIN -->
 <div class="login-screen" id="force-pin-screen" style="display:none">
-  <div class="login-card" style="max-width:380px">
-    <div class="login-badge">
-      <span>🔐 Keamanan Akun</span>
+  <div class="login-card" style="max-width:390px">
+    <div class="login-header">
+      <div class="login-badge">
+        <span>🔐 Keamanan Akun</span>
+      </div>
+      <h2>Wajib Buat PIN Baru</h2>
+      <p style="font-size:12.5px;color:#94a3b8;margin-bottom:14px">Halo <b id="force-user-name" style="color:#ffffff"></b>! Buat <b>PIN 6 angka baru</b> untuk akun kasir Anda.</p>
     </div>
-    <h2>Wajib Buat PIN Baru</h2>
-    <p style="font-size:12.5px;color:#94a3b8;margin-bottom:14px">Halo <b id="force-user-name" style="color:#ffffff"></b>! Buat <b>PIN 6 angka baru</b> untuk akun kasir Anda.</p>
     <div class="form-group">
       <label>PIN Lama (Default: 123456)</label>
-      <input id="force-old-pin" type="password" maxlength="6" inputmode="numeric" placeholder="123456">
+      <div class="input-wrap">
+        <span class="input-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </span>
+        <input id="force-old-pin" class="input-field" type="password" maxlength="6" inputmode="numeric" placeholder="123456">
+      </div>
     </div>
     <div class="form-group">
       <label>PIN Baru (Tepat 6 Angka)</label>
-      <input id="force-new-pin" type="password" maxlength="6" inputmode="numeric" placeholder="Contoh: 829103" pattern="\d{6}" onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('force-confirm-pin').focus()}">
+      <div class="input-wrap">
+        <span class="input-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </span>
+        <input id="force-new-pin" class="input-field" type="password" maxlength="6" inputmode="numeric" placeholder="Contoh: 829103" pattern="\d{6}" onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('force-confirm-pin').focus()}">
+      </div>
     </div>
     <div class="form-group">
       <label>Konfirmasi PIN Baru (6 Angka)</label>
-      <input id="force-confirm-pin" type="password" maxlength="6" inputmode="numeric" placeholder="Ketik ulang PIN baru" pattern="\d{6}" onkeydown="if(event.key==='Enter'){event.preventDefault();submitForcePinChange()}">
+      <div class="input-wrap">
+        <span class="input-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </span>
+        <input id="force-confirm-pin" class="input-field" type="password" maxlength="6" inputmode="numeric" placeholder="Ketik ulang PIN baru" pattern="\d{6}" onkeydown="if(event.key==='Enter'){event.preventDefault();submitForcePinChange()}">
+      </div>
     </div>
-    <button class="btn-primary" onclick="submitForcePinChange()">Simpan PIN & Buka Shift</button>
+    <button class="btn-login-submit" onclick="submitForcePinChange()">Simpan PIN & Buka Shift</button>
     <p id="force-pin-error" style="color:#f87171;font-size:12px;margin-top:10px;display:none"></p>
     <a href="javascript:void(0)" onclick="cancelForcePinChange()" style="color:#94a3b8;font-size:12px;display:inline-block;margin-top:14px;text-decoration:none">✕ Batal / Keluar</a>
   </div>
@@ -1333,21 +1508,36 @@ input, select, button { font-family: inherit; }
 <!-- SHIFT -->
 <div class="login-screen" id="shift-screen" style="display:none">
   <div class="login-card">
-    <div class="login-badge">
-      <span>📋 Presensi Kerja</span>
+    <div class="login-header">
+      <div style="text-align:center;margin-bottom:14px">
+        <img src="/logo.png" alt="Logo YMB" style="width:76px;height:76px;object-fit:contain;background:#ffffff;border-radius:50%;padding:4px;box-shadow:0 8px 24px rgba(0,0,0,0.4), 0 0 16px rgba(212,175,55,0.2);border:2.5px solid rgba(212,175,55,0.45)">
+      </div>
+      <div class="login-badge">
+        <span>📋 Presensi Kerja</span>
+      </div>
+      <h2>Buka Shift Kasir</h2>
+      <p>Selamat bertugas, <b id="shift-user-info" style="color:#ffffff"></b></p>
     </div>
-    <h2>Buka Shift Kasir</h2>
-    <p>Selamat bertugas, <b id="shift-user-info" style="color:#ffffff"></b></p>
     <div class="form-group">
       <label>Pilih Shift Kerja</label>
-      <select id="shift-name">
-        <option value="Shift Pagi (08.00 - 15.00)">Shift Pagi (08.00 - 15.00)</option>
-        <option value="Shift Siang (13.00 - 20.00)">Shift Siang (13.00 - 20.00)</option>
-      </select>
+      <div class="input-wrap">
+        <span class="input-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </span>
+        <select id="shift-name" class="input-field">
+          <option value="Shift Pagi (08.00 - 15.00)">Shift Pagi (08.00 - 15.00)</option>
+          <option value="Shift Siang (13.00 - 20.00)">Shift Siang (13.00 - 20.00)</option>
+        </select>
+      </div>
     </div>
     <div class="form-group">
       <label>Modal Kas Awal / Opening Cash (Rp)</label>
-      <input id="opening-cash" type="number" value="500000">
+      <div class="input-wrap">
+        <span class="input-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        </span>
+        <input id="opening-cash" class="input-field" type="number" value="500000">
+      </div>
       <div class="quick-cash-chips">
         <button type="button" class="btn-chip" onclick="document.getElementById('opening-cash').value=200000">200rb</button>
         <button type="button" class="btn-chip" onclick="document.getElementById('opening-cash').value=300000">300rb</button>
@@ -1355,7 +1545,10 @@ input, select, button { font-family: inherit; }
         <button type="button" class="btn-chip" onclick="document.getElementById('opening-cash').value=1000000">1 Jt</button>
       </div>
     </div>
-    <button class="btn-primary" onclick="openShift()">Mulai Buka Shift</button>
+    <button class="btn-login-submit" onclick="openShift()">
+      <span>Mulai Buka Shift</span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </button>
   </div>
 </div>
 
@@ -1403,12 +1596,6 @@ input, select, button { font-family: inherit; }
       <input class="scanner-input" id="search" placeholder="Scan Barcode / Ketik PLU / Cari Nama Produk... (Enter untuk tambah)" autocomplete="off" autofocus oninput="searchProducts()" onkeydown="if(event.key==='Enter'){event.preventDefault();handleSearchEnter(this.value)}">
     </div>
     <div class="tell-quick-actions">
-      <button type="button" class="btn-quick-tool" onclick="openCatalogModal()">
-        <span>📦</span> Katalog (F2)
-      </button>
-      <button type="button" class="btn-quick-tool btn-etrans-glow" onclick="openETransModal()">
-        <span>⚡</span> E-Trans (F3)
-      </button>
       <button type="button" class="btn-quick-tool" onclick="focusMemberSearch()">
         <span>👤</span> Member (F4)
       </button>
@@ -1493,7 +1680,7 @@ input, select, button { font-family: inherit; }
         <button type="button" class="pay-btn pay-qris" onclick="setPayment('QRIS');showQrisModal()" id="btn-qris">⚡ QRIS (F10)</button>
       </div>
       <div class="cbar-cash-row show" id="cash-row">
-        <div style="display:flex;gap:6px;align-items:center">
+        <div class="cbar-cash-grid">
           <input class="cbar-cash-input" id="amount-paid" type="number" placeholder="Nominal uang..." oninput="updateTotal()" onkeydown="if(event.key==='Enter'){event.preventDefault();if(!document.getElementById('btn-pay').disabled)checkout()}">
           <div class="cbar-change-badge">
             <span class="change-label">Kembali:</span>
@@ -1505,6 +1692,10 @@ input, select, button { font-family: inherit; }
           <button type="button" class="chip-btn" onclick="setQuickCash(50000)">50rb</button>
           <button type="button" class="chip-btn" onclick="setQuickCash(100000)">100rb</button>
         </div>
+      </div>
+      <div id="qris-info-row" style="display:none;background:#f5f3ff;border:1.5px solid #ddd6fe;border-radius:8px;padding:8px 12px;color:#6d28d9;font-size:12px;font-weight:700;align-items:center;justify-content:space-between">
+        <span>⚡ QRIS Ditampilkan di Layar Customer</span>
+        <button type="button" onclick="showQrisModal()" style="background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:800;cursor:pointer">Buka QR</button>
       </div>
     </div>
 
@@ -1555,7 +1746,7 @@ input, select, button { font-family: inherit; }
       <div style="display:flex;align-items:center;gap:10px">
         <span style="font-size:22px">⚡</span>
         <div>
-          <h2 style="font-size:17px;font-weight:800;color:#0f172a;margin:0">Layanan Elektronik E-Trans</h2>
+          <h2 style="font-size:17px;font-weight:800;color:#0f172a;margin:0">Layanan E-Trans</h2>
           <div style="font-size:11.5px;color:#64748b">Pulsa, Paket Data, Token Listrik PLN, dan Dompet Digital</div>
         </div>
       </div>
@@ -1779,6 +1970,19 @@ function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").repl
 async function fetchCsrfToken(authToken){
   console.log("[CSRF] fetching with auth:",authToken?"yes":"no");
   try{var r=await fetch(API+"/api/csrf-token",{headers:{"Authorization":authToken||""}});var d=await r.json();csrfToken=d.csrf_token||d.token||"";console.log("[CSRF] result:",csrfToken?"OK ("+csrfToken.substring(0,8)+"...)":"EMPTY")}catch(e){console.error("[CSRF] error:",e);csrfToken=""}
+}
+
+function toggleKasirPin(inputId, iconId){
+  var inp = document.getElementById(inputId);
+  var icon = document.getElementById(iconId);
+  if(!inp) return;
+  if(inp.type === "password"){
+    inp.type = "text";
+    if(icon) icon.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>';
+  } else {
+    inp.type = "password";
+    if(icon) icon.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
+  }
 }
 
 // LOGIN
@@ -2657,6 +2861,8 @@ function setPayment(m){
   document.getElementById("btn-cash").className="pay-btn pay-cash"+(m==="CASH"?" active":"");
   document.getElementById("btn-qris").className="pay-btn pay-qris"+(m==="QRIS"?" active":"");
   document.getElementById("cash-row").className="cbar-cash-row"+(m==="CASH"?" show":"");
+  var qRow = document.getElementById("qris-info-row");
+  if(qRow) qRow.style.display = (m === "QRIS" ? "flex" : "none");
   updateTotal();
 }
 

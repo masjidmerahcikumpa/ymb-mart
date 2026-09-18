@@ -642,14 +642,18 @@ updatePortalClock();
 
 // QR Presensi Handling
 let currentQRType = 'masuk';
-let publicBaseUrl = window.location.origin;
+let isLocalHost = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname === '0.0.0.0');
+let publicBaseUrl = isLocalHost ? 'https://ymb-mart.vercel.app' : window.location.origin;
 
 // Fetch settings to check public_presensi_url
 fetch('/api/settings')
   .then(function(r) { return r.json(); })
   .then(function(data) {
     if (data && data.public_presensi_url && data.public_presensi_url.trim() !== '') {
-      publicBaseUrl = data.public_presensi_url.trim().replace(/\/+$/, '');
+      var val = data.public_presensi_url.trim().replace(/\/+$/, '');
+      if (val !== '' && !val.includes('localhost') && !val.includes('127.0.0.1')) {
+        publicBaseUrl = val;
+      }
     }
   })
   .catch(function() {});

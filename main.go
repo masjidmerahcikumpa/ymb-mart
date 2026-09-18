@@ -585,14 +585,16 @@ func initDB() {
 		"ad_desc":      "Dapatkan diskon menarik untuk semua produk pilihan",
 		"ad_marquee":   "🎉 Promo Spesial! Diskon menarik untuk semua produk! 🎉",
 		"ad_cards":     "[]",
-		"qris_merchant": "POS Simulator",
-		"qris_amount":   "0",
-		"ppn_rate":      "0",
+		"qris_merchant":       "POS Simulator",
+		"qris_amount":         "0",
+		"ppn_rate":            "0",
+		"public_presensi_url": "https://ymb-mart.vercel.app",
 	}
 	for k, v := range settings {
 		db.Exec("INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)", k, v)
 	}
 	db.Exec("UPDATE settings SET value='0' WHERE key='ppn_rate'")
+	db.Exec("UPDATE settings SET value='https://ymb-mart.vercel.app' WHERE key='public_presensi_url' AND (value='' OR value LIKE '%localhost%' OR value LIKE '%127.0.0.1%')")
 }
 
 func now() string {
