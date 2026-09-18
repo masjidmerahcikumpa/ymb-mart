@@ -205,6 +205,7 @@ func setupRouter() *http.ServeMux {
 			adminOnly(handleUpdateSettings)(w, r)
 		}
 	})
+	mux.HandleFunc("/api/presensi", handlePresensi)
 	mux.HandleFunc("/api/sync/status", handleGetSyncStatus)
 	mux.HandleFunc("/api/sync/trigger", handleTriggerSync)
 	mux.HandleFunc("/api/ws-broadcast", handleWSBroadcast)
@@ -243,6 +244,7 @@ func setupRouter() *http.ServeMux {
 	mux.HandleFunc("/kasir", frontendHandler("kasir.html"))
 	mux.HandleFunc("/admin", frontendHandler("admin.html"))
 	mux.HandleFunc("/customer", frontendHandler("customer.html"))
+	mux.HandleFunc("/presensi", frontendHandler("presensi.html"))
 	mux.HandleFunc("/sw.js", func(w http.ResponseWriter, r *http.Request) {
 		data, _ := frontendFS.ReadFile("frontend/sw.js")
 		if len(data) == 0 {

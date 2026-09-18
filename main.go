@@ -346,6 +346,7 @@ func initDB() {
 				db.Exec("UPDATE inventory_movements SET sync_status = 'synced' WHERE sync_status != 'synced'")
 				db.Exec("UPDATE users SET sync_status = 'synced' WHERE sync_status != 'synced'")
 				db.Exec("UPDATE products SET sync_status = 'synced' WHERE sync_status != 'synced'")
+				db.Exec("UPDATE attendance SET sync_status = 'synced' WHERE sync_status != 'synced'")
 			}()
 		}
 	}
@@ -444,8 +445,23 @@ func initDB() {
 	);
 	CREATE TABLE IF NOT EXISTS settings (
 		key TEXT PRIMARY KEY, value TEXT NOT NULL
+	);
+	CREATE TABLE IF NOT EXISTS attendance (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id INTEGER,
+		username TEXT NOT NULL,
+		cashier_name TEXT NOT NULL,
+		type TEXT NOT NULL,
+		date TEXT NOT NULL,
+		time TEXT NOT NULL,
+		notes TEXT DEFAULT '',
+		device_info TEXT DEFAULT '',
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		sync_status TEXT DEFAULT 'pending'
 	);`
 	db.Exec(tables)
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance(date)")
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_attendance_user ON attendance(username)")
 
 	// Create inventory_movements table
 	db.Exec(`CREATE TABLE IF NOT EXISTS inventory_movements (
@@ -494,6 +510,7 @@ func initDB() {
 	db.Exec("ALTER TABLE shifts ADD COLUMN sync_status TEXT DEFAULT 'pending'")
 	db.Exec("ALTER TABLE cash_log ADD COLUMN sync_status TEXT DEFAULT 'pending'")
 	db.Exec("ALTER TABLE inventory_movements ADD COLUMN sync_status TEXT DEFAULT 'pending'")
+	db.Exec("ALTER TABLE attendance ADD COLUMN sync_status TEXT DEFAULT 'pending'")
 
 	db.Exec(`CREATE TABLE IF NOT EXISTS audit_log (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,

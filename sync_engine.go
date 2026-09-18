@@ -572,6 +572,53 @@ func pushLocalTransactionsToCloud() error {
 		}
 	}
 
+	// 5. Fetch Pending Attendance into memory
+	type pendingAtt struct {
+		id int
+		userID sql.NullInt64
+		username, cashierName, attType, attDate, attTime, notes, deviceInfo, createdAt string
+	}
+	var attendances []pendingAtt
+	attRows, err := db.Query(`SELECT id, user_id, username, cashier_name, type, date, time, notes, device_info, created_at FROM attendance WHERE sync_status = 'pending'`)
+	if err == nil {
+		for attRows.Next() {
+			var a pendingAtt
+			if err := attRows.Scan(&a.id, &a.userID, &a.username, &a.cashierName, &a.attType, &a.attDate, &a.attTime, &a.notes, &a.deviceInfo, &a.createdAt); err == nil {
+				attendances = append(attendances, a)
+			}
+		}
+		attRows.Close()
+	}
+
+	// Make sure cloudDB has attendance table
+	cloudDB.Exec(`CREATE TABLE IF NOT EXISTS attendance (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id INTEGER,
+		username TEXT NOT NULL,
+		cashier_name TEXT NOT NULL,
+		type TEXT NOT NULL,
+		date TEXT NOT NULL,
+		time TEXT NOT NULL,
+		notes TEXT DEFAULT '',
+		device_info TEXT DEFAULT '',
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		sync_status TEXT DEFAULT 'synced'
+	)`)
+
+	// Push Attendance
+	for _, a := range attendances {
+		var uVal interface{} = nil
+		if a.userID.Valid {
+			uVal = a.userID.Int64
+		}
+		_, cErr := cloudDB.Exec(`INSERT INTO attendance (user_id, username, cashier_name, type, date, time, notes, device_info, created_at, sync_status)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')`,
+			uVal, a.username, a.cashierName, a.attType, a.attDate, a.attTime, a.notes, a.deviceInfo, a.createdAt)
+		if cErr == nil {
+			db.Exec("UPDATE attendance SET sync_status = 'synced' WHERE id = ?", a.id)
+		}
+	}
+
 	// Clean up any stray pending flags in cloudDB
 	cloudDB.Exec("UPDATE transactions SET sync_status = 'synced' WHERE sync_status != 'synced'")
 	cloudDB.Exec("UPDATE shifts SET sync_status = 'synced' WHERE sync_status != 'synced'")
@@ -579,6 +626,7 @@ func pushLocalTransactionsToCloud() error {
 	cloudDB.Exec("UPDATE inventory_movements SET sync_status = 'synced' WHERE sync_status != 'synced'")
 	cloudDB.Exec("UPDATE users SET sync_status = 'synced' WHERE sync_status != 'synced'")
 	cloudDB.Exec("UPDATE products SET sync_status = 'synced' WHERE sync_status != 'synced'")
+	cloudDB.Exec("UPDATE attendance SET sync_status = 'synced' WHERE sync_status != 'synced'")
 
 	return nil
 }

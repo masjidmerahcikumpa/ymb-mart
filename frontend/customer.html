@@ -10,13 +10,16 @@
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
 :root {
-  --maroon: #8b1538;
-  --maroon-dark: #5c0d24;
-  --maroon-light: #ab1d47;
-  --gold: #d4af37;
-  --gold-light: #fef08a;
-  --bg-dark: #07090e;
-  --panel-right: #0b111e;
+  --primary-red: #d32f2f;
+  --primary-red-dark: #b71c1c;
+  --alfa-yellow: #facc15;
+  --alfa-yellow-dark: #eab308;
+  --bg-main: #f1f5f9;
+  --bg-card: #ffffff;
+  --text-dark: #0f172a;
+  --text-muted: #64748b;
+  --border-light: #e2e8f0;
+  --emerald-green: #16a34a;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -24,62 +27,50 @@ html, body { width: 100%; height: 100vh; overflow: hidden; }
 body {
   font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   display: flex;
-  background: var(--bg-dark);
-  color: #f8fafc;
+  background: var(--bg-main);
+  color: var(--text-dark);
 }
 
-@keyframes slideIn { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes slideIn { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: translateX(0); } }
 @keyframes pulseGlow { 0%, 100% { box-shadow: 0 0 16px rgba(212, 175, 55, 0.25); } 50% { box-shadow: 0 0 32px rgba(212, 175, 55, 0.5); } }
 @keyframes marquee { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-.slide-in { animation: slideIn 0.25s ease-out; }
+.slide-in { animation: slideIn 0.2s ease-out; }
 .pulse-glow { animation: pulseGlow 2.5s infinite; }
 .marquee { animation: marquee 24s linear infinite; }
 
-/* LEFT: IKLAN & PROMOSI (70%) */
+/* LEFT: IKLAN & PROMOSI (58%) */
 .left {
-  width: 70%;
+  width: 58%;
   display: flex;
   flex-direction: column;
-  background-color: #08060c;
-  background-image: 
-    radial-gradient(circle at 25% 30%, rgba(139, 21, 56, 0.35) 0%, transparent 55%),
-    radial-gradient(circle at 80% 80%, rgba(212, 175, 55, 0.12) 0%, transparent 45%),
-    radial-gradient(circle at 50% 50%, rgba(15, 23, 42, 0.6) 0%, transparent 100%);
+  background: #f8fafc;
+  border-right: 1.5px solid var(--border-light);
   position: relative;
   overflow: hidden;
-}
-
-.left::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image: 
-    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
-  background-size: 40px 40px;
-  pointer-events: none;
 }
 
 .ad-carousel-wrap {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 24px 32px 0;
+  padding: 20px 24px 0;
   position: relative;
   z-index: 1;
 }
 
 .ad-carousel {
   flex: 1;
-  border: 1.5px solid rgba(212, 175, 55, 0.3);
-  border-radius: 20px;
+  border: 1.5px solid var(--border-light);
+  border-radius: 18px;
   overflow: hidden;
-  background: rgba(14, 20, 32, 0.7);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), inset 0 0 40px rgba(0, 0, 0, 0.3);
+  background: #ffffff;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
   position: relative;
-  backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .ad-carousel img {
@@ -98,6 +89,7 @@ body {
   justify-content: center;
   text-align: center;
   padding: 40px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
 }
 
 .ad-badge {
@@ -106,30 +98,30 @@ body {
   gap: 8px;
   padding: 6px 16px;
   border-radius: 9999px;
-  background: rgba(139, 21, 56, 0.35);
-  border: 1px solid rgba(212, 175, 55, 0.35);
+  background: #fef2f2;
+  border: 1px solid #fecaca;
   font-size: 11.5px;
   font-weight: 800;
-  letter-spacing: 1px;
+  letter-spacing: 0.8px;
   text-transform: uppercase;
-  color: var(--gold);
-  margin-bottom: 20px;
+  color: var(--primary-red);
+  margin-bottom: 18px;
 }
 
 .ad-fallback h2 {
-  font-size: 32px;
+  font-size: 30px;
   font-weight: 900;
-  color: #ffffff;
+  color: #0f172a;
   letter-spacing: -0.5px;
-  margin-bottom: 12px;
-  max-width: 600px;
+  margin-bottom: 10px;
+  max-width: 580px;
   line-height: 1.25;
 }
 
 .ad-fallback p {
   font-size: 15px;
-  color: #94a3b8;
-  max-width: 520px;
+  color: #64748b;
+  max-width: 500px;
   line-height: 1.6;
 }
 
@@ -144,7 +136,7 @@ body {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
+  background: #cbd5e1;
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -152,23 +144,23 @@ body {
 .ad-dot.active {
   width: 24px;
   border-radius: 4px;
-  background: var(--gold);
+  background: var(--primary-red);
 }
 
 /* MARQUEE RUNNING TICKER */
 .ad-marquee-wrap {
   display: flex;
   align-items: center;
-  gap: 14px;
-  border: 1px solid rgba(212, 175, 55, 0.25);
-  border-radius: 14px;
-  padding: 10px 18px;
-  margin: 14px 32px 18px;
-  background: rgba(11, 15, 25, 0.85);
+  gap: 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 9px 16px;
+  margin: 12px 24px 14px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
   overflow: hidden;
   position: relative;
   z-index: 1;
-  backdrop-filter: blur(12px);
 }
 
 .marquee-badge {
@@ -177,7 +169,7 @@ body {
   gap: 6px;
   padding: 4px 10px;
   border-radius: 6px;
-  background: var(--maroon);
+  background: var(--primary-red);
   color: #ffffff;
   font-size: 11px;
   font-weight: 800;
@@ -201,9 +193,9 @@ body {
 }
 
 .ad-marquee-text {
-  color: var(--gold-light);
-  font-size: 14px;
-  font-weight: 600;
+  color: #1e293b;
+  font-size: 13.5px;
+  font-weight: 700;
   white-space: nowrap;
   letter-spacing: 0.2px;
 }
@@ -214,192 +206,328 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 32px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 10px 24px;
+  border-top: 1px solid var(--border-light);
   font-size: 11.5px;
   color: #64748b;
+  background: #f8fafc;
 }
 
-/* RIGHT: LIVE RECEIPT / TRANSAKSI (30%) */
+/* RIGHT: LIVE RECEIPT / TRANSAKSI ALA ALFAMART (42%) */
 .right {
-  width: 30%;
+  width: 42%;
   display: flex;
   flex-direction: column;
-  background: var(--panel-right);
-  border-left: 1.5px solid rgba(212, 175, 55, 0.22);
-  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.4);
+  background: #ffffff;
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.04);
+  position: relative;
 }
 
+/* TOP HEADER */
 .r-header {
-  background: rgba(15, 23, 42, 0.85);
-  padding: 16px 20px;
+  background: #ffffff;
+  padding: 14px 20px;
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  border-bottom: 1px solid rgba(212, 175, 55, 0.2);
-}
-
-.r-header-top {
-  display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: center;
+  border-bottom: 2px solid #e2e8f0;
+  gap: 12px;
 }
 
-.r-store-title {
-  font-size: 16px;
-  font-weight: 900;
-  color: #ffffff;
+.r-brand-area {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 12px;
+  min-width: 0;
 }
 
-.r-store-title span {
-  color: var(--gold);
-}
-
-.r-clock {
-  font-size: 15px;
-  font-weight: 800;
-  color: var(--gold);
-  font-variant-numeric: tabular-nums;
-}
-
-.r-header-sub {
-  display: flex;
-  justify-content: space-between;
-  font-size: 11.5px;
-  color: #94a3b8;
-}
-
-.r-status {
-  padding: 10px 20px;
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: rgba(0, 0, 0, 0.25);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.r-status .dot {
-  width: 8px;
-  height: 8px;
+.r-brand-logo {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  background: #ffffff;
   border-radius: 50%;
-  background: #22c55e;
-}
-
-.r-items {
-  flex: 1;
-  overflow-y: auto;
-  padding: 14px 18px;
-}
-
-.r-items::-webkit-scrollbar { width: 4px; }
-.r-items::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
-
-.item-row {
-  background: rgba(18, 26, 42, 0.7);
-  border-radius: 12px;
-  padding: 12px 14px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  margin-bottom: 8px;
-  transition: all 0.15s ease;
-}
-
-.item-num {
-  width: 24px;
-  height: 24px;
-  background: linear-gradient(135deg, var(--maroon), var(--maroon-dark));
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--gold);
-  font-weight: 800;
-  font-size: 11px;
+  padding: 2px;
+  border: 2px solid #d4af37;
   flex-shrink: 0;
 }
 
-.item-info {
+.r-store-name {
+  font-size: 20px;
+  font-weight: 900;
+  color: #0f172a;
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+}
+
+.r-store-name span {
+  color: var(--primary-red);
+}
+
+.r-store-sub {
+  font-size: 11.5px;
+  color: #64748b;
+  font-weight: 600;
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
+/* ALFAMART STYLE CASHIER BOX */
+.r-cashier-box {
+  background: linear-gradient(135deg, var(--primary-red), var(--primary-red-dark));
+  color: #ffffff;
+  border-radius: 10px;
+  padding: 8px 16px;
+  text-align: right;
+  box-shadow: 0 4px 12px rgba(211, 47, 47, 0.25);
+  flex-shrink: 0;
+  min-width: 170px;
+}
+
+.r-cashier-title {
+  font-size: 13.5px;
+  font-weight: 900;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.r-cashier-sub {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #fef08a;
+  margin-top: 2px;
+}
+
+/* TABLE HEADER (NO, DESCRIPTION, QTY, PRICE) */
+.r-table-header {
+  background: #f8fafc;
+  display: grid;
+  grid-template-columns: 36px 1fr 65px 120px;
+  padding: 10px 16px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  border-bottom: 2px solid #cbd5e1;
+}
+
+.r-th-price {
+  text-align: right;
+}
+
+.r-th-qty {
+  text-align: center;
+}
+
+/* ITEMS LIST (ENLARGED) */
+.r-items {
   flex: 1;
-  margin-left: 12px;
+  overflow-y: auto;
+  padding: 8px 12px;
+  background: #ffffff;
+}
+
+.r-items::-webkit-scrollbar { width: 5px; }
+.r-items::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+.item-row {
+  display: grid;
+  grid-template-columns: 36px 1fr 65px 120px;
+  align-items: center;
+  padding: 12px 6px;
+  border-bottom: 1px solid #f1f5f9;
+  transition: background 0.15s ease;
+}
+
+.item-row:hover {
+  background: #f8fafc;
+}
+
+.item-num {
+  font-size: 13px;
+  font-weight: 800;
+  color: #94a3b8;
+  text-align: center;
+}
+
+.item-name-col {
   padding-right: 8px;
 }
 
 .item-name {
-  color: #ffffff;
+  color: #0f172a;
   font-weight: 700;
-  font-size: 13.5px;
-  margin-bottom: 2px;
+  font-size: 16px;
   line-height: 1.3;
 }
 
+.item-unit-price {
+  color: #64748b;
+  font-size: 12px;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
 .item-qty {
-  color: #94a3b8;
-  font-size: 11.5px;
+  color: #1e293b;
+  font-size: 16px;
+  font-weight: 800;
+  text-align: center;
   font-variant-numeric: tabular-nums;
 }
 
 .item-price {
-  color: var(--gold);
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  font-size: 14px;
-}
-
-.r-total {
-  background: rgba(11, 17, 30, 0.95);
-  padding: 18px 22px;
-  border-top: 1.5px solid rgba(212, 175, 55, 0.3);
-  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.3);
-}
-
-.r-total-label {
-  color: #94a3b8;
-  font-size: 11.5px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  margin-bottom: 4px;
-}
-
-.r-total-amount {
-  font-size: 36px;
+  color: #0f172a;
   font-weight: 900;
-  color: var(--gold);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.5px;
+  font-size: 17px;
+  text-align: right;
 }
 
-.r-total-sub {
+/* BOTTOM SECTION (TOTAL, MEMBER, PAYMENT, INFO) */
+.r-bottom-panel {
+  background: #ffffff;
+  border-top: 2px solid var(--border-light);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.04);
+}
+
+/* BIG YELLOW TOTAL BOX */
+.r-total-box {
+  background: var(--alfa-yellow);
+  padding: 14px 22px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.r-total-title {
+  font-size: 24px;
+  font-weight: 900;
+  color: #0f172a;
+  text-transform: uppercase;
+  letter-spacing: -0.3px;
+}
+
+.r-total-val {
+  font-size: 46px;
+  font-weight: 900;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.8px;
+}
+
+/* MEMBER ROW */
+.r-member-bar {
+  padding: 8px 22px;
+  background: #fefce8;
+  border-bottom: 1px solid #fef08a;
+  font-size: 13px;
+  font-weight: 700;
+  color: #854d0e;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* PAYMENT DETAILS (TUNAI & KEMBALIAN ENLARGED) */
+.r-payment-details {
+  display: none;
+  padding: 12px 22px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.r-pay-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.r-pay-row:last-child {
+  margin-bottom: 0;
+}
+
+.r-pay-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.r-pay-val {
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+
+.r-change-label {
+  font-size: 17px;
+  font-weight: 900;
+  color: #15803d;
+  text-transform: uppercase;
+}
+
+.r-change-val {
+  font-size: 34px;
+  font-weight: 900;
+  color: #16a34a;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ALFAMART CUSTOMER INFO FOOTER */
+.r-info-box {
+  padding: 12px 22px;
+  background: #f1f5f9;
+  color: #475569;
   font-size: 12px;
-  color: #94a3b8;
-  margin-top: 4px;
+  line-height: 1.5;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
-/* RESPONSIVE */
-@media (max-width: 1024px) {
-  .left { width: 60%; }
-  .right { width: 40%; }
-  .r-total-amount { font-size: 28px; }
-  .ad-carousel-wrap { padding: 16px 16px 0; }
-  .ad-marquee-wrap { margin: 12px 16px 14px; }
+.r-info-text b {
+  color: #0f172a;
 }
 
-@media (max-width: 768px) {
+.r-clock-badge {
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+  background: #ffffff;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+}
+
+/* RESPONSIVE SCALING */
+@media (max-width: 1100px) {
+  .left { width: 52%; }
+  .right { width: 48%; }
+  .r-total-val { font-size: 38px; }
+  .item-name { font-size: 15px; }
+  .item-price { font-size: 15px; }
+}
+
+@media (max-width: 800px) {
   body { flex-direction: column; height: auto; overflow-y: auto; }
-  .left { width: 100%; min-height: 480px; }
-  .right { width: 100%; min-height: 480px; border-left: none; border-top: 2px solid rgba(212, 175, 55, 0.3); }
+  .left { width: 100%; min-height: 440px; }
+  .right { width: 100%; min-height: 520px; border-left: none; }
 }
 </style>
 </head>
 <body>
 
-<!-- LEFT: Iklan & Promosi (70%) -->
+<!-- LEFT: Iklan & Promosi -->
 <div class="left">
   <div class="ad-carousel-wrap">
     <div class="ad-carousel" id="ad-carousel">
@@ -427,80 +555,103 @@ body {
 
   <div class="footer">
     <span>Masjid Jami' Baiturrahman &bull; YMB Mart</span>
-    <span>Customer Display v2.2</span>
+    <span>Customer Display v2.3</span>
   </div>
 </div>
 
-<!-- RIGHT: Transaksi Belanja (30%) -->
+<!-- RIGHT: Transaksi Belanja Ala Alfamart -->
 <div class="right">
+  <!-- TOP HEADER -->
   <div class="r-header">
-    <div class="r-header-top" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
-      <div style="display:flex;align-items:center;gap:12px;min-width:0">
-        <img src="/logo.png" alt="Logo YMB" id="customer-store-logo" style="width:62px;height:62px;object-fit:contain;background:#ffffff;border-radius:50%;padding:4px;box-shadow:0 6px 18px rgba(0,0,0,0.4),0 0 12px rgba(212,175,55,0.25);border:2px solid rgba(212,175,55,0.45);flex-shrink:0">
-        <div style="min-width:0">
-          <h2 class="r-store-title" id="store-name-header" style="font-size:20px;font-weight:900;letter-spacing:-0.4px;margin:0">YMB<span>Mart</span></h2>
-          <div style="font-size:11.5px;color:#94a3b8;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Masjid Jami' Baiturrahman</div>
-        </div>
+    <div class="r-brand-area">
+      <img src="/logo.png" alt="Logo YMB" id="customer-store-logo" class="r-brand-logo">
+      <div>
+        <h1 class="r-store-name" id="store-name-header">YMB <span>Mart</span></h1>
+        <div class="r-store-sub">Masjid Jami' Baiturrahman</div>
       </div>
-      <div class="r-clock" id="clock" style="font-size:16px;font-weight:800;color:var(--gold);flex-shrink:0">--:--:--</div>
     </div>
-    <div class="r-header-sub" style="margin-top:6px">
-      <span id="kasir-display" style="color:#d4af37;font-weight:700">Kasir: --</span>
-      <span id="member-display" style="color:#94a3b8"></span>
+    <div class="r-cashier-box">
+      <div class="r-cashier-title" id="kasir-display">KASIR STANDBY</div>
+      <div class="r-cashier-sub">Senang melayani anda</div>
     </div>
   </div>
 
-  <div class="r-status" id="r-status">
-    <div class="dot" id="status-dot" style="background:#22c55e"></div>
-    <span id="status-text" style="color:#4ade80;font-weight:700">Siap melayani</span>
+  <!-- TABLE HEADER -->
+  <div class="r-table-header">
+    <div>No</div>
+    <div>Description</div>
+    <div class="r-th-qty">QTY</div>
+    <div class="r-th-price">Price</div>
   </div>
 
+  <!-- ITEMS LIST (SCROLLABLE & ENLARGED) -->
   <div class="r-items" id="items-list">
-    <div style="text-align:center;padding:80px 20px;color:#64748b">
-      <p style="font-size:36px;margin-bottom:8px;opacity:0.5">🛒</p>
-      <p style="font-size:13.5px;font-weight:600">Menunggu scan barang kasir...</p>
+    <div style="text-align:center;padding:70px 20px;color:#94a3b8">
+      <p style="font-size:42px;margin-bottom:10px;opacity:0.6">🛒</p>
+      <p style="font-size:15px;font-weight:700;color:#64748b">Menunggu scan barang kasir...</p>
+      <p style="font-size:12.5px;color:#94a3b8;margin-top:4px">Daftar belanjaan Anda akan tampil otomatis di sini</p>
     </div>
   </div>
 
-  <div class="r-total">
-    <div class="r-total-label">Total Tagihan Belanja</div>
-    <div class="r-total-amount" id="grand-total">Rp 0</div>
-    <div id="payment-details" style="display:none;margin-top:10px;padding-top:10px;border-top:1px dashed rgba(212,175,55,0.3)">
-      <div style="display:flex;justify-content:space-between;font-size:13px;color:#cbd5e1;margin-bottom:4px">
-        <span>Tunai Diterima:</span>
-        <span id="cash-paid-display" style="font-weight:800;color:#ffffff">Rp 0</span>
+  <!-- BOTTOM PANEL -->
+  <div class="r-bottom-panel">
+    <!-- BIG YELLOW TOTAL BOX -->
+    <div class="r-total-box">
+      <div class="r-total-title">Total</div>
+      <div class="r-total-val" id="grand-total">0</div>
+    </div>
+
+    <!-- MEMBER ROW -->
+    <div class="r-member-bar" id="member-bar">
+      <span>Member:</span>
+      <b id="member-display">-</b>
+    </div>
+
+    <!-- PAYMENT DETAILS (TUNAI & KEMBALIAN) -->
+    <div class="r-payment-details" id="payment-details">
+      <div class="r-pay-row">
+        <span class="r-pay-label">Tunai Diterima:</span>
+        <span class="r-pay-val" id="cash-paid-display">Rp 0</span>
       </div>
-      <div style="display:flex;justify-content:space-between;font-size:18px;color:#4ade80;font-weight:900">
-        <span>Kembalian:</span>
-        <span id="change-display">Rp 0</span>
+      <div class="r-pay-row" style="margin-top:4px">
+        <span class="r-change-label">Kembalian:</span>
+        <span class="r-change-val" id="change-display">Rp 0</span>
       </div>
     </div>
-    <div class="r-total-sub" id="payment-info"></div>
+
+    <!-- CUSTOMER INFORMATION FOOTER -->
+    <div class="r-info-box">
+      <div class="r-info-text">
+        <div><b>Informasi Customer:</b></div>
+        <div>Minta dan periksa kembali struk belanja Anda. Terima kasih telah berbelanja di YMB Mart.</div>
+      </div>
+      <div class="r-clock-badge" id="clock">--:--:--</div>
+    </div>
   </div>
 </div>
 
 <!-- CUSTOMER QRIS SCAN OVERLAY -->
-<div id="customer-qris-overlay" style="display:none;position:fixed;inset:0;background:rgba(9,13,22,0.92);backdrop-filter:blur(10px);z-index:9999;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center">
-  <div style="background:#ffffff;border-radius:24px;padding:34px 38px;max-width:480px;width:92%;box-shadow:0 25px 60px rgba(0,0,0,0.6);border:2px solid #d4af37;animation:slideIn 0.3s ease-out">
+<div id="customer-qris-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.85);backdrop-filter:blur(8px);z-index:9999;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center">
+  <div style="background:#ffffff;border-radius:24px;padding:32px 36px;max-width:460px;width:92%;box-shadow:0 25px 60px rgba(0,0,0,0.3);border:2px solid #d4af37;animation:slideIn 0.25s ease-out">
     <div style="text-align:center;margin-bottom:12px">
-      <img src="/logo.png" alt="Logo YMB" style="width:68px;height:68px;object-fit:contain;background:#ffffff;border-radius:50%;padding:4px;box-shadow:0 4px 16px rgba(0,0,0,0.12);border:2px solid #d4af37">
+      <img src="/logo.png" alt="Logo YMB" style="width:64px;height:64px;object-fit:contain;background:#ffffff;border-radius:50%;padding:4px;box-shadow:0 4px 14px rgba(0,0,0,0.1);border:2px solid #d4af37">
     </div>
-    <div style="display:inline-flex;align-items:center;gap:8px;background:#fdf2f4;padding:6px 14px;border-radius:20px;border:1px solid #f8c9d2;margin-bottom:12px">
-      <span style="font-size:16px">⚡</span>
-      <span style="font-size:13px;font-weight:800;color:#8b1538;text-transform:uppercase;letter-spacing:0.5px">Pembayaran QRIS</span>
+    <div style="display:inline-flex;align-items:center;gap:6px;background:#fef2f2;padding:5px 14px;border-radius:20px;border:1px solid #fecaca;margin-bottom:10px">
+      <span style="font-size:15px">⚡</span>
+      <span style="font-size:12.5px;font-weight:800;color:#d32f2f;text-transform:uppercase;letter-spacing:0.5px">Pembayaran QRIS</span>
     </div>
-    <h2 style="font-size:19px;font-weight:800;color:#0f172a;margin-bottom:4px" id="c-qris-store">YMB Mart</h2>
-    <p style="font-size:12.5px;color:#64748b;margin-bottom:18px">Scan kode QR di bawah ini dengan aplikasi mobile banking atau e-wallet Anda</p>
+    <h2 style="font-size:18px;font-weight:800;color:#0f172a;margin-bottom:4px" id="c-qris-store">YMB Mart</h2>
+    <p style="font-size:12px;color:#64748b;margin-bottom:16px">Scan kode QR di bawah ini dengan aplikasi mobile banking atau e-wallet Anda</p>
 
     <!-- Nominal Tagihan -->
-    <div style="background:#f8fafc;border:2px dashed #cbd5e1;border-radius:14px;padding:12px 16px;margin-bottom:18px">
+    <div style="background:#f8fafc;border:2px dashed #cbd5e1;border-radius:14px;padding:10px 14px;margin-bottom:16px">
       <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px">Total Tagihan Belanja</div>
-      <div style="font-size:36px;font-weight:900;color:#8b1538;font-variant-numeric:tabular-nums;margin-top:2px" id="c-qris-amount">Rp 0</div>
+      <div style="font-size:36px;font-weight:900;color:#d32f2f;font-variant-numeric:tabular-nums;margin-top:2px" id="c-qris-amount">Rp 0</div>
     </div>
 
     <!-- QR Code Container -->
-    <div style="background:#ffffff;padding:12px;border:2px solid #e2e8f0;border-radius:16px;display:inline-block;box-shadow:0 4px 14px rgba(0,0,0,0.06);margin-bottom:18px">
-      <img id="c-qris-img" src="" alt="Scan QRIS" style="width:260px;height:260px;object-fit:contain;display:block;border-radius:8px">
+    <div style="background:#ffffff;padding:10px;border:2px solid #e2e8f0;border-radius:16px;display:inline-block;box-shadow:0 4px 14px rgba(0,0,0,0.06);margin-bottom:16px">
+      <img id="c-qris-img" src="" alt="Scan QRIS" style="width:240px;height:240px;object-fit:contain;display:block;border-radius:8px">
     </div>
 
     <div style="display:flex;align-items:center;justify-content:center;gap:8px;color:#16a34a;font-weight:700;font-size:13px">
@@ -514,7 +665,8 @@ body {
 // Clock
 function updateClock(){
   var n = new Date();
-  document.getElementById("clock").textContent = n.toLocaleTimeString("id-ID", {hour12: false});
+  var el = document.getElementById("clock");
+  if(el) el.textContent = n.toLocaleTimeString("id-ID", {hour12: false});
 }
 setInterval(updateClock, 1000);
 updateClock();
@@ -542,7 +694,7 @@ function renderCarousel(){
   var dots = document.getElementById("ad-dots");
   if(!_adImages.length){
     el.innerHTML = '<div class="ad-fallback" id="ad-fallback">' +
-      '<div style="margin-bottom:16px"><img src="/logo.png" alt="Logo YMB" style="width:96px;height:96px;object-fit:contain;background:#ffffff;border-radius:50%;padding:6px;box-shadow:0 8px 24px rgba(0,0,0,0.4);border:2px solid rgba(212,175,55,0.4)"></div>' +
+      '<div style="margin-bottom:16px"><img src="/logo.png" alt="Logo YMB" style="width:96px;height:96px;object-fit:contain;background:#ffffff;border-radius:50%;padding:4px;box-shadow:0 6px 18px rgba(0,0,0,0.08);border:2px solid #d4af37"></div>' +
       '<div class="ad-badge"><span>✨ Promo Pilihan YMB Mart</span></div>' +
       '<h2 id="ad-title">Belanja Berkah & Hemat Setiap Hari</h2>' +
       '<p id="ad-desc">Dapatkan aneka produk kebutuhan harian dengan harga terjangkau dan kualitas terjamin di Masjid Jami\' Baiturrahman.</p>' +
@@ -572,7 +724,7 @@ async function loadStoreName(){
     var r = await fetch("/api/settings");
     var s = await r.json();
     if(s.store_name){
-      document.getElementById("store-name-header").textContent = s.store_name;
+      document.getElementById("store-name-header").innerHTML = esc(s.store_name);
     }
   } catch(e){}
 }
@@ -591,12 +743,12 @@ async function loadActiveCashier(){
       var name = s.cashier_name || s.cashier || "";
       if(name){
         currentCashier = name;
-        document.getElementById("kasir-display").textContent = "Kasir: " + currentCashier;
+        document.getElementById("kasir-display").textContent = currentCashier;
         return;
       }
     }
     if(!currentCashier){
-      document.getElementById("kasir-display").textContent = "Kasir: --";
+      document.getElementById("kasir-display").textContent = "KASIR STANDBY";
     }
   } catch(e){}
 }
@@ -611,9 +763,6 @@ function connectWS(){
   try {
     var ws = new WebSocket(WS_URL);
     ws.onopen = function(){
-      document.getElementById("status-text").textContent = "Siap melayani";
-      document.getElementById("status-text").style.color = "#4ade80";
-      document.getElementById("status-dot").style.background = "#22c55e";
       loadActiveCashier();
     };
     ws.onmessage = function(e){
@@ -627,9 +776,6 @@ function connectWS(){
       if(msg.type === "hide_qris") handleHideQris();
     };
     ws.onclose = function(){
-      document.getElementById("status-text").textContent = "Menghubungkan kembali...";
-      document.getElementById("status-text").style.color = "#f87171";
-      document.getElementById("status-dot").style.background = "#dc2626";
       setTimeout(connectWS, 3000);
     };
     ws.onerror = function(){};
@@ -639,7 +785,7 @@ function connectWS(){
 function handleShiftOpen(data){
   if(data && data.cashier){
     currentCashier = data.cashier;
-    document.getElementById("kasir-display").textContent = "Kasir: " + currentCashier;
+    document.getElementById("kasir-display").textContent = currentCashier;
   } else {
     loadActiveCashier();
   }
@@ -647,7 +793,7 @@ function handleShiftOpen(data){
 
 function handleShiftClose(data){
   currentCashier = "";
-  document.getElementById("kasir-display").textContent = "Kasir: --";
+  document.getElementById("kasir-display").textContent = "KASIR STANDBY";
   setTimeout(loadActiveCashier, 500);
 }
 
@@ -657,39 +803,35 @@ function handleCartUpdate(data){
   var total = data.total || 0;
   renderLiveItems();
   document.getElementById("payment-details").style.display = "none";
-  document.getElementById("grand-total").textContent = "Rp " + total.toLocaleString("id-ID");
-  document.getElementById("payment-info").textContent = liveItems.length + " item belanjaan";
-  document.getElementById("status-text").textContent = "Memilih produk...";
-  document.getElementById("status-text").style.color = "#fbbf24";
-  document.getElementById("status-dot").style.background = "#fbbf24";
+  document.getElementById("grand-total").textContent = total > 0 ? total.toLocaleString("id-ID") : "0";
   if(data.cashier){
     currentCashier = data.cashier;
-    document.getElementById("kasir-display").textContent = "Kasir: " + currentCashier;
-  } else if(currentCashier){
-    document.getElementById("kasir-display").textContent = "Kasir: " + currentCashier;
+    document.getElementById("kasir-display").textContent = currentCashier;
   }
-  if(data.member) document.getElementById("member-display").textContent = "👤 " + data.member;
-  else document.getElementById("member-display").textContent = "";
+  if(data.member) document.getElementById("member-display").textContent = data.member;
+  else document.getElementById("member-display").textContent = "-";
 }
 
 function renderLiveItems(){
   var el = document.getElementById("items-list");
   if(!liveItems.length){
-    el.innerHTML = '<div style="text-align:center;padding:80px 20px;color:#64748b">' +
-      '<p style="font-size:36px;margin-bottom:8px;opacity:0.5">🛒</p>' +
-      '<p style="font-size:13.5px;font-weight:600">Menunggu scan barang kasir...</p>' +
+    el.innerHTML = '<div style="text-align:center;padding:70px 20px;color:#94a3b8">' +
+      '<p style="font-size:42px;margin-bottom:10px;opacity:0.6">🛒</p>' +
+      '<p style="font-size:15px;font-weight:700;color:#64748b">Menunggu scan barang kasir...</p>' +
+      '<p style="font-size:12.5px;color:#94a3b8;margin-top:4px">Daftar belanjaan Anda akan tampil otomatis di sini</p>' +
     '</div>';
     return;
   }
   var html = "";
   liveItems.forEach(function(item, i){
-    html += '<div class="item-row slide-in" style="animation-delay:' + (i * 25) + 'ms">' +
+    html += '<div class="item-row slide-in">' +
       '<div class="item-num">' + (i + 1) + '</div>' +
-      '<div class="item-info">' +
-        '<p class="item-name">' + esc(item.name) + '</p>' +
-        '<p class="item-qty">' + item.qty + ' x Rp ' + item.price.toLocaleString("id-ID") + '</p>' +
+      '<div class="item-name-col">' +
+        '<div class="item-name">' + esc(item.name) + '</div>' +
+        '<div class="item-unit-price">@ Rp ' + item.price.toLocaleString("id-ID") + '</div>' +
       '</div>' +
-      '<p class="item-price">Rp ' + (item.price * item.qty).toLocaleString("id-ID") + '</p>' +
+      '<div class="item-qty">' + item.qty + '</div>' +
+      '<div class="item-price">Rp ' + (item.price * item.qty).toLocaleString("id-ID") + '</div>' +
     '</div>';
   });
   el.innerHTML = html;
@@ -725,7 +867,8 @@ function handleNewTx(tx){
   isCheckoutDone = true;
   liveItems = (tx.items || []).map(function(it){ return { name: it.name, qty: it.qty, price: it.price }; });
   renderLiveItems();
-  document.getElementById("grand-total").textContent = "Rp " + (tx.grand_total || 0).toLocaleString("id-ID");
+  var grand = tx.grand_total || 0;
+  document.getElementById("grand-total").textContent = grand > 0 ? grand.toLocaleString("id-ID") : "0";
   
   if(tx.payment === "CASH" && (tx.amount_paid || 0) > 0){
     document.getElementById("payment-details").style.display = "block";
@@ -735,41 +878,35 @@ function handleNewTx(tx){
     document.getElementById("payment-details").style.display = "none";
   }
 
-  document.getElementById("payment-info").textContent = "✅ " + (tx.payment || "CASH") + " — Selesai";
-  document.getElementById("status-text").textContent = "Transaksi selesai!";
-  document.getElementById("status-text").style.color = "#22c55e";
-  document.getElementById("status-dot").style.background = "#22c55e";
   if(tx.cashier){
     currentCashier = tx.cashier;
-    document.getElementById("kasir-display").textContent = "Kasir: " + currentCashier;
+    document.getElementById("kasir-display").textContent = currentCashier;
   }
-  if(tx.member) document.getElementById("member-display").textContent = "👤 " + tx.member;
+  if(tx.member) document.getElementById("member-display").textContent = tx.member;
+  else document.getElementById("member-display").textContent = "-";
 }
 
 function closeTransaction(data){
   handleHideQris();
   isCheckoutDone = false;
   liveItems = [];
-  document.getElementById("items-list").innerHTML = '<div style="text-align:center;padding:80px 20px;color:#64748b">' +
-    '<p style="font-size:36px;margin-bottom:8px;opacity:0.5">🛒</p>' +
-    '<p style="font-size:13.5px;font-weight:600">Menunggu scan barang kasir...</p>' +
+  document.getElementById("items-list").innerHTML = '<div style="text-align:center;padding:70px 20px;color:#94a3b8">' +
+    '<p style="font-size:42px;margin-bottom:10px;opacity:0.6">🛒</p>' +
+    '<p style="font-size:15px;font-weight:700;color:#64748b">Menunggu scan barang kasir...</p>' +
+    '<p style="font-size:12.5px;color:#94a3b8;margin-top:4px">Daftar belanjaan Anda akan tampil otomatis di sini</p>' +
   '</div>';
-  document.getElementById("grand-total").textContent = "Rp 0";
+  document.getElementById("grand-total").textContent = "0";
   document.getElementById("payment-details").style.display = "none";
-  document.getElementById("payment-info").textContent = "";
-  document.getElementById("status-text").textContent = "Siap melayani";
-  document.getElementById("status-text").style.color = "#4ade80";
-  document.getElementById("status-dot").style.background = "#22c55e";
+  document.getElementById("member-display").textContent = "-";
   
   if(data && data.cashier){
     currentCashier = data.cashier;
   }
   if(currentCashier){
-    document.getElementById("kasir-display").textContent = "Kasir: " + currentCashier;
+    document.getElementById("kasir-display").textContent = currentCashier;
   } else {
     loadActiveCashier();
   }
-  document.getElementById("member-display").textContent = "";
 }
 
 connectWS();

@@ -3206,3 +3206,179 @@ func handleTriggerSync(w http.ResponseWriter, r *http.Request) {
 	go DoSync()
 	jsonResponse(w, map[string]interface{}{"status": "sync_triggered"}, 200)
 }
+
+// === PRESENSI KASIR (QR SCAN SMARTPHONE) ===
+type PresensiReq struct {
+	Username   string `json:"username"`
+	PIN        string `json:"pin"`
+	Type       string `json:"type"` // "masuk" or "pulang"
+	Notes      string `json:"notes"`
+	DeviceInfo string `json:"device_info"`
+}
+
+type AttendanceRecord struct {
+	ID          int    `json:"id"`
+	UserID      int    `json:"user_id"`
+	Username    string `json:"username"`
+	CashierName string `json:"cashier_name"`
+	Type        string `json:"type"`
+	Date        string `json:"date"`
+	Time        string `json:"time"`
+	Notes       string `json:"notes"`
+	DeviceInfo  string `json:"device_info"`
+	CreatedAt   string `json:"created_at"`
+}
+
+func handlePresensi(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		handleRecordPresensi(w, r)
+		return
+	} else if r.Method == http.MethodGet {
+		handleGetPresensiList(w, r)
+		return
+	}
+	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+}
+
+func handleRecordPresensi(w http.ResponseWriter, r *http.Request) {
+	var req PresensiReq
+	if err := decodeJSON(w, r, &req); err != nil {
+		jsonResponse(w, map[string]string{"status": "error", "message": "Format data tidak valid"}, 400)
+		return
+	}
+
+	req.Username = strings.TrimSpace(req.Username)
+	req.PIN = strings.TrimSpace(req.PIN)
+	req.Type = strings.ToLower(strings.TrimSpace(req.Type))
+	if req.Type != "masuk" && req.Type != "pulang" {
+		req.Type = "masuk"
+	}
+
+	if req.Username == "" || req.PIN == "" {
+		jsonResponse(w, map[string]string{"status": "error", "message": "ID Kasir dan PIN wajib diisi"}, 400)
+		return
+	}
+
+	// Query user
+	var user struct {
+		ID          int
+		Username    string
+		Password    string
+		DisplayName string
+		Active      int
+	}
+	err := db.QueryRow("SELECT id, username, password, display_name, active FROM users WHERE LOWER(username) = LOWER(?)", req.Username).
+		Scan(&user.ID, &user.Username, &user.Password, &user.DisplayName, &user.Active)
+	if err != nil || user.Active != 1 {
+		jsonResponse(w, map[string]string{"status": "error", "message": "Akun kasir tidak ditemukan atau status tidak aktif"}, 401)
+		return
+	}
+
+	// Verify PIN
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.PIN)); err != nil {
+		jsonResponse(w, map[string]string{"status": "error", "message": "PIN yang Anda masukkan salah"}, 401)
+		return
+	}
+
+	now := time.Now()
+	dateStr := now.Format("2006-01-02")
+	timeStr := now.Format("15:04:05")
+	cashierName := user.DisplayName
+	if cashierName == "" {
+		cashierName = user.Username
+	}
+
+	res, err := db.Exec(`INSERT INTO attendance (user_id, username, cashier_name, type, date, time, notes, device_info, sync_status) 
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+		user.ID, user.Username, cashierName, req.Type, dateStr, timeStr, req.Notes, req.DeviceInfo)
+	if err != nil {
+		logError("handleRecordPresensi", err)
+		jsonResponse(w, map[string]string{"status": "error", "message": "Gagal menyimpan data presensi ke database"}, 500)
+		return
+	}
+
+	newID, _ := res.LastInsertId()
+
+	// Async trigger cloud sync if online
+	go DoSync()
+
+	jsonResponse(w, map[string]interface{}{
+		"status":       "ok",
+		"id":           newID,
+		"message":      "Presensi berhasil dicatat",
+		"cashier_name": cashierName,
+		"username":     user.Username,
+		"type":         req.Type,
+		"date":         dateStr,
+		"time":         timeStr,
+	}, 200)
+}
+
+func handleGetPresensiList(w http.ResponseWriter, r *http.Request) {
+	if !requireAuth(r, "admin") {
+		jsonResponse(w, map[string]string{"error": "Unauthorized"}, 401)
+		return
+	}
+
+	dateParam := strings.TrimSpace(r.URL.Query().Get("date"))
+	typeParam := strings.TrimSpace(r.URL.Query().Get("type"))
+	userParam := strings.TrimSpace(r.URL.Query().Get("username"))
+
+	query := "SELECT id, user_id, username, cashier_name, type, date, time, notes, device_info, created_at FROM attendance WHERE 1=1"
+	var args []interface{}
+
+	if dateParam != "" {
+		query += " AND date = ?"
+		args = append(args, dateParam)
+	}
+	if typeParam != "" && typeParam != "all" {
+		query += " AND type = ?"
+		args = append(args, typeParam)
+	}
+	if userParam != "" {
+		query += " AND (LOWER(username) = LOWER(?) OR LOWER(cashier_name) = LOWER(?))"
+		args = append(args, userParam, userParam)
+	}
+
+	query += " ORDER BY id DESC LIMIT 200"
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		logError("handleGetPresensiList", err)
+		jsonResponse(w, map[string]string{"error": "Database error"}, 500)
+		return
+	}
+	defer rows.Close()
+
+	var list []AttendanceRecord
+	for rows.Next() {
+		var a AttendanceRecord
+		var uID sql.NullInt64
+		if err := rows.Scan(&a.ID, &uID, &a.Username, &a.CashierName, &a.Type, &a.Date, &a.Time, &a.Notes, &a.DeviceInfo, &a.CreatedAt); err == nil {
+			if uID.Valid {
+				a.UserID = int(uID.Int64)
+			}
+			list = append(list, a)
+		}
+	}
+	if list == nil {
+		list = []AttendanceRecord{}
+	}
+
+	// Stats for today
+	todayStr := time.Now().Format("2006-01-02")
+	var totalToday, masukToday, pulangToday int
+	db.QueryRow("SELECT COUNT(*) FROM attendance WHERE date = ?", todayStr).Scan(&totalToday)
+	db.QueryRow("SELECT COUNT(*) FROM attendance WHERE date = ? AND type = 'masuk'", todayStr).Scan(&masukToday)
+	db.QueryRow("SELECT COUNT(*) FROM attendance WHERE date = ? AND type = 'pulang'", todayStr).Scan(&pulangToday)
+
+	jsonResponse(w, map[string]interface{}{
+		"status":      "ok",
+		"data":        list,
+		"today_date":  todayStr,
+		"total_today": totalToday,
+		"masuk_today": masukToday,
+		"pulang_today": pulangToday,
+	}, 200)
+}
+

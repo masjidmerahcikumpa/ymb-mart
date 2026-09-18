@@ -392,6 +392,10 @@ tr:hover td{background:#f8fafc}
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         <span>Shift Kasir</span>
       </button>
+      <button class="sidebar-btn" onclick="showTab('presensi')" id="nav-presensi">
+        <svg viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="m9 16 2 2 4-4"/></svg>
+        <span>Presensi Kasir</span>
+      </button>
       <button class="sidebar-btn" onclick="showTab('cash')" id="nav-cash">
         <svg viewBox="0 0 24 24"><rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></svg>
         <span>Arus Kas Laci</span>
@@ -596,6 +600,86 @@ tr:hover td{background:#f8fafc}
   <div id="panel-shifts" class="card hidden">
     <h2 style="font-size:16px;font-weight:700;color:#0f172a;margin-bottom:12px">Laporan & Rekap Shift Kasir</h2>
     <table><thead><tr><th class="sortable" onclick="sortTable('shifts-table',0)">ID</th><th class="sortable" onclick="sortTable('shifts-table',1)">Shift</th><th class="sortable" onclick="sortTable('shifts-table',2)">Kasir</th><th class="sortable" onclick="sortTable('shifts-table',3,'num')" style="text-align:right">Opening</th><th class="sortable" onclick="sortTable('shifts-table',4,'num')" style="text-align:right">Cash Sales</th><th class="sortable" onclick="sortTable('shifts-table',5,'num')" style="text-align:right">QRIS Sales</th><th class="sortable" onclick="sortTable('shifts-table',6,'num')" style="text-align:right">Total Sales</th><th class="sortable" onclick="sortTable('shifts-table',7,'num')" style="text-align:right">Expected</th><th class="sortable" onclick="sortTable('shifts-table',8,'num')" style="text-align:right">Closing</th><th class="sortable" onclick="sortTable('shifts-table',9,'num')" style="text-align:right">Disc</th><th class="sortable" onclick="sortTable('shifts-table',10)">Status</th></tr></thead><tbody id="shifts-table"></tbody></table>
+  </div>
+
+  <!-- PRESENSI KASIR -->
+  <div id="panel-presensi" class="card hidden">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+      <div>
+        <h2 style="font-size:16px;font-weight:700;color:#0f172a">Presensi & Absensi Kasir</h2>
+        <p style="font-size:12px;color:#64748b;margin-top:2px">Rekap log kehadiran kasir (waktu masuk & waktu pulang) melalui scan QR smartphone.</p>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary-subtle btn-sm" onclick="loadPresensiData()">
+          <svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+          <span>Segarkan Data</span>
+        </button>
+        <button class="btn btn-secondary-subtle btn-sm" onclick="exportPresensiCSV()">
+          <svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+          <span>Ekspor CSV</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- KPI STATS -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:14px;margin-bottom:20px">
+      <div style="background:#f8fafc;padding:14px 18px;border-radius:10px;border:1px solid #e2e8f0">
+        <div style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.5px">Total Presensi Hari Ini</div>
+        <div id="presensi-kpi-total" style="font-size:24px;font-weight:800;color:#0f172a;margin-top:4px">0</div>
+        <div style="font-size:11px;color:#94a3b8;margin-top:2px">Catatan log kehadiran hari ini</div>
+      </div>
+      <div style="background:#f0fdf4;padding:14px 18px;border-radius:10px;border:1px solid #bbf7d0">
+        <div style="font-size:11px;font-weight:600;color:#166534;text-transform:uppercase;letter-spacing:0.5px">Presensi Masuk (Hari Ini)</div>
+        <div id="presensi-kpi-masuk" style="font-size:24px;font-weight:800;color:#16a34a;margin-top:4px">0</div>
+        <div style="font-size:11px;color:#166534;margin-top:2px">Kasir mulai jam kerja</div>
+      </div>
+      <div style="background:#fffbeb;padding:14px 18px;border-radius:10px;border:1px solid #fde68a">
+        <div style="font-size:11px;font-weight:600;color:#92400e;text-transform:uppercase;letter-spacing:0.5px">Presensi Pulang (Hari Ini)</div>
+        <div id="presensi-kpi-pulang" style="font-size:24px;font-weight:800;color:#d97706;margin-top:4px">0</div>
+        <div style="font-size:11px;color:#92400e;margin-top:2px">Kasir selesai jam kerja</div>
+      </div>
+    </div>
+
+    <!-- FILTER TOOLBAR -->
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:12px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:12px;font-weight:600;color:#475569">Tanggal:</span>
+        <input type="date" id="presensi-filter-date" style="padding:6px 10px;font-size:12px;border:1px solid #cbd5e1;border-radius:6px;outline:none" onchange="loadPresensiData()">
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:12px;font-weight:600;color:#475569">Tipe:</span>
+        <select id="presensi-filter-type" style="padding:6px 10px;font-size:12px;border:1px solid #cbd5e1;border-radius:6px;outline:none" onchange="loadPresensiData()">
+          <option value="all">Semua Tipe</option>
+          <option value="masuk">☀️ Masuk</option>
+          <option value="pulang">🌙 Pulang</option>
+        </select>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:180px">
+        <input type="text" id="presensi-filter-user" placeholder="Cari ID / Nama Kasir..." style="width:100%;padding:6px 12px;font-size:12px;border:1px solid #cbd5e1;border-radius:6px;outline:none" oninput="debouncePresensiSearch()">
+      </div>
+      <button class="btn btn-secondary-subtle btn-sm" onclick="resetPresensiFilter()">Reset Filter</button>
+    </div>
+
+    <!-- TABLE -->
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:50px;text-align:center">No</th>
+            <th>Waktu Presensi</th>
+            <th>Tanggal</th>
+            <th>ID Kasir</th>
+            <th>Nama Kasir</th>
+            <th style="text-align:center">Jenis</th>
+            <th>Catatan</th>
+            <th>Perangkat / Info</th>
+          </tr>
+        </thead>
+        <tbody id="presensi-table">
+          <tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:24px">Memuat data presensi...</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <!-- CASH -->
@@ -1004,6 +1088,11 @@ tr:hover td{background:#f8fafc}
             <img id="s-qris-preview" src="" style="width:120px;height:120px;object-fit:contain;border:1px solid #cbd5e1;border-radius:8px;background:#fff;padding:4px">
           </div>
           <p style="font-size:11px;color:#64748b;margin-top:4px">QRIS ini otomatis tampil di layar kasir & monitor customer saat metode bayar QRIS dipilih.</p>
+        </div>
+        <div class="form-group">
+          <label>URL Publik Presensi Kasir (Opsional)</label>
+          <input id="s-public-presensi-url" placeholder="Contoh: https://ymb-pos.vercel.app atau http://192.168.1.10:8070">
+          <p style="font-size:11px;color:#64748b;margin-top:4px">Digunakan pada QR Code portal agar kasir dapat scan langsung via smartphone mereka.</p>
         </div>
         <button class="btn btn-primary" onclick="saveSettings()">Simpan Pengaturan</button>
       </div>
@@ -1618,7 +1707,7 @@ function showTab(name){
     closeMobileSidebar();
   }
   _currentTab=name;
-  const tList=["dashboard","daily","transactions","shifts","cash","products","stock","opname","members","ads","users","system"];
+  const tList=["dashboard","daily","transactions","shifts","presensi","cash","products","stock","opname","members","ads","users","system"];
   tList.forEach(t=>{
     const p=document.getElementById("panel-"+t);
     if(p)p.classList.toggle("hidden",t!==name);
@@ -1635,6 +1724,7 @@ function showTab(name){
     daily:"Laporan & Rekap Penjualan",
     transactions:"Riwayat Transaksi",
     shifts:"Shift Kasir",
+    presensi:"Presensi & Absensi Kasir",
     cash:"Arus Kas Laci",
     products:"Katalog Master Produk",
     stock:"Monitoring Stok",
@@ -1652,6 +1742,7 @@ function showTab(name){
     daily:loadDailyReport,
     transactions:loadTransactions,
     shifts:loadShifts,
+    presensi:loadPresensiData,
     cash:loadCash,
     products:loadProducts,
     stock:loadStockReport,
@@ -3527,6 +3618,9 @@ async function loadSettings(){
     document.getElementById("s-qris").value=s.qris_image||"";
     updateQrisPreview(s.qris_image||"");
   }
+  if(document.getElementById("s-public-presensi-url")){
+    document.getElementById("s-public-presensi-url").value=s.public_presensi_url||"";
+  }
 }
 async function saveSettings(){
   var body={
@@ -3534,10 +3628,126 @@ async function saveSettings(){
     store_address:document.getElementById("s-address").value,
     store_phone:document.getElementById("s-phone").value,
     ppn_rate:document.getElementById("s-ppn").value,
-    qris_image:document.getElementById("s-qris")?document.getElementById("s-qris").value:""
+    qris_image:document.getElementById("s-qris")?document.getElementById("s-qris").value:"",
+    public_presensi_url:document.getElementById("s-public-presensi-url")?document.getElementById("s-public-presensi-url").value.trim():""
   };
   await authFetch("/api/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-  alert("Pengaturan dan QRIS berhasil disimpan!");
+  alert("Pengaturan berhasil disimpan!");
+}
+
+// === PRESENSI KASIR BACKOFFICE ===
+let _presensiDebounceTimer = null;
+let _currentPresensiList = [];
+
+function debouncePresensiSearch() {
+  clearTimeout(_presensiDebounceTimer);
+  _presensiDebounceTimer = setTimeout(loadPresensiData, 300);
+}
+
+function resetPresensiFilter() {
+  const dateInput = document.getElementById("presensi-filter-date");
+  if (dateInput) {
+    dateInput.value = "";
+  }
+  const typeSelect = document.getElementById("presensi-filter-type");
+  if (typeSelect) {
+    typeSelect.value = "all";
+  }
+  const userInput = document.getElementById("presensi-filter-user");
+  if (userInput) {
+    userInput.value = "";
+  }
+  loadPresensiData();
+}
+
+async function loadPresensiData() {
+  const tbody = document.getElementById("presensi-table");
+  if (!tbody) return;
+
+  const dateVal = document.getElementById("presensi-filter-date") ? document.getElementById("presensi-filter-date").value : "";
+  const typeVal = document.getElementById("presensi-filter-type") ? document.getElementById("presensi-filter-type").value : "all";
+  const userVal = document.getElementById("presensi-filter-user") ? document.getElementById("presensi-filter-user").value.trim() : "";
+
+  let url = "/api/presensi?1=1";
+  if (dateVal) url += "&date=" + encodeURIComponent(dateVal);
+  if (typeVal && typeVal !== "all") url += "&type=" + encodeURIComponent(typeVal);
+  if (userVal) url += "&username=" + encodeURIComponent(userVal);
+
+  try {
+    const res = await authFetch(url);
+    if (!res.ok) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#ef4444;padding:24px">Gagal memuat data presensi (' + res.status + ')</td></tr>';
+      return;
+    }
+    const d = await res.json();
+    _currentPresensiList = d.data || [];
+
+    // Update KPI counters
+    const kpiTotal = document.getElementById("presensi-kpi-total");
+    const kpiMasuk = document.getElementById("presensi-kpi-masuk");
+    const kpiPulang = document.getElementById("presensi-kpi-pulang");
+    if (kpiTotal) kpiTotal.textContent = (d.total_today || 0) + " Log";
+    if (kpiMasuk) kpiMasuk.textContent = (d.masuk_today || 0) + " Kasir";
+    if (kpiPulang) kpiPulang.textContent = (d.pulang_today || 0) + " Kasir";
+
+    if (_currentPresensiList.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:32px">Tidak ada catatan presensi ditemukan.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = _currentPresensiList.map((item, idx) => {
+      const isMasuk = (item.type || '').toLowerCase() === 'masuk';
+      const badge = isMasuk 
+        ? '<span class="badge badge-green">☀️ Masuk</span>' 
+        : '<span class="badge badge-yellow">🌙 Pulang</span>';
+      
+      const devInfo = item.device_info ? (item.device_info.length > 50 ? item.device_info.slice(0, 50) + '...' : item.device_info) : '-';
+      
+      return `<tr>
+        <td style="text-align:center;color:#94a3b8;font-size:11.5px">${idx + 1}</td>
+        <td style="font-weight:700;color:#0f172a">${item.time || '-'}</td>
+        <td style="color:#475569">${item.date || '-'}</td>
+        <td><code>${item.username || '-'}</code></td>
+        <td style="font-weight:600">${item.cashier_name || item.username || '-'}</td>
+        <td style="text-align:center">${badge}</td>
+        <td style="color:#64748b">${item.notes || '-'}</td>
+        <td style="color:#94a3b8;font-size:11px" title="${item.device_info || ''}">${devInfo}</td>
+      </tr>`;
+    }).join("");
+
+  } catch (err) {
+    console.error("loadPresensiData error:", err);
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#ef4444;padding:24px">Error: ' + err.message + '</td></tr>';
+  }
+}
+
+function exportPresensiCSV() {
+  if (!_currentPresensiList || _currentPresensiList.length === 0) {
+    alert("Tidak ada data presensi untuk diekspor.");
+    return;
+  }
+
+  const headers = ["No", "Tanggal", "Waktu", "ID Kasir", "Nama Kasir", "Tipe", "Catatan", "Perangkat"];
+  const rows = _currentPresensiList.map((a, i) => [
+    i + 1,
+    `"${a.date || ''}"`,
+    `"${a.time || ''}"`,
+    `"${a.username || ''}"`,
+    `"${(a.cashier_name || a.username || '').replace(/"/g, '""')}"`,
+    `"${a.type || ''}"`,
+    `"${(a.notes || '').replace(/"/g, '""')}"`,
+    `"${(a.device_info || '').replace(/"/g, '""')}"`
+  ]);
+
+  const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement("a");
+  const dateStr = new Date().toISOString().slice(0, 10);
+  link.setAttribute("href", encodedUri);
+  link.setAttribute("download", `presensi_kasir_${dateStr}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 async function backupDB(){
   const token=sessionStorage.getItem("token")||"";
