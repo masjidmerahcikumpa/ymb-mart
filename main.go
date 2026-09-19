@@ -281,6 +281,8 @@ type CartItemReq struct {
 	Notes        string  `json:"notes"`
 	Discount     float64 `json:"discount"`
 	DiscountType string  `json:"discount_type,omitempty"` // "nominal" or "percent"
+	Name         string  `json:"name,omitempty"`
+	Price        int     `json:"price,omitempty"`
 }
 
 type CheckoutReq struct {
@@ -589,6 +591,7 @@ func initDB() {
 		"qris_amount":         "0",
 		"ppn_rate":            "0",
 		"public_presensi_url": "https://ymb-mart.vercel.app",
+		"etrans_admin_fee":    "1500",
 	}
 	for k, v := range settings {
 		db.Exec("INSERT OR IGNORE INTO settings (key,value) VALUES (?,?)", k, v)

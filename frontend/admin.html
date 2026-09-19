@@ -388,6 +388,10 @@ tr:hover td{background:#f8fafc}
         <svg viewBox="0 0 24 24"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 6v12"/></svg>
         <span>Riwayat Transaksi</span>
       </button>
+      <button class="sidebar-btn" onclick="showTab('etrans')" id="nav-etrans">
+        <svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        <span>Layanan E-Trans</span>
+      </button>
       <button class="sidebar-btn" onclick="showTab('shifts')" id="nav-shifts">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         <span>Shift Kasir</span>
@@ -677,6 +681,112 @@ tr:hover td{background:#f8fafc}
         </thead>
         <tbody id="presensi-table">
           <tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:24px">Memuat data presensi...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- LAYANAN E-TRANS -->
+  <div id="panel-etrans" class="card hidden">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:20px">⚡</span>
+          <h2 style="font-size:17px;font-weight:800;color:#0f172a;letter-spacing:-0.2px">Laporan Layanan E-Trans</h2>
+          <span style="background:#e0e7ff;color:#4338ca;font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px">Digital Goods</span>
+        </div>
+        <p style="font-size:12px;color:#64748b;margin-top:2px">Rekap transaksi Pulsa, Paket Data, Token PLN, dan Top Up E-Money beserta margin laba admin fee toko.</p>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-secondary-subtle btn-sm" onclick="loadETransReport()" style="display:inline-flex;align-items:center;gap:6px">
+          <svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+          <span>Segarkan Data</span>
+        </button>
+        <button class="btn btn-primary btn-sm" onclick="exportETransCSV()" style="display:inline-flex;align-items:center;gap:6px">
+          <svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+          <span>Ekspor CSV</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 4 KPI CARDS -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(210px, 1fr));gap:14px;margin-bottom:18px">
+      <div style="background:#f8fafc;padding:14px 18px;border-radius:12px;border:1px solid #e2e8f0">
+        <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px">Total Transaksi</div>
+        <div id="etrans-kpi-count" style="font-size:24px;font-weight:900;color:#0f172a;margin-top:4px">0</div>
+        <div style="font-size:11px;color:#94a3b8;margin-top:2px">Pembelian berhasil</div>
+      </div>
+      <div style="background:#f0fdf4;padding:14px 18px;border-radius:12px;border:1px solid #bbf7d0">
+        <div style="font-size:11px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:0.5px">Total Omzet Kotor (GMV)</div>
+        <div id="etrans-kpi-gmv" style="font-size:24px;font-weight:900;color:#16a34a;margin-top:4px">Rp 0</div>
+        <div style="font-size:11px;color:#15803d;margin-top:2px">Nominal + Admin Fee</div>
+      </div>
+      <div style="background:#eff6ff;padding:14px 18px;border-radius:12px;border:1px solid #bfdbfe">
+        <div style="font-size:11px;font-weight:700;color:#1e40af;text-transform:uppercase;letter-spacing:0.5px">Keuntungan Admin Toko</div>
+        <div id="etrans-kpi-fee" style="font-size:24px;font-weight:900;color:#2563eb;margin-top:4px">Rp 0</div>
+        <div style="font-size:11px;color:#1d4ed8;margin-top:2px">Laba bersih dari biaya admin</div>
+      </div>
+      <div style="background:#fffbeb;padding:14px 18px;border-radius:12px;border:1px solid #fde68a">
+        <div style="font-size:11px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.5px">Layanan Terpopuler</div>
+        <div id="etrans-kpi-popular" style="font-size:18px;font-weight:800;color:#b45309;margin-top:7px">-</div>
+        <div style="font-size:11px;color:#a16207;margin-top:2px">Kategori transaksi terbanyak</div>
+      </div>
+    </div>
+
+    <!-- FILTER TOOLBAR -->
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between">
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:11.5px;font-weight:700;color:#475569;margin-right:2px">Periode:</span>
+        <button type="button" id="etf-btn-today" class="btn btn-sm btn-primary" onclick="setETransFilterMode('today')">Hari Ini</button>
+        <button type="button" id="etf-btn-7days" class="btn btn-sm btn-secondary-subtle" onclick="setETransFilterMode('7days')">7 Hari</button>
+        <button type="button" id="etf-btn-this-month" class="btn btn-sm btn-secondary-subtle" onclick="setETransFilterMode('this_month')">Bulan Ini</button>
+        <button type="button" id="etf-btn-all" class="btn btn-sm btn-secondary-subtle" onclick="setETransFilterMode('all')">Semua</button>
+        <button type="button" id="etf-btn-custom" class="btn btn-sm btn-secondary-subtle" onclick="setETransFilterMode('custom')">Kustom Rentang</button>
+      </div>
+
+      <div id="etrans-date-range-box" style="display:none;gap:6px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:11.5px;color:#64748b">Dari:</span>
+        <input type="date" id="etrans-start-date" style="border:1px solid #cbd5e1;border-radius:6px;padding:5px 8px;font-size:12px;outline:none" onchange="loadETransReport()">
+        <span style="font-size:11.5px;color:#64748b">s/d:</span>
+        <input type="date" id="etrans-end-date" style="border:1px solid #cbd5e1;border-radius:6px;padding:5px 8px;font-size:12px;outline:none" onchange="loadETransReport()">
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="etrans-filter-category" style="border:1px solid #cbd5e1;border-radius:6px;padding:6px 10px;font-size:12px;outline:none" onchange="loadETransReport()">
+          <option value="ALL">Semua Kategori</option>
+          <option value="PULSA">📱 Pulsa & Paket Data</option>
+          <option value="PLN">⚡ Token PLN / Listrik</option>
+          <option value="EMONEY">💳 E-Money / Dompet Digital</option>
+          <option value="LAINNYA">📦 Lainnya</option>
+        </select>
+        <select id="etrans-filter-cashier" style="border:1px solid #cbd5e1;border-radius:6px;padding:6px 10px;font-size:12px;outline:none" onchange="loadETransReport()">
+          <option value="all">Semua Kasir</option>
+        </select>
+        <input type="text" id="etrans-filter-q" placeholder="Cari No. HP / ID PLN / Struk..." style="border:1px solid #cbd5e1;border-radius:6px;padding:6px 12px;font-size:12px;outline:none;width:200px" oninput="debounceETransSearch()">
+        <button class="btn btn-secondary-subtle btn-sm" onclick="resetETransFilter()">Reset</button>
+      </div>
+    </div>
+
+    <!-- DATA TABLE -->
+    <div style="overflow-x:auto;border:1px solid #e2e8f0;border-radius:10px">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:40px;text-align:center">No</th>
+            <th class="sortable" onclick="sortTable('etrans-table',1)">Waktu (WIB)</th>
+            <th class="sortable" onclick="sortTable('etrans-table',2)">No. Struk</th>
+            <th class="sortable" onclick="sortTable('etrans-table',3)">Kategori</th>
+            <th class="sortable" onclick="sortTable('etrans-table',4)">Produk & Denominasi</th>
+            <th>No. Tujuan / ID Pelanggan</th>
+            <th class="sortable" onclick="sortTable('etrans-table',6,'num')" style="text-align:right">Nominal Pokok</th>
+            <th class="sortable" onclick="sortTable('etrans-table',7,'num')" style="text-align:right">Biaya Admin (Laba Toko)</th>
+            <th class="sortable" onclick="sortTable('etrans-table',8,'num')" style="text-align:right">Total Bayar</th>
+            <th class="sortable" onclick="sortTable('etrans-table',9)">Kasir</th>
+            <th class="sortable" onclick="sortTable('etrans-table',10)" style="text-align:center">Metode</th>
+          </tr>
+        </thead>
+        <tbody id="etrans-table">
+          <tr><td colspan="11" style="text-align:center;padding:24px;color:#94a3b8">Memuat data transaksi E-Trans...</td></tr>
         </tbody>
       </table>
     </div>
@@ -1093,6 +1203,11 @@ tr:hover td{background:#f8fafc}
           <label>URL Publik Presensi Kasir (Opsional)</label>
           <input id="s-public-presensi-url" placeholder="Contoh: https://ymb-pos.vercel.app atau http://192.168.1.10:8070">
           <p style="font-size:11px;color:#64748b;margin-top:4px">Digunakan pada QR Code portal agar kasir dapat scan langsung via smartphone mereka.</p>
+        </div>
+        <div class="form-group">
+          <label>Biaya Admin Layanan E-Trans (Rp per transaksi)</label>
+          <input id="s-etrans-fee" type="number" value="1500" min="0" step="500" placeholder="1500">
+          <p style="font-size:11px;color:#64748b;margin-top:4px">Keuntungan bersih toko yang ditambahkan ke setiap transaksi pulsa, token PLN, & e-money.</p>
         </div>
         <button class="btn btn-primary" onclick="saveSettings()">Simpan Pengaturan</button>
       </div>
@@ -1707,7 +1822,7 @@ function showTab(name){
     closeMobileSidebar();
   }
   _currentTab=name;
-  const tList=["dashboard","daily","transactions","shifts","presensi","cash","products","stock","opname","members","ads","users","system"];
+  const tList=["dashboard","daily","transactions","etrans","shifts","presensi","cash","products","stock","opname","members","ads","users","system"];
   tList.forEach(t=>{
     const p=document.getElementById("panel-"+t);
     if(p)p.classList.toggle("hidden",t!==name);
@@ -1723,6 +1838,7 @@ function showTab(name){
     dashboard:"Dashboard Utama",
     daily:"Laporan & Rekap Penjualan",
     transactions:"Riwayat Transaksi",
+    etrans:"Layanan & Transaksi E-Trans",
     shifts:"Shift Kasir",
     presensi:"Presensi & Absensi Kasir",
     cash:"Arus Kas Laci",
@@ -1741,6 +1857,7 @@ function showTab(name){
     dashboard:loadDashboard,
     daily:loadDailyReport,
     transactions:loadTransactions,
+    etrans:loadETransReport,
     shifts:loadShifts,
     presensi:loadPresensiData,
     cash:loadCash,
@@ -3621,6 +3738,9 @@ async function loadSettings(){
   if(document.getElementById("s-public-presensi-url")){
     document.getElementById("s-public-presensi-url").value=s.public_presensi_url||"";
   }
+  if(document.getElementById("s-etrans-fee")){
+    document.getElementById("s-etrans-fee").value=s.etrans_admin_fee||"1500";
+  }
 }
 async function saveSettings(){
   var body={
@@ -3629,7 +3749,8 @@ async function saveSettings(){
     store_phone:document.getElementById("s-phone").value,
     ppn_rate:document.getElementById("s-ppn").value,
     qris_image:document.getElementById("s-qris")?document.getElementById("s-qris").value:"",
-    public_presensi_url:document.getElementById("s-public-presensi-url")?document.getElementById("s-public-presensi-url").value.trim():""
+    public_presensi_url:document.getElementById("s-public-presensi-url")?document.getElementById("s-public-presensi-url").value.trim():"",
+    etrans_admin_fee:document.getElementById("s-etrans-fee")?document.getElementById("s-etrans-fee").value.trim():"1500"
   };
   await authFetch("/api/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
   alert("Pengaturan berhasil disimpan!");
@@ -3749,6 +3870,227 @@ function exportPresensiCSV() {
   link.click();
   document.body.removeChild(link);
 }
+
+// === LAYANAN E-TRANS BACKOFFICE ===
+let _etransDebounceTimer = null;
+let _currentETransList = [];
+let _currentETransFilterMode = 'today';
+
+function setETransFilterMode(mode) {
+  _currentETransFilterMode = mode;
+  const modes = ['today', '7days', 'this_month', 'all', 'custom'];
+  modes.forEach(m => {
+    const btn = document.getElementById('etf-btn-' + m);
+    if (btn) {
+      if (m === mode) {
+        btn.classList.add('btn-primary');
+        btn.classList.remove('btn-secondary-subtle');
+      } else {
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-secondary-subtle');
+      }
+    }
+  });
+
+  const rangeBox = document.getElementById('etrans-date-range-box');
+  if (rangeBox) {
+    rangeBox.style.display = (mode === 'custom') ? 'flex' : 'none';
+  }
+
+  loadETransReport();
+}
+
+function debounceETransSearch() {
+  clearTimeout(_etransDebounceTimer);
+  _etransDebounceTimer = setTimeout(loadETransReport, 300);
+}
+
+function resetETransFilter() {
+  const catSel = document.getElementById('etrans-filter-category');
+  if (catSel) catSel.value = 'ALL';
+  const cashSel = document.getElementById('etrans-filter-cashier');
+  if (cashSel) cashSel.value = 'all';
+  const qInp = document.getElementById('etrans-filter-q');
+  if (qInp) qInp.value = '';
+  const sDate = document.getElementById('etrans-start-date');
+  if (sDate) sDate.value = '';
+  const eDate = document.getElementById('etrans-end-date');
+  if (eDate) eDate.value = '';
+  setETransFilterMode('today');
+}
+
+async function loadETransReport() {
+  const tbody = document.getElementById('etrans-table');
+  if (!tbody) return;
+
+  var url = '/api/reports/etrans?';
+  var now = new Date();
+
+  if (_currentETransFilterMode === 'today') {
+    var todayStr = now.toISOString().split('T')[0];
+    url += 'date=' + encodeURIComponent(todayStr);
+  } else if (_currentETransFilterMode === '7days') {
+    var endStr = now.toISOString().split('T')[0];
+    var past = new Date(now);
+    past.setDate(past.getDate() - 6);
+    var startStr = past.toISOString().split('T')[0];
+    url += 'start_date=' + encodeURIComponent(startStr) + '&end_date=' + encodeURIComponent(endStr);
+  } else if (_currentETransFilterMode === 'this_month') {
+    var mStr = now.toISOString().slice(0, 7);
+    url += 'month=' + encodeURIComponent(mStr);
+  } else if (_currentETransFilterMode === 'custom') {
+    var sVal = document.getElementById('etrans-start-date') ? document.getElementById('etrans-start-date').value : '';
+    var eVal = document.getElementById('etrans-end-date') ? document.getElementById('etrans-end-date').value : '';
+    if (sVal) url += 'start_date=' + encodeURIComponent(sVal) + '&';
+    if (eVal) url += 'end_date=' + encodeURIComponent(eVal) + '&';
+  }
+
+  const catVal = document.getElementById('etrans-filter-category') ? document.getElementById('etrans-filter-category').value : 'ALL';
+  if (catVal && catVal !== 'ALL') {
+    url += '&category=' + encodeURIComponent(catVal);
+  }
+
+  const cashVal = document.getElementById('etrans-filter-cashier') ? document.getElementById('etrans-filter-cashier').value : 'all';
+  if (cashVal && cashVal !== 'all') {
+    url += '&cashier=' + encodeURIComponent(cashVal);
+  }
+
+  const qVal = document.getElementById('etrans-filter-q') ? document.getElementById('etrans-filter-q').value.trim() : '';
+  if (qVal) {
+    url += '&q=' + encodeURIComponent(qVal);
+  }
+
+  tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:24px;color:#94a3b8">Memuat data transaksi E-Trans...</td></tr>';
+
+  try {
+    const res = await authFetch(url);
+    if (!res.ok) throw new Error('Gagal mengambil data E-Trans');
+    const data = await res.json();
+
+    // Populate Cashiers dropdown if empty or new
+    const cashierSelect = document.getElementById('etrans-filter-cashier');
+    if (cashierSelect && data.cashiers && data.cashiers.length > 0) {
+      const curCashier = cashierSelect.value;
+      cashierSelect.innerHTML = '<option value="all">Semua Kasir</option>' +
+        data.cashiers.map(c => '<option value="' + esc(c) + '"' + (c === curCashier ? ' selected' : '') + '>' + esc(c) + '</option>').join('');
+    }
+
+    // Update KPI Cards
+    const kpiCount = document.getElementById('etrans-kpi-count');
+    if (kpiCount) kpiCount.textContent = (data.total_tx || 0).toLocaleString('id-ID');
+
+    const kpiGmv = document.getElementById('etrans-kpi-gmv');
+    if (kpiGmv) kpiGmv.textContent = 'Rp ' + (data.total_gmv || 0).toLocaleString('id-ID');
+
+    const kpiFee = document.getElementById('etrans-kpi-fee');
+    if (kpiFee) kpiFee.textContent = 'Rp ' + (data.total_admin_fee || 0).toLocaleString('id-ID');
+
+    const kpiPop = document.getElementById('etrans-kpi-popular');
+    if (kpiPop) kpiPop.textContent = data.popular_category || '-';
+
+    _currentETransList = data.items || [];
+    renderETransTable(_currentETransList);
+  } catch (err) {
+    console.error('loadETransReport error:', err);
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:24px;color:#ef4444">Terjadi kesalahan saat memuat data: ' + esc(err.message) + '</td></tr>';
+  }
+}
+
+function renderETransTable(items) {
+  const tbody = document.getElementById('etrans-table');
+  if (!tbody) return;
+
+  if (!items || items.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:36px;color:#94a3b8">' +
+      '<div style="font-size:32px;margin-bottom:8px">⚡</div>' +
+      '<div style="font-weight:700;font-size:14px;color:#64748b">Belum Ada Transaksi E-Trans</div>' +
+      '<div style="font-size:12px;color:#94a3b8;margin-top:4px">Transaksi Pulsa, PLN, dan E-Money kasir pada filter ini akan otomatis tercatat di sini.</div>' +
+      '</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = items.map((it, idx) => {
+    let catBadge = '';
+    if (it.category === 'PLN') {
+      catBadge = '<span style="background:#fef3c7;color:#b45309;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px">⚡ PLN</span>';
+    } else if (it.category === 'EMONEY') {
+      catBadge = '<span style="background:#dbeafe;color:#1d4ed8;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px">💳 E-Money</span>';
+    } else if (it.category === 'PULSA') {
+      catBadge = '<span style="background:#dcfce7;color:#15803d;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px">📱 Pulsa/Data</span>';
+    } else {
+      catBadge = '<span style="background:#f3e8ff;color:#7e22ce;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px">📦 Lainnya</span>';
+    }
+
+    const targetBadge = (it.target_number && it.target_number !== '-') 
+      ? '<span style="font-family:monospace;background:#f1f5f9;color:#334155;padding:3px 8px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;border:1px solid #e2e8f0" onclick="copyETransText(\'' + esc(it.target_number) + '\', this)" title="Klik untuk salin">' + esc(it.target_number) + ' 📋</span>'
+      : '<span style="color:#94a3b8">-</span>';
+
+    const payBadge = it.payment === 'QRIS'
+      ? '<span style="background:#ede9fe;color:#6d28d9;padding:2px 6px;border-radius:4px;font-size:11px;font-weight:700">QRIS</span>'
+      : '<span style="background:#ecfdf5;color:#047857;padding:2px 6px;border-radius:4px;font-size:11px;font-weight:700">CASH</span>';
+
+    return '<tr>' +
+      '<td style="text-align:center;color:#64748b">' + (idx + 1) + '</td>' +
+      '<td style="white-space:nowrap;font-size:12px;color:#334155">' + esc(it.created_at || '-') + '</td>' +
+      '<td style="font-weight:700;font-family:monospace;font-size:12px;color:#0f172a">' + esc(it.tx_id) + '</td>' +
+      '<td>' + catBadge + '</td>' +
+      '<td style="font-weight:600;color:#0f172a">' + esc(it.product || it.raw_name) + '</td>' +
+      '<td>' + targetBadge + '</td>' +
+      '<td style="text-align:right;font-size:12px;color:#475569">Rp ' + (it.nominal || 0).toLocaleString('id-ID') + '</td>' +
+      '<td style="text-align:right;font-weight:700;color:#16a34a;font-size:12px">+Rp ' + (it.admin_fee || 0).toLocaleString('id-ID') + '</td>' +
+      '<td style="text-align:right;font-weight:800;color:#0f172a;font-size:13px">Rp ' + (it.total || 0).toLocaleString('id-ID') + '</td>' +
+      '<td style="font-size:12px;color:#475569">' + esc(it.cashier || '-') + '</td>' +
+      '<td style="text-align:center">' + payBadge + '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+function copyETransText(txt, el) {
+  if (!navigator.clipboard) {
+    prompt("Salin nomor tujuan:", txt);
+    return;
+  }
+  navigator.clipboard.writeText(txt).then(function() {
+    const original = el.innerHTML;
+    el.innerHTML = txt + ' ✅ Tersalin';
+    setTimeout(function() { el.innerHTML = original; }, 1500);
+  }).catch(function() {
+    prompt("Salin nomor tujuan:", txt);
+  });
+}
+
+function exportETransCSV() {
+  if (!_currentETransList || !_currentETransList.length) {
+    alert("Tidak ada data transaksi E-Trans untuk diekspor pada filter ini.");
+    return;
+  }
+  var headers = ["No", "Waktu (WIB)", "No. Struk", "Kategori", "Produk / Denominasi", "No. Tujuan / ID Pelanggan", "Nominal Pokok (Rp)", "Biaya Admin Toko (Rp)", "Total Bayar (Rp)", "Kasir", "Metode Bayar"];
+  var rows = _currentETransList.map(function(it, idx) {
+    return [
+      idx + 1,
+      '"' + (it.created_at || '').replace(/"/g, '""') + '"',
+      '"' + (it.tx_id || '').replace(/"/g, '""') + '"',
+      '"' + (it.category || '').replace(/"/g, '""') + '"',
+      '"' + (it.product || it.raw_name || '').replace(/"/g, '""') + '"',
+      '"\t' + (it.target_number || '').replace(/"/g, '""') + '"',
+      it.nominal || 0,
+      it.admin_fee || 0,
+      it.total || 0,
+      '"' + (it.cashier || '').replace(/"/g, '""') + '"',
+      '"' + (it.payment || '').replace(/"/g, '""') + '"'
+    ];
+  });
+  var csvString = "\uFEFF" + [headers.join(","), ...rows.map(r => r.join(","))].join("\r\n");
+  var blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+  var link = document.createElement("a");
+  var dateStr = new Date().toISOString().slice(0, 10);
+  link.href = URL.createObjectURL(blob);
+  link.setAttribute("download", "laporan_etrans_" + dateStr + ".csv");
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
 async function backupDB(){
   const token=sessionStorage.getItem("token")||"";
   if(!token){ alert("Sesi login berakhir. Silakan login ulang."); return; }

@@ -1771,7 +1771,7 @@ input, select, button { font-family: inherit; }
         </div>
         <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px 16px;margin-top:16px;display:flex;justify-content:space-between;align-items:center">
           <div>
-            <div style="font-size:11px;color:#64748b">Biaya Admin: <b style="color:#0f172a">Rp 1.500</b></div>
+            <div style="font-size:11px;color:#64748b">Biaya Admin: <b style="color:#0f172a" id="etrans-admin-fee-badge">Rp 1.500</b></div>
             <div style="font-size:13px;font-weight:700;color:#0f172a" id="etrans-selected-info">Pilih nominal di atas</div>
           </div>
           <div style="text-align:right">
@@ -2591,7 +2591,7 @@ function selectETransDenom(tab, idx, cardEl){
   _selectedETrans = list[idx];
   if(!_selectedETrans) return;
 
-  var adminFee = 1500;
+  var adminFee = currentETransAdminFee;
   var total = _selectedETrans.amount + adminFee;
   document.getElementById("etrans-selected-info").textContent = _selectedETrans.name;
   document.getElementById("etrans-total-val").textContent = "Rp " + total.toLocaleString("id-ID");
@@ -2606,7 +2606,7 @@ function addSelectedETransToCart(){
     document.getElementById("etrans-number").focus();
     return;
   }
-  var adminFee = 1500;
+  var adminFee = currentETransAdminFee;
   var total = _selectedETrans.amount + adminFee;
   var itemDesc = "E-Trans " + _selectedETrans.name + " (" + num + ")";
 
@@ -2928,9 +2928,10 @@ window.addEventListener("keydown", function(e){
   }
 });
 
-// QRIS
+// QRIS & Layanan E-Trans Settings
 var staticQrisImage = "";
 var currentStoreName = "YMB Mart";
+var currentETransAdminFee = 1500;
 
 async function loadStoreSettingsForQris(){
   try{
@@ -2938,6 +2939,14 @@ async function loadStoreSettingsForQris(){
     var s = await r.json();
     if(s.store_name) currentStoreName = s.store_name;
     if(s.qris_image) staticQrisImage = s.qris_image;
+    if(s.etrans_admin_fee !== undefined && s.etrans_admin_fee !== ""){
+      var fee = parseInt(s.etrans_admin_fee);
+      if(!isNaN(fee) && fee >= 0){
+        currentETransAdminFee = fee;
+        var badge = document.getElementById("etrans-admin-fee-badge");
+        if(badge) badge.textContent = "Rp " + currentETransAdminFee.toLocaleString("id-ID");
+      }
+    }
   }catch(e){}
 }
 loadStoreSettingsForQris();
@@ -3005,7 +3014,7 @@ async function checkout(){
   var discount=0;
   if(discountType==="percent"){discount=Math.round(subtotal*discountInput/100)}
   else{discount=discountInput}
-  var items=cart.map(function(i){return{product_id:i.product_id,qty:i.qty,discount:0,notes:""}});
+  var items=cart.map(function(i){return{product_id:i.product_id,name:i.name,price:i.price,qty:i.qty,discount:0,notes:""}});
   var purchasedItems=cart.map(function(i){return{product_id:i.product_id,name:i.name,qty:i.qty}});
   // Auto-refresh CSRF if empty
   if(!csrfToken){await fetchCsrfToken(currentToken)}

@@ -168,6 +168,7 @@ func setupRouter() *http.ServeMux {
 	mux.HandleFunc("/api/payment-breakdown", requireAuthHandler(handlePaymentBreakdown))
 	mux.HandleFunc("/api/daily-report", handleDailyReport)
 	mux.HandleFunc("/api/stock-report", handleStockReport)
+	mux.HandleFunc("/api/reports/etrans", adminOnly(handleGetETransReport))
 	mux.HandleFunc("/api/e-voucher", requireCSRF(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
 			handleGetEVouchers(w, r)

@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1104,6 +1105,31 @@ func handleCheckout(w http.ResponseWriter, r *http.Request) {
 		if ci.Qty <= 0 {
 			continue
 		}
+		if ci.ProductID <= 0 {
+			itemName := strings.TrimSpace(ci.Name)
+			if itemName == "" {
+				itemName = "Layanan E-Trans"
+			}
+			effectivePrice := ci.Price
+			if effectivePrice <= 0 {
+				continue
+			}
+			sub := effectivePrice * ci.Qty
+			total += sub
+			items = append(items, checkoutItem{
+				ProductID: 0,
+				Name:      itemName,
+				Qty:       ci.Qty,
+				Price:     effectivePrice,
+				Discount:  0,
+				Subtotal:  sub,
+				TaxRate:   0,
+				Notes:     ci.Notes,
+			})
+			sqlTx.Exec("INSERT INTO tx_items (tx_id,product_id,name,qty,price,discount,subtotal,notes) VALUES (?,?,?,?,?,?,?,?)",
+				txID, 0, itemName, ci.Qty, effectivePrice, 0, sub, ci.Notes)
+			continue
+		}
 		var p Product
 		err := sqlTx.QueryRow("SELECT id,name,price,promo_price,promo_active,stock,tax_rate FROM products WHERE id=? AND active=1", ci.ProductID).
 			Scan(&p.ID, &p.Name, &p.Price, &p.PromoPrice, &p.PromoActive, &p.Stock, &p.TaxRate)
@@ -1511,11 +1537,21 @@ func handleEVoucher(w http.ResponseWriter, r *http.Request) {
 
 	txID := generateID("EV", 8)
 	adminFee := 1500
+	var feeStr string
+	if err := db.QueryRow("SELECT value FROM settings WHERE key='etrans_admin_fee'").Scan(&feeStr); err == nil {
+		if f, err := strconv.Atoi(feeStr); err == nil && f >= 0 {
+			adminFee = f
+		}
+	}
 	total := req.Amount + adminFee
 
 	db.Exec("INSERT INTO transactions (tx_id,shift_id,total,discount,tax,grand_total,payment,amount_paid,change_amount,customer_name,cashier,notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
 		txID, nullInt(req.ShiftID), total, 0, 0, total, "CASH", total, 0,
 		req.Number, req.Cashier, fmt.Sprintf("E-Voucher %s %s", req.Type, req.Product))
+
+	desc := fmt.Sprintf("E-Trans %s %s (%s)", req.Type, req.Product, req.Number)
+	db.Exec("INSERT INTO tx_items (tx_id,product_id,name,qty,price,discount,subtotal,notes) VALUES (?,?,?,?,?,?,?,?)",
+		txID, 0, desc, 1, total, 0, total, "")
 
 	if req.ShiftID > 0 {
 		db.Exec("UPDATE shifts SET total_sales=total_sales+?, total_tx=total_tx+1 WHERE id=?", total, req.ShiftID)
@@ -1552,6 +1588,249 @@ func handleGetEVouchers(w http.ResponseWriter, r *http.Request) {
 		{"type": "pln", "product": "Token 200K", "amount": 200000, "category": "PLN"},
 	}
 	jsonResponse(w, vouchers, 200)
+}
+
+// === E-Trans Reports & Analytics ===
+type ETransItemReport struct {
+	ID           int64  `json:"id"`
+	TxID         string `json:"tx_id"`
+	CreatedAt    string `json:"created_at"`
+	Payment      string `json:"payment"`
+	Cashier      string `json:"cashier"`
+	CustomerName string `json:"customer_name"`
+	RawName      string `json:"raw_name"`
+	Product      string `json:"product"`
+	TargetNumber string `json:"target_number"`
+	Category     string `json:"category"` // PULSA, PLN, EMONEY, LAINNYA
+	Qty          int    `json:"qty"`
+	Nominal      int    `json:"nominal"`
+	AdminFee     int    `json:"admin_fee"`
+	Total        int    `json:"total"`
+}
+
+type ETransCategoryStat struct {
+	Count int `json:"count"`
+	GMV   int `json:"gmv"`
+	Fee   int `json:"fee"`
+}
+
+type ETransSummaryReport struct {
+	TotalTx           int                           `json:"total_tx"`
+	TotalGMV          int                           `json:"total_gmv"`
+	TotalAdminFee     int                           `json:"total_admin_fee"`
+	TotalNominal      int                           `json:"total_nominal"`
+	PopularCategory   string                        `json:"popular_category"`
+	CategoryBreakdown map[string]ETransCategoryStat `json:"category_breakdown"`
+	Cashiers          []string                      `json:"cashiers"`
+	Items             []ETransItemReport            `json:"items"`
+}
+
+func handleGetETransReport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		jsonResponse(w, map[string]string{"error": "Method not allowed"}, 405)
+		return
+	}
+
+	reqCat := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("category")))
+	reqCashier := strings.TrimSpace(r.URL.Query().Get("cashier"))
+	reqQ := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
+
+	adminFeePerTx := 1500
+	var feeStr string
+	if err := db.QueryRow("SELECT value FROM settings WHERE key='etrans_admin_fee'").Scan(&feeStr); err == nil {
+		if f, err := strconv.Atoi(feeStr); err == nil && f >= 0 {
+			adminFeePerTx = f
+		}
+	}
+
+	var conds []string
+	var args []interface{}
+
+	conds = append(conds, "t.status = 'completed'")
+	conds = append(conds, "(ti.name LIKE 'E-Trans%' OR ti.name LIKE 'E-Voucher%' OR t.notes LIKE 'E-Voucher%' OR t.tx_id LIKE 'EV%')")
+
+	if startDate := r.URL.Query().Get("start_date"); startDate != "" {
+		conds = append(conds, "t.created_at >= ?")
+		args = append(args, startDate+" 00:00:00")
+	}
+	if endDate := r.URL.Query().Get("end_date"); endDate != "" {
+		conds = append(conds, "t.created_at <= ?")
+		args = append(args, endDate+" 23:59:59")
+	}
+	if date := r.URL.Query().Get("date"); date != "" {
+		conds = append(conds, "t.created_at LIKE ?")
+		args = append(args, date+"%")
+	}
+	if month := r.URL.Query().Get("month"); month != "" {
+		conds = append(conds, "t.created_at LIKE ?")
+		args = append(args, month+"%")
+	}
+	if reqCashier != "" && reqCashier != "all" {
+		conds = append(conds, "t.cashier = ?")
+		args = append(args, reqCashier)
+	}
+
+	query := `
+		SELECT ti.id, ti.tx_id, ti.name, ti.qty, ti.price, ti.subtotal, t.payment, t.cashier, t.customer_name, t.created_at
+		FROM tx_items ti
+		JOIN transactions t ON ti.tx_id = t.tx_id
+		WHERE ` + strings.Join(conds, " AND ") + `
+		ORDER BY t.created_at DESC`
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		logError("handleGetETransReport", err)
+		jsonResponse(w, ETransSummaryReport{
+			CategoryBreakdown: map[string]ETransCategoryStat{},
+			Cashiers:          []string{},
+			Items:             []ETransItemReport{},
+		}, 200)
+		return
+	}
+	defer rows.Close()
+
+	reTarget := regexp.MustCompile(`\(([^)]+)\)`)
+
+	var items []ETransItemReport
+	cashierSet := make(map[string]bool)
+	categoryBreakdown := map[string]ETransCategoryStat{
+		"PULSA":   {Count: 0, GMV: 0, Fee: 0},
+		"PLN":     {Count: 0, GMV: 0, Fee: 0},
+		"EMONEY":  {Count: 0, GMV: 0, Fee: 0},
+		"LAINNYA": {Count: 0, GMV: 0, Fee: 0},
+	}
+
+	totalGMV := 0
+	totalAdminFee := 0
+	totalNominal := 0
+
+	for rows.Next() {
+		var it ETransItemReport
+		var rawName, payment, cashier, custName, createdAt string
+		var id int64
+		var qty, price, subtotal int
+
+		if err := rows.Scan(&id, &it.TxID, &rawName, &qty, &price, &subtotal, &payment, &cashier, &custName, &createdAt); err != nil {
+			continue
+		}
+
+		it.ID = id
+		it.RawName = rawName
+		it.Qty = qty
+		it.Total = subtotal
+		it.Payment = payment
+		it.Cashier = cashier
+		it.CustomerName = custName
+		it.CreatedAt = createdAt
+		if cashier != "" {
+			cashierSet[cashier] = true
+		}
+
+		// Extract target number & product
+		targetNum := "-"
+		prodName := rawName
+		if m := reTarget.FindStringSubmatch(rawName); len(m) > 1 {
+			targetNum = strings.TrimSpace(m[1])
+			prodName = strings.TrimSpace(strings.Replace(rawName, m[0], "", 1))
+		} else if custName != "" && custName != "Umum" && custName != "-" {
+			targetNum = custName
+		}
+		it.TargetNumber = targetNum
+
+		prodName = strings.TrimPrefix(prodName, "E-Trans ")
+		prodName = strings.TrimPrefix(prodName, "E-Voucher ")
+		prodName = strings.TrimSpace(prodName)
+		it.Product = prodName
+
+		// Classify category
+		pLower := strings.ToLower(rawName)
+		cat := "LAINNYA"
+		if strings.Contains(pLower, "pln") || strings.Contains(pLower, "listrik") || strings.Contains(pLower, "token") {
+			cat = "PLN"
+		} else if strings.Contains(pLower, "dana") || strings.Contains(pLower, "gopay") || strings.Contains(pLower, "ovo") || strings.Contains(pLower, "shopee") || strings.Contains(pLower, "emoney") || strings.Contains(pLower, "e-money") || strings.Contains(pLower, "dompet") {
+			cat = "EMONEY"
+		} else if strings.Contains(pLower, "telkomsel") || strings.Contains(pLower, "indosat") || strings.Contains(pLower, "xl") || strings.Contains(pLower, "tri") || strings.Contains(pLower, "axis") || strings.Contains(pLower, "smartfren") || strings.Contains(pLower, "pulsa") || strings.Contains(pLower, "data") || strings.Contains(pLower, "paket") {
+			cat = "PULSA"
+		}
+		it.Category = cat
+
+		// Filter Category if specified
+		if reqCat != "" && reqCat != "ALL" && cat != reqCat {
+			continue
+		}
+
+		// Filter search query if specified
+		if reqQ != "" {
+			matchQ := strings.Contains(strings.ToLower(it.TargetNumber), reqQ) ||
+				strings.Contains(strings.ToLower(it.TxID), reqQ) ||
+				strings.Contains(strings.ToLower(it.Product), reqQ) ||
+				strings.Contains(strings.ToLower(it.Cashier), reqQ)
+			if !matchQ {
+				continue
+			}
+		}
+
+		// Calculate admin fee & nominal
+		itemFee := adminFeePerTx * qty
+		itemNominal := subtotal - itemFee
+		if itemNominal < 0 {
+			itemNominal = subtotal
+			itemFee = 0
+		}
+		it.AdminFee = itemFee
+		it.Nominal = itemNominal
+
+		// Aggregations
+		totalGMV += subtotal
+		totalAdminFee += itemFee
+		totalNominal += itemNominal
+
+		cStat := categoryBreakdown[cat]
+		cStat.Count += qty
+		cStat.GMV += subtotal
+		cStat.Fee += itemFee
+		categoryBreakdown[cat] = cStat
+
+		items = append(items, it)
+	}
+
+	if items == nil {
+		items = []ETransItemReport{}
+	}
+
+	popCat := "-"
+	maxCount := 0
+	catLabels := map[string]string{
+		"PULSA":   "Pulsa & Paket Data",
+		"PLN":     "Token Listrik PLN",
+		"EMONEY":  "Dompet Digital (E-Money)",
+		"LAINNYA": "Lainnya",
+	}
+	for catK, cStat := range categoryBreakdown {
+		if cStat.Count > maxCount {
+			maxCount = cStat.Count
+			popCat = catLabels[catK]
+		}
+	}
+
+	var cashierList []string
+	for c := range cashierSet {
+		cashierList = append(cashierList, c)
+	}
+	sort.Strings(cashierList)
+
+	resp := ETransSummaryReport{
+		TotalTx:           len(items),
+		TotalGMV:          totalGMV,
+		TotalAdminFee:     totalAdminFee,
+		TotalNominal:      totalNominal,
+		PopularCategory:   popCat,
+		CategoryBreakdown: categoryBreakdown,
+		Cashiers:          cashierList,
+		Items:             items,
+	}
+
+	jsonResponse(w, resp, 200)
 }
 
 // === Receipt ===
