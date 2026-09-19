@@ -2162,6 +2162,12 @@ async function showCloseShiftModal(){
     }
   }).catch(function(){});
 
+  var btn = document.getElementById("btn-submit-close-shift");
+  if(btn){
+    btn.disabled = false;
+    btn.textContent = "Selesai & Tutup Shift";
+  }
+
   document.getElementById("close-shift-modal").style.display = "flex";
   setTimeout(function(){
     var inp = document.getElementById("cs-closing-cash");
@@ -2171,6 +2177,11 @@ async function showCloseShiftModal(){
 
 function closeCloseShiftModal(){
   document.getElementById("close-shift-modal").style.display = "none";
+  var btn = document.getElementById("btn-submit-close-shift");
+  if(btn){
+    btn.disabled = false;
+    btn.textContent = "Selesai & Tutup Shift";
+  }
 }
 
 function toggleDenominations(){
@@ -2267,6 +2278,10 @@ async function submitCloseShift(){
       "• Selisih Kas: " + discText
     );
 
+    if(btn){
+      btn.disabled = false;
+      btn.textContent = "Selesai & Tutup Shift";
+    }
     closeCloseShiftModal();
     doDirectLogout();
   } catch(e){
@@ -2278,6 +2293,11 @@ async function submitCloseShift(){
 
 function doDirectLogout(){
   currentUser="";currentDisplayName="";currentToken="";currentShiftId=null;activeMember=null;
+  var btn = document.getElementById("btn-submit-close-shift");
+  if(btn){
+    btn.disabled = false;
+    btn.textContent = "Selesai & Tutup Shift";
+  }
   sessionStorage.removeItem("kasir_token");
   sessionStorage.removeItem("kasir_user");
   sessionStorage.removeItem("kasir_display_name");
