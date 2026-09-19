@@ -597,6 +597,12 @@ func initDB() {
 	db.Exec("UPDATE settings SET value='https://ymb-mart.vercel.app' WHERE key='public_presensi_url' AND (value='' OR value LIKE '%localhost%' OR value LIKE '%127.0.0.1%')")
 }
 
+var wibLocation = time.FixedZone("WIB", 7*3600)
+
+func nowWIB() time.Time {
+	return time.Now().In(wibLocation)
+}
+
 func now() string {
-	return time.Now().Format("2006-01-02 15:04:05")
+	return nowWIB().Format("2006-01-02 15:04:05")
 }

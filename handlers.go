@@ -1204,7 +1204,7 @@ func handleCheckout(w http.ResponseWriter, r *http.Request) {
 		"grand_total": grandTotal, "payment": req.Payment,
 		"amount_paid": amountPaid, "change": change, "items": items,
 		"customer": req.CustomerName, "cashier": req.Cashier, "shift_id": req.ShiftID,
-		"time": time.Now().Format("15:04:05"), "date": time.Now().Format("2006-01-02"),
+		"time": nowWIB().Format("15:04:05"), "date": nowWIB().Format("2006-01-02"),
 	}
 
 	wsBroadcast(WSMessage{Type: "new_transaction", Data: txData})
@@ -1395,7 +1395,7 @@ func handleVoidTransaction(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, map[string]interface{}{"status": "ok", "message": "Transaction voided with full reversal"}, 200)
 }
 func handleGetStats(w http.ResponseWriter, r *http.Request) {
-	today := time.Now().Format("2006-01-02")
+	today := nowWIB().Format("2006-01-02")
 	todayPattern := today + "%"
 
 	var totalSales, totalTx, totalProfit, lowStock, memberCount int
@@ -1527,7 +1527,7 @@ func handleEVoucher(w http.ResponseWriter, r *http.Request) {
 			{"name": fmt.Sprintf("%s %s", req.Type, req.Product), "qty": 1, "price": req.Amount, "subtotal": req.Amount},
 			{"name": "Admin Fee", "qty": 1, "price": adminFee, "subtotal": adminFee},
 		},
-		"time": time.Now().Format("15:04:05"), "date": time.Now().Format("2006-01-02"),
+		"time": nowWIB().Format("15:04:05"), "date": nowWIB().Format("2006-01-02"),
 	}
 	wsBroadcast(WSMessage{Type: "new_transaction", Data: txData})
 	jsonResponse(w, txData, 200)
@@ -1662,7 +1662,7 @@ func handleDailyReport(w http.ResponseWriter, r *http.Request) {
 		labelDate = date
 	} else {
 		if date == "" {
-			date = time.Now().Format("2006-01-02")
+			date = nowWIB().Format("2006-01-02")
 		}
 		dateCond = "created_at LIKE ?"
 		dateCondT = "t.created_at LIKE ?"
@@ -1782,7 +1782,7 @@ func handleSalesTrend(w http.ResponseWriter, r *http.Request) {
 
 	trendMap := make(map[string]*TrendPoint)
 	var dates []string
-	now := time.Now()
+	now := nowWIB()
 	for i := 6; i >= 0; i-- {
 		d := now.AddDate(0, 0, -i).Format("2006-01-02")
 		dates = append(dates, d)
@@ -1818,7 +1818,7 @@ func handleSalesTrend(w http.ResponseWriter, r *http.Request) {
 
 // === Payment Breakdown ===
 func handlePaymentBreakdown(w http.ResponseWriter, r *http.Request) {
-	today := time.Now().Format("2006-01-02") + "%"
+	today := nowWIB().Format("2006-01-02") + "%"
 	type PayMethod struct {
 		Method string `json:"method"`
 		Count  int    `json:"count"`
@@ -2323,7 +2323,7 @@ func handleAIWebhook(w http.ResponseWriter, r *http.Request) {
 func handleAIReport(w http.ResponseWriter, r *http.Request) {
 	date := r.URL.Query().Get("date")
 	if date == "" {
-		date = time.Now().Format("2006-01-02")
+		date = nowWIB().Format("2006-01-02")
 	}
 
 	// Total sales
@@ -2829,7 +2829,7 @@ func handleCreateStockOpname(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	req.OpnameDate = strings.TrimSpace(req.OpnameDate)
 	if req.OpnameDate == "" {
-		req.OpnameDate = time.Now().Format("2006-01-02")
+		req.OpnameDate = nowWIB().Format("2006-01-02")
 	}
 
 	result, err := db.Exec("INSERT INTO stock_opname_sessions (created_by, status, opname_date, notes, sync_status) VALUES (?, 'open', ?, ?, 'pending')", username, req.OpnameDate, req.Notes)
@@ -3047,12 +3047,12 @@ func handleSubmitStockOpname(w http.ResponseWriter, r *http.Request) {
 		}
 
 		difference := item.PhysicalQty - systemQty
-		now := time.Now()
+		nowStr := nowWIB().Format("2006-01-02 15:04:05")
 
 		_, err = db.Exec(`UPDATE stock_opname_items 
 			SET physical_qty = ?, difference = ?, scanned_at = ?, user = ?, sync_status = 'pending'
 			WHERE session_id = ? AND product_id = ?`,
-			item.PhysicalQty, difference, now, username, sessionID, item.ProductID)
+			item.PhysicalQty, difference, nowStr, username, sessionID, item.ProductID)
 		if err != nil {
 			logError("handleSubmitStockOpname update item", err)
 			jsonResponse(w, map[string]string{"error": "Failed to update item"}, 500)
@@ -3132,7 +3132,7 @@ func handleApplyStockOpname(w http.ResponseWriter, r *http.Request) {
 	// Conditional close: only succeeds if status is still open
 	result, err := tx.Exec(
 		"UPDATE stock_opname_sessions SET status = 'closed', closed_at = ?, sync_status = 'pending' WHERE id = ? AND status = 'open'",
-		time.Now(), sessionID)
+		nowWIB().Format("2006-01-02 15:04:05"), sessionID)
 	if err != nil {
 		logError("handleApplyStockOpname close session", err)
 		tx.Rollback()
@@ -3350,17 +3350,18 @@ func handleRecordPresensi(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	now := time.Now()
+	now := nowWIB()
 	dateStr := now.Format("2006-01-02")
 	timeStr := now.Format("15:04:05")
+	createdAtStr := now.Format("2006-01-02 15:04:05")
 	cashierName := user.DisplayName
 	if cashierName == "" {
 		cashierName = user.Username
 	}
 
-	res, err := db.Exec(`INSERT INTO attendance (user_id, username, cashier_name, type, date, time, notes, device_info, sync_status) 
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
-		user.ID, user.Username, cashierName, req.Type, dateStr, timeStr, req.Notes, req.DeviceInfo)
+	res, err := db.Exec(`INSERT INTO attendance (user_id, username, cashier_name, type, date, time, notes, device_info, created_at, sync_status) 
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+		user.ID, user.Username, cashierName, req.Type, dateStr, timeStr, req.Notes, req.DeviceInfo, createdAtStr)
 	if err != nil {
 		logError("handleRecordPresensi", err)
 		jsonResponse(w, map[string]string{"status": "error", "message": "Gagal menyimpan data presensi ke database"}, 500)
@@ -3436,7 +3437,7 @@ func handleGetPresensiList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Stats for today
-	todayStr := time.Now().Format("2006-01-02")
+	todayStr := nowWIB().Format("2006-01-02")
 	var totalToday, masukToday, pulangToday int
 	db.QueryRow("SELECT COUNT(*) FROM attendance WHERE date = ?", todayStr).Scan(&totalToday)
 	db.QueryRow("SELECT COUNT(*) FROM attendance WHERE date = ? AND type = 'masuk'", todayStr).Scan(&masukToday)

@@ -189,7 +189,7 @@ func DoSync() {
 	}
 
 	syncMu.Lock()
-	currentSyncStatus.LastSync = time.Now().Format("2006-01-02 15:04:05")
+	currentSyncStatus.LastSync = nowWIB().Format("2006-01-02 15:04:05")
 	syncMu.Unlock()
 }
 
