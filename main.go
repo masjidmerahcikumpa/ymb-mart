@@ -579,7 +579,7 @@ func initDB() {
 	}
 
 	settings := map[string]string{
-		"store_name":   "Masjid Jami' Baiturrahman",
+		"store_name":   "Baiturrahman Mart",
 		"opening_cash": "500000",
 		"store_address": "Jl. Tole Iskandar No.KM. 3, Mekar Jaya, Kec. Sukmajaya, Kota Depok, Jawa Barat 16411",
 		"store_phone":  "081234567890",
@@ -598,6 +598,7 @@ func initDB() {
 	}
 	db.Exec("UPDATE settings SET value='0' WHERE key='ppn_rate'")
 	db.Exec("UPDATE settings SET value='https://ymb-mart.vercel.app' WHERE key='public_presensi_url' AND (value='' OR value LIKE '%localhost%' OR value LIKE '%127.0.0.1%')")
+	db.Exec("UPDATE settings SET value='Baiturrahman Mart' WHERE key='store_name' AND (value='YMB Mart' OR value='Masjid Jami'' Baiturrahman')")
 }
 
 var wibLocation = time.FixedZone("WIB", 7*3600)

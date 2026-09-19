@@ -1,6 +1,6 @@
 <!DOCTYPE html><html lang="id"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>YMB Mart - Backoffice & Executive Dashboard</title>
+<title>Baiturrahman Mart - Backoffice & Executive Dashboard</title>
 <link rel="icon" type="image/png" href="/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -361,7 +361,7 @@ tr:hover td{background:#f8fafc}
       <div style="display:flex;align-items:center;gap:12px;min-width:0">
         <img src="/logo.png" alt="YMB" class="brand-badge" style="object-fit:contain;background:#ffffff;padding:2px">
         <div class="brand-text">
-          <div class="brand-name">YMB MART</div>
+          <div class="brand-name">BAITURRAHMAN MART</div>
           <div class="brand-sub">Yayasan Masjid Baiturrahman</div>
         </div>
       </div>
@@ -475,7 +475,7 @@ tr:hover td{background:#f8fafc}
         <button class="btn-hamburger" id="sidebar-toggle-btn" onclick="toggleSidebar()" aria-label="Menu Navigasi" title="Buka/Tutup Menu">
           <svg viewBox="0 0 24 24"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
         </button>
-        <span class="topbar-brand-crumb">YMB Mart</span>
+        <span class="topbar-brand-crumb">Baiturrahman Mart</span>
         <span class="topbar-sep">/</span>
         <span class="topbar-current-crumb" id="topbar-title">Dashboard Eksekutif</span>
       </div>
@@ -1544,7 +1544,7 @@ async function printDailySummary(targetDate){
       authFetch("/api/settings").then(r => r.json()).catch(() => ({}))
     ]);
 
-    const storeName = setRes.store_name || "YMB Mart";
+    const storeName = setRes.store_name || "Baiturrahman Mart";
     const storeAddress = setRes.store_address || "Yayasan Masjid Baiturrahman, Sukmajaya, Kota Depok";
     const storePhone = setRes.store_phone || "-";
 
@@ -1758,7 +1758,7 @@ async function printDailySummary(targetDate){
         <div class="sig-name">( ............................................ )</div>
       </div>
       <div>
-        <div class="sig-role">Diperiksa Oleh:<br><b>Pengelola / Manajer YMB Mart</b></div>
+        <div class="sig-role">Diperiksa Oleh:<br><b>Pengelola / Manajer Baiturrahman Mart</b></div>
         <div class="sig-name">( ............................................ )</div>
       </div>
       <div>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Customer Display — YMB Mart</title>
+<title>Customer Display — Baiturrahman Mart</title>
 <link rel="icon" type="image/png" href="/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -533,7 +533,7 @@ body {
     <div class="ad-carousel" id="ad-carousel">
       <div class="ad-fallback" id="ad-fallback">
         <div class="ad-badge">
-          <span>✨ Promo Pilihan YMB Mart</span>
+          <span>✨ Promo Pilihan Baiturrahman Mart</span>
         </div>
         <h2 id="ad-title">Belanja Berkah & Hemat Setiap Hari</h2>
         <p id="ad-desc">Dapatkan aneka produk kebutuhan harian dengan harga terjangkau dan kualitas terjamin di Masjid Jami' Baiturrahman.</p>
@@ -549,12 +549,12 @@ body {
       <span>INFO PROMO</span>
     </div>
     <div class="marquee-scroll-area">
-      <p class="ad-marquee-text marquee" id="ad-marquee">🎉 Selamat datang di YMB Mart! Belanja berkah & nyaman setiap hari 🎉</p>
+      <p class="ad-marquee-text marquee" id="ad-marquee">🎉 Selamat datang di Baiturrahman Mart! Belanja berkah & nyaman setiap hari 🎉</p>
     </div>
   </div>
 
   <div class="footer">
-    <span>Masjid Jami' Baiturrahman &bull; YMB Mart</span>
+    <span>Masjid Jami' Baiturrahman &bull; Baiturrahman Mart</span>
     <span>Customer Display v2.3</span>
   </div>
 </div>
@@ -623,7 +623,7 @@ body {
     <div class="r-info-box">
       <div class="r-info-text">
         <div><b>Informasi Customer:</b></div>
-        <div>Minta dan periksa kembali struk belanja Anda. Terima kasih telah berbelanja di YMB Mart.</div>
+        <div>Minta dan periksa kembali struk belanja Anda. Terima kasih telah berbelanja di Baiturrahman Mart.</div>
       </div>
       <div class="r-clock-badge" id="clock">--:--:--</div>
     </div>
@@ -640,7 +640,7 @@ body {
       <span style="font-size:15px">⚡</span>
       <span style="font-size:12.5px;font-weight:800;color:#d32f2f;text-transform:uppercase;letter-spacing:0.5px">Pembayaran QRIS</span>
     </div>
-    <h2 style="font-size:18px;font-weight:800;color:#0f172a;margin-bottom:4px" id="c-qris-store">YMB Mart</h2>
+    <h2 style="font-size:18px;font-weight:800;color:#0f172a;margin-bottom:4px" id="c-qris-store">Baiturrahman Mart</h2>
     <p style="font-size:12px;color:#64748b;margin-bottom:16px">Scan kode QR di bawah ini dengan aplikasi mobile banking atau e-wallet Anda</p>
 
     <!-- Nominal Tagihan -->
@@ -695,7 +695,7 @@ function renderCarousel(){
   if(!_adImages.length){
     el.innerHTML = '<div class="ad-fallback" id="ad-fallback">' +
       '<div style="margin-bottom:16px"><img src="/logo.png" alt="Logo YMB" style="width:96px;height:96px;object-fit:contain;background:#ffffff;border-radius:50%;padding:4px;box-shadow:0 6px 18px rgba(0,0,0,0.08);border:2px solid #d4af37"></div>' +
-      '<div class="ad-badge"><span>✨ Promo Pilihan YMB Mart</span></div>' +
+      '<div class="ad-badge"><span>✨ Promo Pilihan Baiturrahman Mart</span></div>' +
       '<h2 id="ad-title">Belanja Berkah & Hemat Setiap Hari</h2>' +
       '<p id="ad-desc">Dapatkan aneka produk kebutuhan harian dengan harga terjangkau dan kualitas terjamin di Masjid Jami\' Baiturrahman.</p>' +
     '</div>';
@@ -843,7 +843,7 @@ function handleShowQris(data){
   if(!overlay) return;
   var total = (data && data.total) || 0;
   var qrUrl = (data && data.qr_url) || "";
-  var store = (data && data.store_name) || "YMB Mart";
+  var store = (data && data.store_name) || "Baiturrahman Mart";
   
   var amtEl = document.getElementById("c-qris-amount");
   if(amtEl) amtEl.textContent = "Rp " + Number(total).toLocaleString("id-ID");
