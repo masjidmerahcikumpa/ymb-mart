@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+
+<html lang="id"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Lacak Pesanan - Baiturrahman Mart Online</title>
+<!-- Google Fonts & Material Symbols -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "surface-container": "#e5eeff",
+            "error": "#ba1a1a",
+            "tertiary-fixed-dim": "#4edea3",
+            "surface-tint": "#ab2f4e",
+            "primary-fixed": "#ffd9dd",
+            "tertiary-container": "#005237",
+            "outline": "#8a7174",
+            "surface-bright": "#f8f9ff",
+            "inverse-surface": "#213145",
+            "secondary-fixed": "#ffe088",
+            "secondary-fixed-dim": "#e9c349",
+            "on-secondary-fixed": "#241a00",
+            "error-container": "#ffdad6",
+            "surface-container-lowest": "#ffffff",
+            "primary-fixed-dim": "#ffb2bd",
+            "outline-variant": "#debfc2",
+            "on-primary": "#ffffff",
+            "on-error-container": "#93000a",
+            "secondary": "#735c00",
+            "on-secondary": "#ffffff",
+            "inverse-on-surface": "#eaf1ff",
+            "background": "#f8f9ff",
+            "tertiary": "#003925",
+            "surface-dim": "#cbdbf5",
+            "primary": "#670024",
+            "on-surface-variant": "#574144",
+            "on-secondary-fixed-variant": "#574500",
+            "tertiary-fixed": "#6ffbbe",
+            "surface-container-low": "#eff4ff",
+            "surface-container-highest": "#d3e4fe",
+            "on-primary-fixed-variant": "#8a1438",
+            "secondary-container": "#fed65b",
+            "on-surface": "#0b1c30",
+            "on-secondary-container": "#745c00",
+            "on-tertiary-container": "#37cd93",
+            "surface-container-high": "#dce9ff",
+            "on-primary-fixed": "#400013",
+            "primary-container": "#8b1538",
+            "inverse-primary": "#ffb2bd",
+            "on-error": "#ffffff",
+            "surface-variant": "#d3e4fe",
+            "surface": "#f8f9ff",
+            "on-tertiary-fixed": "#002113",
+            "on-tertiary": "#ffffff",
+            "on-tertiary-fixed-variant": "#005236",
+            "on-background": "#0b1c30",
+            "on-primary-container": "#ff98a8"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "2xl": "1rem",
+            "3xl": "1.5rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "space-xs": "0.25rem",
+            "margin": "1rem",
+            "space-sm": "0.5rem",
+            "space-md": "0.75rem",
+            "gutter": "0.75rem",
+            "space-xl": "1.5rem",
+            "space-lg": "1rem"
+          },
+          "fontFamily": {
+            "display-lg": ["Plus Jakarta Sans"],
+            "body-md": ["Plus Jakarta Sans"],
+            "body-lg": ["Plus Jakarta Sans"],
+            "price-value": ["Plus Jakarta Sans"],
+            "label-sm": ["Inter"],
+            "headline-lg": ["Plus Jakarta Sans"],
+            "label-lg": ["Inter"],
+            "headline-lg-mobile": ["Plus Jakarta Sans"],
+            "body-sm": ["Plus Jakarta Sans"],
+            "price-currency": ["Inter"],
+            "label-md": ["Inter"],
+            "headline-md": ["Plus Jakarta Sans"]
+          },
+          "fontSize": {
+            "display-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "800" }],
+            "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+            "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "500" }],
+            "price-value": ["16px", { "lineHeight": "20px", "fontWeight": "800" }],
+            "label-sm": ["10px", { "lineHeight": "12px", "letterSpacing": "0.04em", "fontWeight": "700" }],
+            "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "700" }],
+            "label-lg": ["14px", { "lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600" }],
+            "headline-lg-mobile": ["20px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700" }],
+            "body-sm": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+            "price-currency": ["11px", { "lineHeight": "14px", "fontWeight": "600" }],
+            "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600" }],
+            "headline-md": ["18px", { "lineHeight": "24px", "fontWeight": "600" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.9); opacity: 0.8; }
+      50% { transform: scale(1.4); opacity: 0; }
+      100% { transform: scale(0.9); opacity: 0; }
+    }
+    .animate-courier-ping {
+      animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface font-body-md antialiased min-h-screen selection:bg-primary selection:text-on-primary">
+<div class="max-w-[480px] mx-auto bg-surface min-h-screen relative flex flex-col pb-12 shadow-2xl">
+<!-- 1. STICKY TOP APP BAR (TASK-FOCUSED SUBPAGE: Hides BottomNav Shell per rule) -->
+<header class="sticky top-0 z-40 bg-surface-container-lowest/95 backdrop-blur-md px-margin py-3 shadow-sm flex items-center justify-between transition-all">
+<div class="flex items-center gap-3">
+<a class="w-10 h-10 rounded-xl bg-surface-container-low hover:bg-surface-container flex items-center justify-center text-primary active:scale-95 transition-all" href="#">
+<span class="material-symbols-outlined text-primary text-xl">arrow_back</span>
+</a>
+<div>
+<h1 class="font-headline-md text-headline-md font-bold text-on-surface tracking-tight">Lacak Pesanan</h1>
+<p class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-1 font-mono">
+<span>#YMB-2026-8921</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span class="text-tertiary-container font-semibold">15-25 Mnt Kilat</span>
+</p>
+</div>
+</div>
+<!-- Active Status Badge with Pulse -->
+<div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-tertiary-container/10 border border-tertiary-container/20">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-on-tertiary-container opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-on-tertiary-container"></span>
+</span>
+<span class="font-label-md text-label-md font-bold text-on-tertiary-container">Sedang Diantar</span>
+</div>
+</header>
+<!-- MAIN SCROLL CONTENT AREA -->
+<main class="flex-1 flex flex-col space-y-4 px-margin pt-2">
+<!-- 2. LIVE MAP HERO SECTION -->
+<div class="relative w-full h-64 rounded-2xl overflow-hidden shadow-sm border border-surface-container-high bg-surface-container-low">
+<!-- Interactive Simulated Map Background Graphic -->
+<div class="absolute inset-0 bg-[#E8EEF5] opacity-90">
+<svg class="w-full h-full object-cover" fill="none" viewbox="0 0 400 240" xmlns="http://www.w3.org/2000/svg">
+<!-- Road Networks -->
+<rect fill="#EDF3F8" height="240" width="400"></rect>
+<path d="M-20 40 H420" stroke="#FFFFFF" stroke-width="12"></path>
+<path d="M-20 120 H420" stroke="#FFFFFF" stroke-width="18"></path>
+<path d="M-20 190 H420" stroke="#FFFFFF" stroke-width="10"></path>
+<path d="M70 -20 V260" stroke="#FFFFFF" stroke-width="14"></path>
+<path d="M220 -20 V260" stroke="#FFFFFF" stroke-width="16"></path>
+<path d="M340 -20 V260" stroke="#FFFFFF" stroke-width="10"></path>
+<!-- City Blocks -->
+<rect fill="#DEE6F0" height="56" opacity="0.6" rx="6" width="124" x="84" y="52"></rect>
+<rect fill="#DEE6F0" height="56" opacity="0.6" rx="6" width="94" x="234" y="52"></rect>
+<rect fill="#DEE6F0" height="44" opacity="0.6" rx="6" width="124" x="84" y="136"></rect>
+<rect fill="#DEE6F0" height="44" opacity="0.6" rx="6" width="94" x="234" y="136"></rect>
+<!-- Active Delivery Route (Green dashed & solid glow) -->
+<path d="M 60 50 L 60 120 L 220 120 L 220 190 L 330 190" stroke="#005237" stroke-linecap="round" stroke-linejoin="round" stroke-width="5"></path>
+<path d="M 60 50 L 60 120 L 220 120 L 220 190 L 330 190" stroke="#6FFBBE" stroke-dasharray="4 4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<!-- Origin Pin: Toko Baiturrahman Mart Cikumpa -->
+<div class="absolute top-8 left-10 flex flex-col items-center">
+<div class="px-2 py-0.5 rounded bg-primary text-on-primary font-label-sm text-label-sm font-bold shadow-md whitespace-nowrap mb-1">
+            YMB Mart Cikumpa
+          </div>
+<div class="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-on-primary shadow-lg ring-2 ring-surface-container-lowest">
+<span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">storefront</span>
+</div>
+</div>
+<!-- Destination Pin: Rumah (Jl. Cikumpa No. 12) -->
+<div class="absolute bottom-6 right-10 flex flex-col items-center">
+<div class="px-2 py-0.5 rounded bg-on-surface text-surface-bright font-label-sm text-label-sm font-bold shadow-md whitespace-nowrap mb-1">
+            Rumah Pemesan
+          </div>
+<div class="w-8 h-8 rounded-full bg-on-surface flex items-center justify-center text-white shadow-lg ring-2 ring-surface-container-lowest">
+<span class="material-symbols-outlined text-base" style="font-variation-settings: 'FILL' 1;">home</span>
+</div>
+</div>
+<!-- Active Courier Icon with Animated Pulsing Glow -->
+<div class="absolute top-[108px] left-[180px] -translate-x-1/2 -translate-y-1/2 flex items-center justify-center">
+<div class="absolute w-14 h-14 rounded-full bg-primary-container opacity-30 animate-courier-ping"></div>
+<div class="w-10 h-10 rounded-full bg-primary-container border-2 border-surface-container-lowest flex items-center justify-center shadow-xl text-white z-10">
+<span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">two_wheeler</span>
+</div>
+</div>
+<!-- Floating ETA Card over Map -->
+<div class="absolute bottom-3 left-3 right-3 bg-surface-container-lowest/95 backdrop-blur-md px-3.5 py-2.5 rounded-xl shadow-lg border border-surface-container-high flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-lg bg-secondary-container flex items-center justify-center text-on-secondary-container">
+<span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">bolt</span>
+</div>
+<div>
+<p class="font-headline-md text-headline-md font-bold text-primary-container leading-tight">Tiba dlm ~12 Menit</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Estimasi tiba pukul 20:08 WIB</p>
+</div>
+</div>
+<span class="px-2 py-1 rounded-md bg-tertiary-container/10 text-on-tertiary-container font-label-sm text-label-sm font-bold uppercase tracking-wider">
+            Tepat Waktu
+          </span>
+</div>
+</div>
+<!-- 3. ORDER PROGRESS STEPPER CONTAINER -->
+<section class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm border border-surface-container-high">
+<div class="mb-4">
+<h2 class="font-headline-md text-headline-md font-bold text-on-surface">Kurir Toko Menuju Lokasimu</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Pesananmu sedang dalam perjalanan kilat 15-25 menit.</p>
+</div>
+<!-- Stepper Component -->
+<div class="relative pl-1">
+<!-- Step 1: Completed -->
+<div class="relative flex items-start gap-3.5 pb-6">
+<div class="absolute top-5 left-3 -ml-[1px] w-[2px] h-full bg-tertiary-container"></div>
+<div class="relative z-10 w-6 h-6 rounded-full bg-tertiary-container flex items-center justify-center text-on-tertiary shadow-sm">
+<span class="material-symbols-outlined text-sm font-bold">check</span>
+</div>
+<div class="flex-1 -mt-0.5">
+<div class="flex items-center justify-between">
+<p class="font-label-lg text-label-lg font-semibold text-on-surface">Pembayaran Terverifikasi</p>
+<span class="font-label-sm text-label-sm text-on-surface-variant">19:50 WIB</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">QRIS Instant Rp 92.000 sukses dikonfirmasi</p>
+</div>
+</div>
+<!-- Step 2: Completed -->
+<div class="relative flex items-start gap-3.5 pb-6">
+<div class="absolute top-5 left-3 -ml-[1px] w-[2px] h-full bg-tertiary-container"></div>
+<div class="relative z-10 w-6 h-6 rounded-full bg-tertiary-container flex items-center justify-center text-on-tertiary shadow-sm">
+<span class="material-symbols-outlined text-sm font-bold">check</span>
+</div>
+<div class="flex-1 -mt-0.5">
+<div class="flex items-center justify-between">
+<p class="font-label-lg text-label-lg font-semibold text-on-surface">Pesanan Selesai Dikemas Kasir</p>
+<span class="font-label-sm text-label-sm text-on-surface-variant">19:53 WIB</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Kantong ramah lingkungan YMB tertutup rapat &amp; higienis</p>
+</div>
+</div>
+<!-- Step 3: Active Stage -->
+<div class="relative flex items-start gap-3.5 pb-6">
+<div class="absolute top-5 left-3 -ml-[1px] w-[2px] h-full bg-surface-container-highest"></div>
+<div class="relative z-10 w-6 h-6 rounded-full bg-primary-container text-on-primary flex items-center justify-center shadow-md ring-4 ring-primary-fixed">
+<span class="material-symbols-outlined text-xs" style="font-variation-settings: 'FILL' 1;">two_wheeler</span>
+</div>
+<div class="flex-1 -mt-0.5 bg-surface-container-low/70 p-2.5 rounded-xl border border-primary-fixed">
+<div class="flex items-center justify-between">
+<p class="font-label-lg text-label-lg font-bold text-primary">Kurir Menuju Alamat Tujuan</p>
+<span class="font-label-sm text-label-sm text-primary font-bold">19:56 WIB</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-0.5">Kurir bergerak lewat Jl. Tole Iskandar - Simpang Cikumpa</p>
+</div>
+</div>
+<!-- Step 4: Pending -->
+<div class="relative flex items-start gap-3.5">
+<div class="relative z-10 w-6 h-6 rounded-full bg-surface-container border-2 border-outline-variant flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-xs">flag</span>
+</div>
+<div class="flex-1 -mt-0.5">
+<div class="flex items-center justify-between">
+<p class="font-label-lg text-label-lg font-semibold text-outline">Pesanan Tiba &amp; Selesai</p>
+<span class="font-label-sm text-label-sm text-outline">Est 20:08 WIB</span>
+</div>
+<p class="font-body-sm text-body-sm text-outline">Siapkan tempat penerimaan belanjaan di depan pintu</p>
+</div>
+</div>
+</div>
+</section>
+<!-- 4. DEDICATED COURIER INFO CARD -->
+<section class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm border border-surface-container-high">
+<div class="flex items-center justify-between pb-3 border-b border-surface-container-low">
+<div class="flex items-center gap-3">
+<div class="relative">
+<img class="w-12 h-12 rounded-full object-cover border-2 border-primary-fixed" data-alt="Close up portrait photo of a smiling professional Indonesian male grocery courier wearing a clean maroon delivery uniform and cap, well lit in warm natural daylight, approachable and friendly expression, crisp commercial photography style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC3J5ptIgTMeacH38nseieIxA-Qtwi_-H_NkPcrwdPtxmsUc4JmwIvtbQ47s_DyTxFIHRDYJPfHZSlJDt-JqLSil2pyvfijWmJ2kJE6ZpR9rHuDbVApbiLuUnfSOBa-SRona7fWuz-2cBZL8t1oeYrZF49C0VIrbBT5kcVAUHn3vgYuadRcffPzHpS-X97yUnIZlPpR-emY4oavHawCQWh9MLB74gv0Xy_LKBB3V45BF05oO46x2DsvB67AbFX1QpDb9vvL0ZzVQq0"/>
+<span class="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-on-tertiary-container border-2 border-surface-container-lowest"></span>
+</div>
+<div>
+<div class="flex items-center gap-1.5">
+<h3 class="font-label-lg text-label-lg font-bold text-on-surface">Budi Santoso</h3>
+<span class="material-symbols-outlined text-primary text-base" style="font-variation-settings: 'FILL' 1;">verified</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Honda Vario • <span class="font-semibold text-on-surface">B 1234 XYZ</span></p>
+</div>
+</div>
+<!-- Courier Rating Badge -->
+<div class="flex flex-col items-end">
+<div class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary-container/20 text-on-secondary-container">
+<span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="font-label-md text-label-md font-bold">4.9</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant mt-0.5">500+ antar</span>
+</div>
+</div>
+<!-- Quick Contact Action Buttons -->
+<div class="grid grid-cols-2 gap-2.5 pt-3">
+<a class="h-11 px-3 rounded-xl bg-[#ECFDF5] border border-tertiary-container/30 text-tertiary-container hover:bg-tertiary-container/10 flex items-center justify-center gap-2 active:scale-95 transition-all" href="https://wa.me/" target="_blank">
+<span class="material-symbols-outlined text-lg font-semibold" style="font-variation-settings: 'FILL' 1;">chat</span>
+<span class="font-label-md text-label-md font-bold">Chat WhatsApp</span>
+</a>
+<a class="h-11 px-3 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface flex items-center justify-center gap-2 active:scale-95 transition-all" href="tel:08123456789">
+<span class="material-symbols-outlined text-lg text-primary">call</span>
+<span class="font-label-md text-label-md font-bold">Telepon</span>
+</a>
+</div>
+</section>
+<!-- 5. ORDER ITEMS & RECEIPT SUMMARY CARD -->
+<section class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm border border-surface-container-high">
+<div class="flex items-center justify-between pb-3 border-b border-surface-container-low">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-xl">shopping_basket</span>
+<h3 class="font-headline-md text-headline-md font-bold text-on-surface">3 Item Belanjaan</h3>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-surface-container font-label-sm text-label-sm text-on-surface-variant font-bold">
+            Siap Terima
+          </span>
+</div>
+<!-- Item Rows -->
+<div class="divide-y divide-surface-container-low pt-1">
+<!-- Item 1 -->
+<div class="py-2.5 flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<span class="w-6 h-6 rounded bg-surface-container flex items-center justify-center font-label-sm text-label-sm font-bold text-primary">1x</span>
+<div>
+<p class="font-body-md text-body-md font-semibold text-on-surface leading-tight">Beras Premium Ramos Setra</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Kemasan 5 Kg</p>
+</div>
+</div>
+<span class="font-price-value text-price-value font-bold text-on-surface">Rp 68.000</span>
+</div>
+<!-- Item 2 -->
+<div class="py-2.5 flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<span class="w-6 h-6 rounded bg-surface-container flex items-center justify-center font-label-sm text-label-sm font-bold text-primary">1x</span>
+<div>
+<p class="font-body-md text-body-md font-semibold text-on-surface leading-tight">Minyak Goreng Sania Pouch</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Kemasan 2 Liter</p>
+</div>
+</div>
+<span class="font-price-value text-price-value font-bold text-on-surface">Rp 28.500</span>
+</div>
+<!-- Item 3 -->
+<div class="py-2.5 flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<span class="w-6 h-6 rounded bg-surface-container flex items-center justify-center font-label-sm text-label-sm font-bold text-primary">1x</span>
+<div>
+<p class="font-body-md text-body-md font-semibold text-on-surface leading-tight">Indomie Mi Goreng Spesial</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Paket Hemat Isi 5 Pcs</p>
+</div>
+</div>
+<span class="font-price-value text-price-value font-bold text-on-surface">Rp 14.500</span>
+</div>
+</div>
+<!-- Payment Total & Verification Status -->
+<div class="mt-3 pt-3 border-t border-surface-container-high bg-surface-container-low/50 -mx-4 -mb-4 p-4 rounded-b-2xl">
+<div class="flex items-center justify-between">
+<div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Total Tagihan Belanja</p>
+<div class="flex items-center gap-1.5 mt-0.5">
+<span class="material-symbols-outlined text-tertiary-container text-base font-bold">check_circle</span>
+<span class="font-label-md text-label-md font-bold text-tertiary-container">Lunas - QRIS Instant</span>
+</div>
+</div>
+<div class="text-right">
+<p class="font-price-value text-price-value text-lg font-extrabold text-primary">Rp 92.000</p>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Sudah termasuk ongkir &amp; kemasan</span>
+</div>
+</div>
+</div>
+</section>
+<!-- 6. HELP & STORE SUPPORT ACTION -->
+<section class="pt-1">
+<a class="w-full p-3.5 rounded-2xl bg-surface-container-lowest border border-surface-container-high hover:border-primary-fixed shadow-sm flex items-center justify-between group active:scale-[0.99] transition-all" href="#">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl bg-primary-fixed flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-xl">support_agent</span>
+</div>
+<div>
+<p class="font-label-lg text-label-lg font-bold text-on-surface leading-tight">Ada kendala pesanan?</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Hubungi CS Toko Baiturrahman Mart</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary group-hover:translate-x-0.5 transition-all">chevron_right</span>
+</a>
+</section>
+<!-- Delivery Guarantee Note Footer -->
+<div class="text-center py-4">
+<p class="font-label-sm text-label-sm text-on-surface-variant flex items-center justify-center gap-1.5">
+<span class="material-symbols-outlined text-sm text-secondary">verified_user</span>
+          Garansi barang segar &amp; penggantian 100% jika ada item cacat.
+        </p>
+</div>
+</main>
+</div>
+</body></html>

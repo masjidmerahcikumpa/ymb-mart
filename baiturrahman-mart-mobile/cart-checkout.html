@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+
+<html lang="id"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Keranjang &amp; Checkout - Baiturrahman Mart Online</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Configuration -->
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-surface-variant": "#574144",
+            "on-tertiary-container": "#37cd93",
+            "on-secondary-fixed-variant": "#574500",
+            "on-secondary-fixed": "#241a00",
+            "tertiary-fixed-dim": "#4edea3",
+            "on-background": "#0b1c30",
+            "primary": "#670024",
+            "inverse-primary": "#ffb2bd",
+            "tertiary-fixed": "#6ffbbe",
+            "on-tertiary-fixed-variant": "#005236",
+            "error": "#ba1a1a",
+            "on-tertiary-fixed": "#002113",
+            "on-secondary-container": "#745c00",
+            "inverse-on-surface": "#eaf1ff",
+            "primary-container": "#8b1538",
+            "surface-variant": "#d3e4fe",
+            "surface-dim": "#cbdbf5",
+            "on-surface": "#0b1c30",
+            "on-secondary": "#ffffff",
+            "background": "#f8f9ff",
+            "surface-tint": "#ab2f4e",
+            "primary-fixed-dim": "#ffb2bd",
+            "outline": "#8a7174",
+            "tertiary": "#003925",
+            "outline-variant": "#debfc2",
+            "on-primary-container": "#ff98a8",
+            "surface-container-high": "#dce9ff",
+            "secondary-fixed-dim": "#e9c349",
+            "on-tertiary": "#ffffff",
+            "surface": "#f8f9ff",
+            "tertiary-container": "#005237",
+            "surface-container-lowest": "#ffffff",
+            "inverse-surface": "#213145",
+            "on-primary-fixed": "#400013",
+            "secondary": "#735c00",
+            "on-error": "#ffffff",
+            "primary-fixed": "#ffd9dd",
+            "surface-container-low": "#eff4ff",
+            "secondary-fixed": "#ffe088",
+            "secondary-container": "#fed65b",
+            "surface-container-highest": "#d3e4fe",
+            "on-primary": "#ffffff",
+            "on-primary-fixed-variant": "#8a1438",
+            "on-error-container": "#93000a",
+            "surface-container": "#e5eeff",
+            "surface-bright": "#f8f9ff",
+            "error-container": "#ffdad6"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "2xl": "1rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "space-xl": "1.5rem",
+            "margin": "1rem",
+            "space-md": "0.75rem",
+            "gutter": "0.75rem",
+            "space-xs": "0.25rem",
+            "space-sm": "0.5rem",
+            "space-lg": "1rem"
+          },
+          "fontFamily": {
+            "price-currency": ["Inter"],
+            "display-lg": ["Plus Jakarta Sans"],
+            "headline-lg-mobile": ["Plus Jakarta Sans"],
+            "label-lg": ["Inter"],
+            "label-sm": ["Inter"],
+            "price-value": ["Plus Jakarta Sans"],
+            "headline-lg": ["Plus Jakarta Sans"],
+            "body-sm": ["Plus Jakarta Sans"],
+            "label-md": ["Inter"],
+            "body-lg": ["Plus Jakarta Sans"],
+            "body-md": ["Plus Jakarta Sans"],
+            "headline-md": ["Plus Jakarta Sans"]
+          },
+          "fontSize": {
+            "price-currency": ["11px", { "lineHeight": "14px", "fontWeight": "600" }],
+            "display-lg": ["32px", { "lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "800" }],
+            "headline-lg-mobile": ["20px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "700" }],
+            "label-lg": ["14px", { "lineHeight": "20px", "letterSpacing": "0.01em", "fontWeight": "600" }],
+            "label-sm": ["10px", { "lineHeight": "12px", "letterSpacing": "0.04em", "fontWeight": "700" }],
+            "price-value": ["16px", { "lineHeight": "20px", "fontWeight": "800" }],
+            "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "700" }],
+            "body-sm": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+            "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600" }],
+            "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "500" }],
+            "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+            "headline-md": ["18px", { "lineHeight": "24px", "fontWeight": "600" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-family: 'Material Symbols Outlined';
+      font-weight: normal;
+      font-style: normal;
+      font-size: 20px;
+      line-height: 1;
+      letter-spacing: normal;
+      text-transform: none;
+      display: inline-block;
+      white-space: nowrap;
+      word-wrap: normal;
+      direction: ltr;
+      -webkit-font-smoothing: antialiased;
+    }
+    .tap-effect:active {
+      transform: scale(0.97);
+      transition: transform 0.1s ease-in-out;
+    }
+    /* Hide scrollbar for category tabs */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface font-body-md text-body-md antialiased min-h-screen flex justify-center selection:bg-primary-container selection:text-on-primary">
+<!-- Mobile Screen Container -->
+<div class="w-full max-w-md bg-background min-h-screen flex flex-col relative pb-32">
+<!-- 1. STICKY TOP APP BAR -->
+<header class="sticky top-0 z-40 bg-surface-container-lowest shadow-sm flex flex-col px-margin pt-3 pb-2 transition-shadow">
+<div class="flex items-center justify-between gap-2 h-11">
+<button aria-label="Kembali" class="w-9 h-9 rounded-full flex items-center justify-center text-on-surface hover:bg-surface-container tap-effect">
+<span class="material-symbols-outlined" data-icon="arrow_back">arrow_back</span>
+</button>
+<div class="flex-1 text-center">
+<h1 class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-on-surface tracking-tight">
+            Keranjang &amp; Checkout
+          </h1>
+</div>
+<button aria-label="Hapus Item Terpilih" class="text-primary-container hover:text-primary font-label-md text-label-md font-bold px-2 py-1 rounded-lg tap-effect">
+          Hapus
+        </button>
+</div>
+<!-- Select All Strip -->
+<div class="flex items-center justify-between pt-2 pb-1 border-t border-surface-container">
+<label class="flex items-center gap-2.5 cursor-pointer">
+<input checked="" class="w-5 h-5 rounded text-tertiary-container focus:ring-tertiary border-outline-variant rounded-md cursor-pointer accent-tertiary-container" type="checkbox"/>
+<span class="font-label-lg text-label-lg text-on-surface font-semibold">Pilih Semua (3)</span>
+</label>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant">
+          YMB Cikumpa Depok
+        </span>
+</div>
+</header>
+<!-- MAIN SCROLLABLE CONTENT -->
+<main class="flex-1 px-margin py-3 space-y-3.5">
+<!-- 2. FULFILLMENT METHOD SWITCHER -->
+<section class="bg-surface-container p-1 rounded-xl grid grid-cols-2 gap-1" role="tablist">
+<button aria-selected="true" class="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg bg-primary-container text-on-primary shadow-sm tap-effect font-label-md text-label-md font-bold text-center" role="tab">
+<span class="material-symbols-outlined text-[18px]" data-icon="local_shipping">local_shipping</span>
+<span>Kirim Kilat (15-30 Mnt)</span>
+</button>
+<button aria-selected="false" class="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-lg text-on-surface-variant hover:text-on-surface font-label-md text-label-md font-medium text-center tap-effect" role="tab">
+<span class="material-symbols-outlined text-[18px]" data-icon="storefront">storefront</span>
+<span>Ambil di Toko (Pick Up)</span>
+</button>
+</section>
+<!-- 3. DELIVERY ADDRESS PREVIEW CARD -->
+<section class="bg-surface-container-lowest rounded-xl p-3.5 shadow-sm border border-surface-container space-y-2.5">
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center gap-2">
+<div class="w-7 h-7 rounded-full bg-primary-container/10 flex items-center justify-center text-primary-container shrink-0">
+<span class="material-symbols-outlined text-[18px]" data-icon="location_on" data-weight="fill" style="font-variation-settings: 'FILL' 1;">location_on</span>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-label-lg text-label-lg font-bold text-on-surface">Ahmad Fauzi (Rumah)</span>
+<span class="bg-tertiary-container/15 text-tertiary-container text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Utama</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">0812-3456-7890</p>
+</div>
+</div>
+<button class="flex items-center gap-0.5 text-primary-container hover:text-primary font-label-md text-label-md font-bold shrink-0 pt-0.5 tap-effect">
+<span>Ubah</span>
+<span class="material-symbols-outlined text-[16px]" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface leading-relaxed pl-9">
+          Jl. Cikumpa No. 12, Sukmajaya, Depok, Jawa Barat (Dekat Masjid Baiturrahman)
+        </p>
+<!-- Driver Note Pill -->
+<div class="pl-9 flex items-center gap-1.5 text-on-surface-variant bg-surface-container-low px-2.5 py-1.5 rounded-lg border border-surface-container">
+<span class="material-symbols-outlined text-[15px] text-primary-container" data-icon="edit_note">edit_note</span>
+<span class="font-body-sm text-body-sm italic line-clamp-1">Catatan: Pagar hitam, titip satpam bila kosong</span>
+</div>
+</section>
+<!-- 4. CART ITEMS SECTION -->
+<section class="bg-surface-container-lowest rounded-xl p-3.5 shadow-sm border border-surface-container space-y-3">
+<div class="flex items-center justify-between pb-1 border-b border-surface-container">
+<h2 class="font-headline-md text-headline-md font-bold text-on-surface flex items-center gap-1.5">
+<span class="material-symbols-outlined text-primary-container" data-icon="shopping_basket">shopping_basket</span>
+<span>Produk yang Dipilih (3 Item)</span>
+</h2>
+<div class="flex items-center gap-1 bg-tertiary-container/10 text-tertiary-container px-2 py-0.5 rounded-full font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[14px]" data-icon="bolt">bolt</span>
+<span>Siap Kirim</span>
+</div>
+</div>
+<!-- Item 1: Beras Ramos -->
+<div class="flex gap-3 items-start py-2 border-b border-surface-container/60">
+<input checked="" class="mt-4 w-5 h-5 rounded text-tertiary-container focus:ring-tertiary border-outline-variant accent-tertiary-container cursor-pointer" type="checkbox"/>
+<div class="w-18 h-18 w-20 h-20 rounded-lg bg-surface-container-low p-1.5 flex items-center justify-center shrink-0 border border-surface-container overflow-hidden">
+<img class="w-full h-full object-contain" data-alt="Studio commercial packshot of Beras Ramos Setra premium 5kg transparent white rice bag sack against clean soft off-white gradient backdrop. Realistic Indonesian grocery item styling with high definition lighting and crisp reflections on plastic package." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAWQlIIQwmZKV27W7lDX6tcFK6z1SSe779nXuDLBPutAPHlY_aJPK89kPNSys2h6R5Vq4ZwC_oV5jSQXPo7-u2DiOFnY93u94nOFvfQSlOF7MZxcAnT81y013XpuHMa0gIfara-pHR4n1u6OGU7TQ5BDK1YOPnnyg63pmXA9DkzTpd4g89LIfwpz5DMBaLqxF4dlheiCwT_F0A_E6VNTIxVcZuIc0K_0b8GEdkrEiwZpOgKAdBQtJ2ma_4b3zeq20H-R43RNXqKXmE"/>
+</div>
+<div class="flex-1 min-w-0 space-y-1">
+<div class="flex justify-between items-start">
+<h3 class="font-label-lg text-label-lg font-bold text-on-surface truncate pr-1">Beras Premium Ramos Setra 5 Kg</h3>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Kemasan 5000g (5 Kg)</p>
+<div class="flex items-center gap-1.5">
+<span class="bg-primary-container/10 text-primary-container font-label-sm text-label-sm font-bold px-1.5 py-0.2 rounded">-15%</span>
+<span class="line-through font-body-sm text-body-sm text-outline">Rp 80.000</span>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="font-price-value text-price-value font-extrabold text-primary-container">Rp 68.000</span>
+<!-- Quantity Stepper -->
+<div class="flex items-center border border-outline-variant/60 rounded-lg overflow-hidden bg-surface-container-lowest">
+<button aria-label="Kurangi Jumlah" class="w-7 h-7 flex items-center justify-center text-on-surface-variant hover:bg-surface-container tap-effect">
+<span class="material-symbols-outlined text-[16px]" data-icon="delete">delete</span>
+</button>
+<span class="w-7 text-center font-label-md text-label-md font-bold text-on-surface">1</span>
+<button aria-label="Tambah Jumlah" class="w-7 h-7 flex items-center justify-center text-tertiary-container hover:bg-tertiary-container/10 tap-effect">
+<span class="material-symbols-outlined text-[16px]" data-icon="add">add</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Item 2: Minyak Sania -->
+<div class="flex gap-3 items-start py-2 border-b border-surface-container/60">
+<input checked="" class="mt-4 w-5 h-5 rounded text-tertiary-container focus:ring-tertiary border-outline-variant accent-tertiary-container cursor-pointer" type="checkbox"/>
+<div class="w-20 h-20 rounded-lg bg-surface-container-low p-1.5 flex items-center justify-center shrink-0 border border-surface-container overflow-hidden">
+<img class="w-full h-full object-contain" data-alt="Packshot of Sania Cooking Oil 2 Liters refill pouch with golden transparent liquid shine inside, photographed in modern retail studio setup with warm daylight reflections on a white pedestal ground." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAI9LQO9r92OVJfQitonO0s9gXw_eDtcGZh2ixEyeB7XqKywLqRVTCrEzXOlyx4_tixPwvZsacLoQxFgvC5ZiMTdWSlLDDXN9zArJNWRY-TUJz83RMpl-g8gLW5vKb2eXuhK3kd47gXU15I28zKL9O-0G0zXx9Zfe8P3esEVCVsSIjI3fKSFKFeL5vQVzRZOPrT-ujSIZIHsomOFUtpbWKcXsu2HlvywQKiPYk0iWKvZKpnrLb9KnJJd5yW_S50JFfYm4irmkcPyhY"/>
+</div>
+<div class="flex-1 min-w-0 space-y-1">
+<div class="flex justify-between items-start">
+<h3 class="font-label-lg text-label-lg font-bold text-on-surface truncate pr-1">Minyak Goreng Sania Pouch 2L</h3>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">2 Liter Pouch Hemat</p>
+<div class="flex items-center gap-1.5">
+<span class="bg-primary-container/10 text-primary-container font-label-sm text-label-sm font-bold px-1.5 py-0.2 rounded">-25%</span>
+<span class="line-through font-body-sm text-body-sm text-outline">Rp 38.000</span>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="font-price-value text-price-value font-extrabold text-primary-container">Rp 28.500</span>
+<div class="flex items-center border border-outline-variant/60 rounded-lg overflow-hidden bg-surface-container-lowest">
+<button aria-label="Kurangi Jumlah" class="w-7 h-7 flex items-center justify-center text-on-surface-variant hover:bg-surface-container tap-effect">
+<span class="material-symbols-outlined text-[16px]" data-icon="remove">remove</span>
+</button>
+<span class="w-7 text-center font-label-md text-label-md font-bold text-on-surface">1</span>
+<button aria-label="Tambah Jumlah" class="w-7 h-7 flex items-center justify-center text-tertiary-container hover:bg-tertiary-container/10 tap-effect">
+<span class="material-symbols-outlined text-[16px]" data-icon="add">add</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Item 3: Indomie Goreng Pack 5 -->
+<div class="flex gap-3 items-start py-2 border-b border-surface-container/60">
+<input checked="" class="mt-4 w-5 h-5 rounded text-tertiary-container focus:ring-tertiary border-outline-variant accent-tertiary-container cursor-pointer" type="checkbox"/>
+<div class="w-20 h-20 rounded-lg bg-surface-container-low p-1.5 flex items-center justify-center shrink-0 border border-surface-container overflow-hidden">
+<img class="w-full h-full object-contain" data-alt="Pack of 5 Indomie Mi Goreng instant noodles Indonesian staple product in bright promotional packaging, isolated on clean minimalist studio background with studio lighting and natural shadow." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAOLSvInPSdpArA_SZwUkVian51ZeMRBlmw1ohRrTQQZ4mzuQXCEAliiPc6uLs-yyIF_5FAnkyqZiFov5RsCgW4FPldktQd5_jAMWMP7bs79kgGe3hTP5KwHuUynowxwYSD-7p917bIibaqmwczBdQHjnANLWRhgKUzp0CiEP_HZghrIn6SVdQLRZZ9SDLPCK8og8VvUdHzd-W8HCfk2jsCQIqhW2_M55BJAsA48v7qVCoZz90wh4OS10ARaB9Kd-crJBFApAml4bQ"/>
+</div>
+<div class="flex-1 min-w-0 space-y-1">
+<div class="flex justify-between items-start">
+<h3 class="font-label-lg text-label-lg font-bold text-on-surface truncate pr-1">Indomie Mi Goreng Spesial (Pack Isi 5)</h3>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Multipack 425g (5 x 85g)</p>
+<div class="flex items-center gap-1.5">
+<span class="bg-primary-container/10 text-primary-container font-label-sm text-label-sm font-bold px-1.5 py-0.2 rounded">-17%</span>
+<span class="line-through font-body-sm text-body-sm text-outline">Rp 17.500</span>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="font-price-value text-price-value font-extrabold text-primary-container">Rp 14.500</span>
+<div class="flex items-center border border-outline-variant/60 rounded-lg overflow-hidden bg-surface-container-lowest">
+<button aria-label="Kurangi Jumlah" class="w-7 h-7 flex items-center justify-center text-on-surface-variant hover:bg-surface-container tap-effect">
+<span class="material-symbols-outlined text-[16px]" data-icon="remove">remove</span>
+</button>
+<span class="w-7 text-center font-label-md text-label-md font-bold text-on-surface">1</span>
+<button aria-label="Tambah Jumlah" class="w-7 h-7 flex items-center justify-center text-tertiary-container hover:bg-tertiary-container/10 tap-effect">
+<span class="material-symbols-outlined text-[16px]" data-icon="add">add</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Personal Shopper Note Field -->
+<div class="pt-2 space-y-2">
+<div class="flex items-center gap-2 bg-surface-container-low px-3 py-2 rounded-lg border border-surface-container">
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]" data-icon="edit">edit</span>
+<input class="w-full bg-transparent border-none p-0 text-on-surface font-body-sm text-body-sm focus:ring-0 placeholder:text-outline" placeholder="Catatan untuk Personal Shopper..." type="text" value="Mohon kemasan yang rapi dan exp terlama"/>
+</div>
+<!-- Quick Tags -->
+<div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+<button class="shrink-0 text-[11px] font-semibold text-on-surface-variant bg-surface-container px-2.5 py-1 rounded-full hover:bg-surface-container-high tap-effect">
+              + Kemasan Rapi
+            </button>
+<button class="shrink-0 text-[11px] font-semibold text-on-surface-variant bg-surface-container px-2.5 py-1 rounded-full hover:bg-surface-container-high tap-effect">
+              + Buah Matang
+            </button>
+<button class="shrink-0 text-[11px] font-semibold text-on-surface-variant bg-surface-container px-2.5 py-1 rounded-full hover:bg-surface-container-high tap-effect">
+              + Jangan Dibanting
+            </button>
+</div>
+</div>
+</section>
+<!-- 5. PROMO VOUCHER & YMB MEMBER LOYALTY CARD -->
+<section class="bg-surface-container-lowest rounded-xl p-3.5 shadow-sm border border-surface-container space-y-3">
+<!-- Voucher Row -->
+<div class="flex items-center justify-between p-2.5 rounded-lg bg-surface-container-low border border-primary-container/20">
+<div class="flex items-center gap-2.5 min-w-0">
+<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[18px]" data-icon="confirmation_number">confirmation_number</span>
+</div>
+<div class="min-w-0">
+<div class="flex items-center gap-1.5">
+<span class="font-label-md text-label-md font-bold text-primary-container truncate">DISKONBERKAH</span>
+<span class="bg-tertiary-container/15 text-tertiary-container text-[10px] font-bold px-1.5 py-0.2 rounded-full">Hemat 10rb</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant text-[11px]">Kupon diskon belanja belanja kilat dipakai</p>
+</div>
+</div>
+<div class="flex items-center gap-1 text-tertiary-container font-bold text-[13px] shrink-0">
+<span class="material-symbols-outlined text-[18px]" data-icon="check_circle" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span>Terpasang</span>
+</div>
+</div>
+<!-- Loyalty Member Poin Toggle -->
+<div class="flex items-center justify-between pt-1">
+<div class="flex items-center gap-2.5">
+<div class="w-8 h-8 rounded-full bg-secondary-container text-secondary flex items-center justify-center shrink-0 shadow-sm">
+<span class="material-symbols-outlined text-[18px]" data-icon="stars" data-weight="fill" style="font-variation-settings: 'FILL' 1;">stars</span>
+</div>
+<div>
+<div class="flex items-center gap-1.5">
+<span class="font-label-md text-label-md font-bold text-on-surface">Tukarkan 1.000 Poin YMB</span>
+<span class="font-label-sm text-label-sm text-tertiary-container font-bold">-Rp 10.000</span>
+</div>
+<p class="font-body-sm text-body-sm text-outline text-[11px]">Sisa saldo poin Anda: <strong class="text-on-surface">450 Poin</strong></p>
+</div>
+</div>
+<!-- iOS-style Switch Active -->
+<label class="relative inline-flex items-center cursor-pointer tap-effect">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-tertiary-container"></div>
+</label>
+</div>
+</section>
+<!-- 6. METODE PEMBAYARAN -->
+<section class="bg-surface-container-lowest rounded-xl p-3.5 shadow-sm border border-surface-container space-y-2.5">
+<div class="flex items-center justify-between">
+<h2 class="font-headline-md text-headline-md font-bold text-on-surface flex items-center gap-1.5">
+<span class="material-symbols-outlined text-primary-container" data-icon="account_balance_wallet">account_balance_wallet</span>
+<span>Metode Pembayaran</span>
+</h2>
+<button class="text-primary-container hover:text-primary font-label-md text-label-md font-bold tap-effect">
+            Ubah
+          </button>
+</div>
+<div class="flex items-center justify-between p-3 rounded-lg border-2 border-primary-container/30 bg-primary-fixed/20">
+<div class="flex items-center gap-3">
+<div class="w-10 h-8 rounded bg-white shadow-xs border border-surface-container flex items-center justify-center font-black tracking-tighter text-on-surface text-[12px]">
+<span class="text-primary-container font-extrabold">QRIS</span>
+</div>
+<div>
+<div class="flex items-center gap-1.5">
+<span class="font-label-md text-label-md font-bold text-on-surface">QRIS / Instant E-Wallet</span>
+<span class="material-symbols-outlined text-tertiary-container text-[16px]" data-icon="verified" data-weight="fill" style="font-variation-settings: 'FILL' 1;">verified</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant text-[11px]">GoPay, OVO, ShopeePay, DANA &amp; BCA Bebas Biaya</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-primary-container text-[20px]" data-icon="check_circle" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+</div>
+</section>
+<!-- 7. RINGKASAN PEMBAYARAN -->
+<section class="bg-surface-container-lowest rounded-xl p-3.5 shadow-sm border border-surface-container space-y-2.5">
+<div class="flex items-center justify-between pb-1 border-b border-surface-container">
+<h2 class="font-headline-md text-headline-md font-bold text-on-surface">Rincian Pembayaran</h2>
+<span class="bg-tertiary-container/10 text-tertiary-container font-label-sm text-label-sm font-bold px-2 py-0.5 rounded-full">
+            Hemat Rp 28.000 🎉
+          </span>
+</div>
+<div class="space-y-1.5 font-body-sm text-body-sm text-on-surface-variant pt-1">
+<div class="flex justify-between">
+<span>Subtotal Produk (3 item)</span>
+<span class="text-on-surface font-medium">Rp 111.000</span>
+</div>
+<div class="flex justify-between">
+<span>Biaya Ongkir Kilat (15-30 Mnt)</span>
+<span class="text-on-surface font-medium">Rp 8.000</span>
+</div>
+<div class="flex justify-between text-tertiary-container font-medium">
+<span>Diskon Ongkir Kilat</span>
+<span>-Rp 8.000</span>
+</div>
+<div class="flex justify-between text-tertiary-container font-medium">
+<span>Kupon Promo (DISKONBERKAH)</span>
+<span>-Rp 10.000</span>
+</div>
+<div class="flex justify-between text-tertiary-container font-medium">
+<span>Potongan Poin Member YMB</span>
+<span>-Rp 10.000</span>
+</div>
+<div class="flex justify-between">
+<span class="flex items-center gap-1">
+              Biaya Layanan &amp; Penanganan
+              <span class="material-symbols-outlined text-[13px] text-outline" data-icon="help_outline">help_outline</span>
+</span>
+<span class="text-on-surface font-medium">Rp 1.000</span>
+</div>
+</div>
+<div class="pt-2 border-t border-surface-container flex items-center justify-between">
+<div>
+<span class="font-label-lg text-label-lg font-bold text-on-surface">Total Tagihan</span>
+<span class="block text-[11px] text-outline">Sudah termasuk PPN</span>
+</div>
+<span class="font-headline-lg text-headline-lg font-black text-primary-container">Rp 92.000</span>
+</div>
+</section>
+<!-- Trust Guarantee Banner -->
+<div class="rounded-xl p-3 bg-tertiary-container/5 border border-tertiary-container/20 flex items-center gap-2.5">
+<span class="material-symbols-outlined text-tertiary-container text-[24px]" data-icon="shield_with_heart" data-weight="fill" style="font-variation-settings: 'FILL' 1;">shield_with_heart</span>
+<div>
+<h3 class="font-label-md text-label-md font-bold text-on-surface">Garansi Produk Segar 100% Halal</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant text-[11px]">Rusak atau tidak segar? Garansi ganti barang atau uang kembali instan.</p>
+</div>
+</div>
+</main>
+<!-- 8. FLOATING STICKY BOTTOM CHECKOUT BAR -->
+<footer class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-surface-container-lowest/95 backdrop-blur-md shadow-2xl p-margin pb-6 pt-3.5 z-50 border-t border-surface-container">
+<div class="flex items-center justify-between gap-3">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-on-surface-variant font-medium">Total Pembayaran</span>
+<div class="flex items-baseline gap-1">
+<span class="font-headline-lg text-headline-lg font-extrabold text-primary-container tracking-tight">Rp 92.000</span>
+</div>
+<span class="text-[10px] text-tertiary-container font-bold flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[11px]" data-icon="savings">savings</span>
+            Total hemat Rp 28.000
+          </span>
+</div>
+<button class="flex-1 max-w-[210px] h-12 bg-primary-container hover:bg-primary text-on-primary font-label-lg text-label-lg font-bold rounded-xl shadow-md hover:shadow-lg flex items-center justify-center gap-2 tap-effect transition-all">
+<span class="material-symbols-outlined text-[18px]" data-icon="lock">lock</span>
+<span>Bayar Sekarang</span>
+</button>
+</div>
+</footer>
+</div>
+</body></html>
