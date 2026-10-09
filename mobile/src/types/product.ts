@@ -7,7 +7,10 @@ export interface Product {
   promoPrice?: number;
   promoActive?: boolean;
   category: string;
-  stock: number;
+  stock: number; // available online stock
+  physicalStock?: number;
+  reservedStock?: number;
+  onlineStock?: number;
   unit: string;
   barcode: string;
   imageUrl?: string;

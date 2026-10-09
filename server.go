@@ -213,6 +213,25 @@ func setupRouter() *http.ServeMux {
 	mux.HandleFunc("/ws", handleWebSocket)
 	mux.HandleFunc("/health", handleHealth)
 
+	// Mobile App Online Orders & Real-time Integration
+	mux.HandleFunc("/api/mobile/orders", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			handleMobileCreateOrder(w, r)
+		} else if r.Method == "GET" {
+			handleMobileGetOrders(w, r)
+		}
+	})
+	mux.HandleFunc("/api/mobile/orders/pay", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			handleMobilePayOrder(w, r)
+		}
+	})
+	mux.HandleFunc("/api/mobile/orders/cancel", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			handleMobileCancelOrder(w, r)
+		}
+	})
+
 	// Frontend routes (prefer embedded assets, fallback to live disk)
 	frontendHandler := func(name string) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {

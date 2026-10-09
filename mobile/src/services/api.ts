@@ -19,6 +19,8 @@ interface BackendProductRaw {
   cost?: number;
   category: string;
   stock: number;
+  reserved_stock?: number;
+  online_stock?: number;
   min_stock?: number;
   unit: string;
   barcode: string;
@@ -78,6 +80,13 @@ function mapBackendProductToFrontend(raw: BackendProductRaw): Product {
     discountPercent = Math.round(((raw.price - promoPrice) / raw.price) * 100);
   }
 
+  // Differentiate physical stock vs online display stock to prevent race condition
+  const reservedStock = raw.reserved_stock || 0;
+  const minStock = raw.min_stock || 0;
+  const onlineStock = raw.online_stock !== undefined
+    ? raw.online_stock
+    : Math.max(0, raw.stock - reservedStock - minStock);
+
   return {
     id: raw.id,
     sku: raw.sku,
@@ -88,23 +97,32 @@ function mapBackendProductToFrontend(raw: BackendProductRaw): Product {
     promoActive,
     discountPercent,
     category: raw.category || 'Umum',
-    stock: raw.stock,
+    stock: onlineStock,
+    physicalStock: raw.stock,
+    reservedStock,
+    onlineStock,
     unit: raw.unit || 'pcs',
     barcode: raw.barcode || '',
     imageUrl: resolveProductImage(raw.name, raw.category),
     isHalal: true,
-    isBestSeller: raw.stock > 10,
+    isBestSeller: onlineStock > 5,
   };
 }
 
-async function fetchWithTimeout(url: string, timeoutMs = REQUEST_TIMEOUT_MS): Promise<Response> {
+async function fetchWithTimeout(
+  url: string,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+  init?: RequestInit
+): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, {
+      ...init,
       signal: controller.signal,
       headers: {
         Accept: 'application/json',
+        ...(init?.headers || {}),
       },
     });
     return response;
@@ -179,3 +197,122 @@ export async function fetchProductById(id: number): Promise<Product | null> {
     return MOCK_PRODUCTS.find((p) => p.id === id) || null;
   }
 }
+
+// ==========================================
+// Mobile Order & Stock Reservation APIs
+// ==========================================
+
+export interface CreateOrderItemPayload {
+  product_id: number;
+  qty: number;
+  shopper_note?: string;
+}
+
+export interface CreateOrderPayload {
+  member_id?: string;
+  customer_name: string;
+  customer_phone: string;
+  fulfillment_type: 'delivery' | 'pickup';
+  address_text: string;
+  infaq_amount?: number;
+  voucher_discount?: number;
+  delivery_fee?: number;
+  payment_method?: 'qris' | 'va' | 'cod';
+  shopper_notes?: string;
+  items: CreateOrderItemPayload[];
+}
+
+export interface CreateOrderResponse {
+  success: boolean;
+  order_no?: string;
+  order_id?: number;
+  total_amount?: number;
+  expires_at?: string;
+  message?: string;
+  error?: string;
+  out_of_stock_item?: string;
+  available_online?: number;
+}
+
+export interface PayOrderResponse {
+  success: boolean;
+  order_no?: string;
+  status?: string;
+  message?: string;
+  error?: string;
+}
+
+export async function createMobileOrder(payload: CreateOrderPayload): Promise<CreateOrderResponse> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/api/mobile/orders`, 10000, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      return {
+        success: false,
+        error: data.error || `HTTP error ${res.status}`,
+        out_of_stock_item: data.out_of_stock_item,
+        available_online: data.available_online,
+      };
+    }
+    return data;
+  } catch (err: any) {
+    console.warn('[API] createMobileOrder failed:', err);
+    return {
+      success: false,
+      error: err.message || 'Gagal terhubung ke server',
+    };
+  }
+}
+
+export async function payMobileOrder(orderNo: string): Promise<PayOrderResponse> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/api/mobile/orders/pay`, 10000, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({ order_no: orderNo }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      return {
+        success: false,
+        error: data.error || `HTTP error ${res.status}`,
+      };
+    }
+    return data;
+  } catch (err: any) {
+    console.warn('[API] payMobileOrder failed:', err);
+    return {
+      success: false,
+      error: err.message || 'Gagal terhubung ke server',
+    };
+  }
+}
+
+export async function cancelMobileOrder(orderNo: string): Promise<{ success: boolean; message?: string; error?: string }> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/api/mobile/orders/cancel`, 10000, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({ order_no: orderNo }),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Gagal batalkan pesanan' };
+  }
+}
+

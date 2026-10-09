@@ -540,9 +540,9 @@ func handleResetUserPIN(w http.ResponseWriter, r *http.Request) {
 // === Products ===
 func handleGetProducts(w http.ResponseWriter, r *http.Request) {
 	isAdmin := r.URL.Query().Get("admin") == "1"
-	q := "SELECT id,sku,name,description,price,category,stock,min_stock,unit,barcode,promo_price,promo_active,tax_rate,active FROM products WHERE active=1"
+	q := "SELECT id,sku,name,description,price,category,stock,COALESCE(reserved_stock,0),min_stock,unit,barcode,promo_price,promo_active,tax_rate,active FROM products WHERE active=1"
 	if isAdmin {
-		q = "SELECT id,sku,name,description,price,cost,category,stock,min_stock,unit,barcode,promo_price,promo_active,tax_rate,active FROM products WHERE active=1"
+		q = "SELECT id,sku,name,description,price,cost,category,stock,COALESCE(reserved_stock,0),min_stock,unit,barcode,promo_price,promo_active,tax_rate,active FROM products WHERE active=1"
 	}
 	var args []interface{}
 	if cat := r.URL.Query().Get("category"); cat != "" && cat != "Semua" {
@@ -565,14 +565,35 @@ func handleGetProducts(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		if isAdmin {
 			var p Product
-			rows.Scan(&p.ID, &p.SKU, &p.Name, &p.Description, &p.Price, &p.Cost, &p.Category, &p.Stock, &p.MinStock, &p.Unit, &p.Barcode, &p.PromoPrice, &p.PromoActive, &p.TaxRate, &p.Active)
-			products = append(products, map[string]interface{}{"id": p.ID, "sku": p.SKU, "name": p.Name, "description": p.Description, "price": p.Price, "cost": p.Cost, "category": p.Category, "stock": p.Stock, "min_stock": p.MinStock, "unit": p.Unit, "barcode": p.Barcode, "promo_price": p.PromoPrice, "promo_active": p.PromoActive, "tax_rate": p.TaxRate, "active": p.Active})
+			rows.Scan(&p.ID, &p.SKU, &p.Name, &p.Description, &p.Price, &p.Cost, &p.Category, &p.Stock, &p.ReservedStock, &p.MinStock, &p.Unit, &p.Barcode, &p.PromoPrice, &p.PromoActive, &p.TaxRate, &p.Active)
+			onlineStock := p.Stock - p.ReservedStock - p.MinStock
+			if onlineStock < 0 {
+				onlineStock = 0
+			}
+			p.OnlineStock = onlineStock
+			products = append(products, map[string]interface{}{
+				"id": p.ID, "sku": p.SKU, "name": p.Name, "description": p.Description,
+				"price": p.Price, "cost": p.Cost, "category": p.Category,
+				"stock": p.Stock, "reserved_stock": p.ReservedStock, "online_stock": onlineStock,
+				"min_stock": p.MinStock, "unit": p.Unit, "barcode": p.Barcode,
+				"promo_price": p.PromoPrice, "promo_active": p.PromoActive, "tax_rate": p.TaxRate, "active": p.Active,
+			})
 		} else {
-			var id, price, stock, minStock, promoPrice, promoActive, active int
+			var id, price, stock, reservedStock, minStock, promoPrice, promoActive, active int
 			var sku, name, description, category, unit, barcode string
 			var taxRate float64
-			rows.Scan(&id, &sku, &name, &description, &price, &category, &stock, &minStock, &unit, &barcode, &promoPrice, &promoActive, &taxRate, &active)
-			products = append(products, map[string]interface{}{"id": id, "sku": sku, "name": name, "description": description, "price": price, "category": category, "stock": stock, "min_stock": minStock, "unit": unit, "barcode": barcode, "promo_price": promoPrice, "promo_active": promoActive, "tax_rate": taxRate, "active": active})
+			rows.Scan(&id, &sku, &name, &description, &price, &category, &stock, &reservedStock, &minStock, &unit, &barcode, &promoPrice, &promoActive, &taxRate, &active)
+			onlineStock := stock - reservedStock - minStock
+			if onlineStock < 0 {
+				onlineStock = 0
+			}
+			products = append(products, map[string]interface{}{
+				"id": id, "sku": sku, "name": name, "description": description,
+				"price": price, "category": category,
+				"stock": stock, "reserved_stock": reservedStock, "online_stock": onlineStock,
+				"min_stock": minStock, "unit": unit, "barcode": barcode,
+				"promo_price": promoPrice, "promo_active": promoActive, "tax_rate": taxRate, "active": active,
+			})
 		}
 	}
 	if products == nil {
@@ -3731,4 +3752,518 @@ func handleGetPresensiList(w http.ResponseWriter, r *http.Request) {
 		"pulang_today": pulangToday,
 	}, 200)
 }
+
+// ==========================================
+// Mobile App Online Orders & Stock Reservation
+// ==========================================
+
+type MobileOrderItemReq struct {
+	ProductID   int    `json:"product_id"`
+	Qty         int    `json:"qty"`
+	ShopperNote string `json:"shopper_note"`
+}
+
+type MobileOrderReq struct {
+	MemberID        string               `json:"member_id"`
+	CustomerName    string               `json:"customer_name"`
+	CustomerPhone   string               `json:"customer_phone"`
+	FulfillmentType string               `json:"fulfillment_type"` // 'delivery' | 'pickup'
+	AddressText     string               `json:"address_text"`
+	InfaqAmount     int                  `json:"infaq_amount"`
+	VoucherDiscount int                  `json:"voucher_discount"`
+	DeliveryFee     int                  `json:"delivery_fee"`
+	PaymentMethod   string               `json:"payment_method"`   // 'qris', 'va', 'cod'
+	ShopperNotes    string               `json:"shopper_notes"`
+	Items           []MobileOrderItemReq `json:"items"`
+}
+
+type MobileOrderPayReq struct {
+	OrderNo       string `json:"order_no"`
+	PaymentMethod string `json:"payment_method"`
+}
+
+func handleMobileCreateOrder(w http.ResponseWriter, r *http.Request) {
+	var req MobileOrderReq
+	if err := decodeJSON(w, r, &req); err != nil {
+		jsonResponse(w, map[string]string{"error": "Format request tidak valid"}, 400)
+		return
+	}
+
+	if len(req.Items) == 0 {
+		jsonResponse(w, map[string]string{"error": "Keranjang belanja kosong"}, 400)
+		return
+	}
+
+	// Generate Order ID YMB-YYYYMMDD-XXX
+	now := nowWIB()
+	orderNo := fmt.Sprintf("YMB-%s-%s", now.Format("20060102"), strings.ToUpper(generateID("", 2)))
+	expiresAt := now.Add(15 * time.Minute)
+
+	checkoutMu.Lock()
+	defer checkoutMu.Unlock()
+
+	sqlTx, err := db.BeginTx(context.Background(), nil)
+	if err != nil {
+		logError("handleMobileCreateOrder begin", err)
+		jsonResponse(w, map[string]string{"error": "Gagal memulai transaksi database"}, 500)
+		return
+	}
+	defer sqlTx.Rollback()
+
+	itemsSubtotal := 0
+	type orderItemRecord struct {
+		ProductID   int
+		Name        string
+		Price       int
+		Qty         int
+		Subtotal    int
+		ShopperNote string
+	}
+	var reservedItems []orderItemRecord
+
+	for _, it := range req.Items {
+		if it.Qty <= 0 {
+			continue
+		}
+		var p Product
+		err := sqlTx.QueryRow("SELECT id, name, price, promo_price, promo_active, stock, COALESCE(reserved_stock, 0), min_stock FROM products WHERE id=? AND active=1", it.ProductID).
+			Scan(&p.ID, &p.Name, &p.Price, &p.PromoPrice, &p.PromoActive, &p.Stock, &p.ReservedStock, &p.MinStock)
+		if err != nil {
+			jsonResponse(w, map[string]interface{}{
+				"error":      fmt.Sprintf("Produk ID %d tidak ditemukan atau tidak aktif", it.ProductID),
+				"product_id": it.ProductID,
+			}, 404)
+			return
+		}
+
+		// ATOMIC RESERVATION CHECK
+		// Online stock availability = stock - reserved_stock - min_stock >= it.Qty
+		res, err := sqlTx.Exec(`UPDATE products 
+			SET reserved_stock = COALESCE(reserved_stock, 0) + ?, sync_status = 'pending'
+			WHERE id = ? AND (stock - COALESCE(reserved_stock, 0) - COALESCE(min_stock, 0)) >= ?`,
+			it.Qty, it.ProductID, it.Qty)
+
+		if err != nil {
+			logError("handleMobileCreateOrder update reserved_stock", err)
+			jsonResponse(w, map[string]string{"error": "Gagal mengalokasikan stok produk"}, 500)
+			return
+		}
+
+		rowsAff, _ := res.RowsAffected()
+		if rowsAff == 0 {
+			// RACE CONDITION PREVENTED!
+			availableOnline := p.Stock - p.ReservedStock - p.MinStock
+			if availableOnline < 0 {
+				availableOnline = 0
+			}
+			jsonResponse(w, map[string]interface{}{
+				"error":            fmt.Sprintf("Stok %s tidak mencukupi untuk pemesanan online (sisa online: %d, diminta: %d)", p.Name, availableOnline, it.Qty),
+				"product_id":       p.ID,
+				"available_online": availableOnline,
+			}, 409)
+			return
+		}
+
+		effectivePrice := p.Price
+		if p.PromoActive == 1 && p.PromoPrice > 0 {
+			effectivePrice = p.PromoPrice
+		}
+		itemSub := effectivePrice * it.Qty
+		itemsSubtotal += itemSub
+
+		reservedItems = append(reservedItems, orderItemRecord{
+			ProductID:   p.ID,
+			Name:        p.Name,
+			Price:       effectivePrice,
+			Qty:         it.Qty,
+			Subtotal:    itemSub,
+			ShopperNote: it.ShopperNote,
+		})
+	}
+
+	if len(reservedItems) == 0 {
+		jsonResponse(w, map[string]string{"error": "Tidak ada produk valid yang dipesan"}, 400)
+		return
+	}
+
+	// Calculate grand total
+	deliveryFee := req.DeliveryFee
+	if req.FulfillmentType == "delivery" && deliveryFee == 0 {
+		if itemsSubtotal < 30000 {
+			deliveryFee = 8000
+		}
+	} else if req.FulfillmentType == "pickup" {
+		deliveryFee = 0
+	}
+
+	voucherDiscount := req.VoucherDiscount
+	if voucherDiscount > itemsSubtotal {
+		voucherDiscount = itemsSubtotal
+	}
+
+	infaqAmount := req.InfaqAmount
+	grandTotal := itemsSubtotal + deliveryFee - voucherDiscount + infaqAmount
+	if grandTotal < 0 {
+		grandTotal = 0
+	}
+
+	fulfillmentType := req.FulfillmentType
+	if fulfillmentType == "" {
+		fulfillmentType = "delivery"
+	}
+	paymentMethod := req.PaymentMethod
+	if paymentMethod == "" {
+		paymentMethod = "qris"
+	}
+
+	// Insert into online_orders
+	orderRes, err := sqlTx.Exec(`INSERT INTO online_orders (
+		order_no, member_id, customer_name, customer_phone, fulfillment_type, 
+		address_text, status, items_subtotal, delivery_fee, discount_amount, 
+		infaq_amount, total_amount, payment_method, payment_status, shopper_notes,
+		driver_name, driver_phone, eta_minutes, expires_at, created_at, updated_at, sync_status
+	) VALUES (?, ?, ?, ?, ?, ?, 'pending_payment', ?, ?, ?, ?, ?, ?, 'unpaid', ?, 'Pak Joko (Kurir Kilat Masjid)', '+628123456789', 15, ?, ?, ?, 'pending')`,
+		orderNo, req.MemberID, req.CustomerName, req.CustomerPhone, fulfillmentType,
+		req.AddressText, itemsSubtotal, deliveryFee, voucherDiscount,
+		infaqAmount, grandTotal, paymentMethod, req.ShopperNotes,
+		expiresAt.Format("2006-01-02 15:04:05"), now.Format("2006-01-02 15:04:05"), now.Format("2006-01-02 15:04:05"),
+	)
+	if err != nil {
+		logError("handleMobileCreateOrder insert order", err)
+		jsonResponse(w, map[string]string{"error": "Gagal menyimpan pesanan online"}, 500)
+		return
+	}
+
+	orderID, _ := orderRes.LastInsertId()
+
+	// Insert into online_order_items
+	for _, item := range reservedItems {
+		_, err = sqlTx.Exec(`INSERT INTO online_order_items (order_id, order_no, product_id, product_name, price, qty, subtotal, shopper_note) 
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			orderID, orderNo, item.ProductID, item.Name, item.Price, item.Qty, item.Subtotal, item.ShopperNote)
+		if err != nil {
+			logError("handleMobileCreateOrder insert order item", err)
+			jsonResponse(w, map[string]string{"error": "Gagal menyimpan item pesanan"}, 500)
+			return
+		}
+	}
+
+	if err := sqlTx.Commit(); err != nil {
+		logError("handleMobileCreateOrder commit", err)
+		jsonResponse(w, map[string]string{"error": "Gagal menyelesaikan pemesanan"}, 500)
+		return
+	}
+
+	// WebSocket broadcast to physical store cashiers
+	wsBroadcast(WSMessage{
+		Type: "NEW_ONLINE_ORDER",
+		Data: map[string]interface{}{
+			"order_no":       orderNo,
+			"customer_name":  req.CustomerName,
+			"customer_phone": req.CustomerPhone,
+			"total_amount":   grandTotal,
+			"status":         "pending_payment",
+			"items_count":    len(reservedItems),
+			"expires_at":     expiresAt.Format(time.RFC3339),
+		},
+	})
+
+	jsonResponse(w, map[string]interface{}{
+		"success":          true,
+		"order_no":         orderNo,
+		"order_id":         orderID,
+		"items_subtotal":   itemsSubtotal,
+		"delivery_fee":     deliveryFee,
+		"discount_amount":  voucherDiscount,
+		"infaq_amount":     infaqAmount,
+		"total_amount":     grandTotal,
+		"fulfillment_type": fulfillmentType,
+		"status":           "pending_payment",
+		"payment_method":   paymentMethod,
+		"expires_at":       expiresAt.Format(time.RFC3339),
+		"message":          "Stok berhasil di-reserve. Selesaikan pembayaran dalam 15 menit.",
+	}, 201)
+}
+
+func handleMobilePayOrder(w http.ResponseWriter, r *http.Request) {
+	var req MobileOrderPayReq
+	if err := decodeJSON(w, r, &req); err != nil || req.OrderNo == "" {
+		jsonResponse(w, map[string]string{"error": "Order No wajib diisi"}, 400)
+		return
+	}
+
+	checkoutMu.Lock()
+	defer checkoutMu.Unlock()
+
+	sqlTx, err := db.BeginTx(context.Background(), nil)
+	if err != nil {
+		logError("handleMobilePayOrder begin", err)
+		jsonResponse(w, map[string]string{"error": "Gagal memulai transaksi"}, 500)
+		return
+	}
+	defer sqlTx.Rollback()
+
+	var orderID int
+	var customerName, customerPhone, memberID, paymentMethod string
+	var totalAmount, itemsSubtotal, discountAmount int
+	var status string
+	err = sqlTx.QueryRow(`SELECT id, customer_name, customer_phone, member_id, payment_method, total_amount, items_subtotal, discount_amount, status 
+		FROM online_orders WHERE order_no = ?`, req.OrderNo).
+		Scan(&orderID, &customerName, &customerPhone, &memberID, &paymentMethod, &totalAmount, &itemsSubtotal, &discountAmount, &status)
+
+	if err != nil {
+		jsonResponse(w, map[string]string{"error": "Pesanan tidak ditemukan"}, 404)
+		return
+	}
+
+	if status == "paid" || status == "delivering" || status == "completed" {
+		jsonResponse(w, map[string]interface{}{
+			"success":  true,
+			"order_no": req.OrderNo,
+			"status":   status,
+			"message":  "Pesanan sudah dibayar sebelumnya",
+		}, 200)
+		return
+	}
+
+	if status == "cancelled" {
+		jsonResponse(w, map[string]string{"error": "Pesanan sudah dibatalkan atau kadaluarsa"}, 400)
+		return
+	}
+
+	// Fetch items to deduct stock
+	rows, err := sqlTx.Query(`SELECT product_id, product_name, price, qty, subtotal FROM online_order_items WHERE order_no = ?`, req.OrderNo)
+	if err != nil {
+		logError("handleMobilePayOrder query items", err)
+		jsonResponse(w, map[string]string{"error": "Gagal membaca item pesanan"}, 500)
+		return
+	}
+	defer rows.Close()
+
+	type paidItem struct {
+		ProductID int
+		Name      string
+		Price     int
+		Qty       int
+		Subtotal  int
+	}
+	var items []paidItem
+	for rows.Next() {
+		var it paidItem
+		if err := rows.Scan(&it.ProductID, &it.Name, &it.Price, &it.Qty, &it.Subtotal); err == nil {
+			items = append(items, it)
+		}
+	}
+	rows.Close()
+
+	// Commit stock deductions: physical stock decreases, reserved stock decreases
+	for _, it := range items {
+		var currentStock int
+		sqlTx.QueryRow("SELECT stock FROM products WHERE id = ?", it.ProductID).Scan(&currentStock)
+
+		sqlTx.Exec(`UPDATE products 
+			SET stock = stock - ?, reserved_stock = MAX(0, COALESCE(reserved_stock, 0) - ?), sync_status = 'pending'
+			WHERE id = ?`, it.Qty, it.Qty, it.ProductID)
+
+		sqlTx.Exec(`INSERT INTO inventory_movements (product_id, movement_type, quantity, stock_before, stock_after, reference_type, reference_id, source, reason, user)
+			VALUES (?, 'online_sale', ?, ?, ?, 'online_order', ?, 'mobile_app', 'Online Order Payment Commit', 'Mobile App')`,
+			it.ProductID, -it.Qty, currentStock, currentStock-it.Qty, req.OrderNo)
+
+		sqlTx.Exec(`INSERT INTO tx_items (tx_id, product_id, name, qty, price, discount, subtotal, notes)
+			VALUES (?, ?, ?, ?, ?, 0, ?, 'Online Delivery')`,
+			req.OrderNo, it.ProductID, it.Name, it.Qty, it.Price, it.Subtotal)
+	}
+
+	// Record in transactions table so it enters the physical store shift & sales report
+	now := nowWIB()
+	sqlTx.Exec(`INSERT INTO transactions (tx_id, total, discount, tax, grand_total, payment, amount_paid, change_amount, customer_name, member_id, cashier, notes, status, created_at, sync_status)
+		VALUES (?, ?, ?, 0, ?, ?, ?, 0, ?, ?, 'Online Mobile', 'Online Order App', 'completed', ?, 'pending')`,
+		req.OrderNo, itemsSubtotal, discountAmount, totalAmount, paymentMethod, totalAmount,
+		customerName, nullStr(memberID), now.Format("2006-01-02 15:04:05"))
+
+	// Update online_orders status to paid
+	sqlTx.Exec(`UPDATE online_orders 
+		SET status = 'paid', payment_status = 'paid', updated_at = ? WHERE id = ?`,
+		now.Format("2006-01-02 15:04:05"), orderID)
+
+	if err := sqlTx.Commit(); err != nil {
+		logError("handleMobilePayOrder commit", err)
+		jsonResponse(w, map[string]string{"error": "Gagal memproses pembayaran"}, 500)
+		return
+	}
+
+	TriggerSync()
+
+	// WebSocket event to store cashiers
+	wsBroadcast(WSMessage{
+		Type: "ONLINE_ORDER_PAID",
+		Data: map[string]interface{}{
+			"order_no":      req.OrderNo,
+			"customer_name": customerName,
+			"total_amount":  totalAmount,
+			"status":        "paid",
+		},
+	})
+
+	jsonResponse(w, map[string]interface{}{
+		"success":  true,
+		"order_no": req.OrderNo,
+		"status":   "paid",
+		"message":  "Pembayaran berhasil diverifikasi, pesanan diteruskan ke staf toko",
+	}, 200)
+}
+
+func handleMobileCancelOrder(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		OrderNo string `json:"order_no"`
+	}
+	if err := decodeJSON(w, r, &req); err != nil || req.OrderNo == "" {
+		jsonResponse(w, map[string]string{"error": "Order No wajib diisi"}, 400)
+		return
+	}
+
+	checkoutMu.Lock()
+	defer checkoutMu.Unlock()
+
+	var orderID int
+	var status string
+	err := db.QueryRow("SELECT id, status FROM online_orders WHERE order_no = ?", req.OrderNo).Scan(&orderID, &status)
+	if err != nil {
+		jsonResponse(w, map[string]string{"error": "Pesanan tidak ditemukan"}, 404)
+		return
+	}
+
+	if status != "pending_payment" {
+		jsonResponse(w, map[string]string{"error": fmt.Sprintf("Pesanan dengan status '%s' tidak dapat dibatalkan", status)}, 400)
+		return
+	}
+
+	// Release reserved stock
+	rows, err := db.Query("SELECT product_id, qty FROM online_order_items WHERE order_no = ?", req.OrderNo)
+	if err == nil {
+		for rows.Next() {
+			var pid, qty int
+			if err := rows.Scan(&pid, &qty); err == nil {
+				db.Exec("UPDATE products SET reserved_stock = MAX(0, COALESCE(reserved_stock, 0) - ?), sync_status = 'pending' WHERE id = ?", qty, pid)
+			}
+		}
+		rows.Close()
+	}
+
+	now := nowWIB()
+	db.Exec("UPDATE online_orders SET status = 'cancelled', payment_status = 'cancelled', updated_at = ? WHERE id = ?",
+		now.Format("2006-01-02 15:04:05"), orderID)
+
+	wsBroadcast(WSMessage{
+		Type: "ONLINE_ORDER_CANCELLED",
+		Data: map[string]interface{}{
+			"order_no": req.OrderNo,
+			"status":   "cancelled",
+		},
+	})
+
+	jsonResponse(w, map[string]interface{}{
+		"success":  true,
+		"order_no": req.OrderNo,
+		"status":   "cancelled",
+		"message":  "Pesanan dibatalkan dan alokasi stok telah dikembalikan",
+	}, 200)
+}
+
+func handleMobileGetOrders(w http.ResponseWriter, r *http.Request) {
+	orderNo := r.URL.Query().Get("order_no")
+	phone := r.URL.Query().Get("phone")
+	memberID := r.URL.Query().Get("member_id")
+
+	query := `SELECT id, order_no, member_id, customer_name, customer_phone, fulfillment_type, 
+		address_text, status, items_subtotal, delivery_fee, discount_amount, infaq_amount, 
+		total_amount, payment_method, payment_status, shopper_notes, driver_name, driver_phone, 
+		eta_minutes, expires_at, created_at FROM online_orders WHERE 1=1`
+	var args []interface{}
+
+	if orderNo != "" {
+		query += " AND order_no = ?"
+		args = append(args, orderNo)
+	} else if phone != "" {
+		query += " AND customer_phone = ?"
+		args = append(args, phone)
+	} else if memberID != "" {
+		query += " AND member_id = ?"
+		args = append(args, memberID)
+	}
+
+	query += " ORDER BY id DESC LIMIT 50"
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		logError("handleMobileGetOrders", err)
+		jsonResponse(w, map[string]string{"error": "Database error"}, 500)
+		return
+	}
+	defer rows.Close()
+
+	var orders []map[string]interface{}
+	for rows.Next() {
+		var id, itemsSubtotal, deliveryFee, discountAmount, infaqAmount, totalAmount, etaMinutes int
+		var ordNo, memID, custName, custPhone, fulfill, addr, status, payMethod, payStatus, shopperNotes, driverName, driverPhone string
+		var expiresAt, createdAt sql.NullString
+
+		rows.Scan(&id, &ordNo, &memID, &custName, &custPhone, &fulfill, &addr, &status,
+			&itemsSubtotal, &deliveryFee, &discountAmount, &infaqAmount, &totalAmount,
+			&payMethod, &payStatus, &shopperNotes, &driverName, &driverPhone, &etaMinutes,
+			&expiresAt, &createdAt)
+
+		// Fetch items for this order
+		var items []map[string]interface{}
+		itemRows, iErr := db.Query("SELECT product_id, product_name, price, qty, subtotal, shopper_note FROM online_order_items WHERE order_no = ?", ordNo)
+		if iErr == nil {
+			for itemRows.Next() {
+				var pid, price, qty, subtotal int
+				var pName, sNote string
+				if err := itemRows.Scan(&pid, &pName, &price, &qty, &subtotal, &sNote); err == nil {
+					items = append(items, map[string]interface{}{
+						"product_id":   pid,
+						"product_name": pName,
+						"price":        price,
+						"qty":          qty,
+						"subtotal":     subtotal,
+						"shopper_note": sNote,
+					})
+				}
+			}
+			itemRows.Close()
+		}
+
+		orders = append(orders, map[string]interface{}{
+			"id":               id,
+			"order_no":         ordNo,
+			"member_id":        memID,
+			"customer_name":    custName,
+			"customer_phone":   custPhone,
+			"fulfillment_type": fulfill,
+			"address_text":     addr,
+			"status":           status,
+			"items_subtotal":   itemsSubtotal,
+			"delivery_fee":     deliveryFee,
+			"discount_amount":  discountAmount,
+			"infaq_amount":     infaqAmount,
+			"total_amount":     totalAmount,
+			"payment_method":   payMethod,
+			"payment_status":   payStatus,
+			"shopper_notes":    shopperNotes,
+			"driver_name":      driverName,
+			"driver_phone":     driverPhone,
+			"eta_minutes":      etaMinutes,
+			"expires_at":       expiresAt.String,
+			"created_at":       createdAt.String,
+			"items":            items,
+		})
+	}
+
+	if orders == nil {
+		orders = []map[string]interface{}{}
+	}
+	jsonResponse(w, orders, 200)
+}
+
 

@@ -158,21 +158,23 @@ func generateID(prefix string, length int) string {
 }
 
 type Product struct {
-	ID          int     `json:"id"`
-	SKU         string  `json:"sku"`
-	Name        string  `json:"name"`
-	Description string  `json:"description,omitempty"`
-	Price       int     `json:"price"`
-	Cost        int     `json:"cost,omitempty"`
-	Category    string  `json:"category"`
-	Stock       int     `json:"stock"`
-	MinStock    int     `json:"min_stock,omitempty"`
-	Unit        string  `json:"unit"`
-	Barcode     string  `json:"barcode"`
-	PromoPrice  int     `json:"promo_price"`
-	PromoActive int     `json:"promo_active"`
-	TaxRate     float64 `json:"tax_rate"`
-	Active      int     `json:"active"`
+	ID            int     `json:"id"`
+	SKU           string  `json:"sku"`
+	Name          string  `json:"name"`
+	Description   string  `json:"description,omitempty"`
+	Price         int     `json:"price"`
+	Cost          int     `json:"cost,omitempty"`
+	Category      string  `json:"category"`
+	Stock         int     `json:"stock"`
+	ReservedStock int     `json:"reserved_stock"`
+	OnlineStock   int     `json:"online_stock"`
+	MinStock      int     `json:"min_stock,omitempty"`
+	Unit          string  `json:"unit"`
+	Barcode       string  `json:"barcode"`
+	PromoPrice    int     `json:"promo_price"`
+	PromoActive   int     `json:"promo_active"`
+	TaxRate       float64 `json:"tax_rate"`
+	Active        int     `json:"active"`
 }
 
 type Transaction struct {
@@ -510,6 +512,7 @@ func initDB() {
 	db.Exec("ALTER TABLE products ADD COLUMN tax_rate REAL DEFAULT -1")
 	db.Exec("ALTER TABLE products ADD COLUMN description TEXT DEFAULT ''")
 	db.Exec("ALTER TABLE products ADD COLUMN min_stock INTEGER DEFAULT 0")
+	db.Exec("ALTER TABLE products ADD COLUMN reserved_stock INTEGER DEFAULT 0")
 	db.Exec("ALTER TABLE products ADD COLUMN sync_status TEXT DEFAULT 'pending'")
 	db.Exec("ALTER TABLE transactions ADD COLUMN sync_status TEXT DEFAULT 'pending'")
 	db.Exec("ALTER TABLE shifts ADD COLUMN sync_status TEXT DEFAULT 'pending'")
@@ -532,6 +535,47 @@ func initDB() {
 		role TEXT NOT NULL,
 		username TEXT NOT NULL,
 		expires_at TEXT NOT NULL
+	)`)
+
+	// Tables for Mobile App Online Orders
+	db.Exec(`CREATE TABLE IF NOT EXISTS online_orders (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		order_no TEXT UNIQUE NOT NULL,
+		member_id TEXT DEFAULT '',
+		customer_name TEXT NOT NULL,
+		customer_phone TEXT NOT NULL,
+		fulfillment_type TEXT DEFAULT 'delivery',
+		address_text TEXT DEFAULT '',
+		status TEXT DEFAULT 'pending_payment',
+		items_subtotal INTEGER NOT NULL,
+		delivery_fee INTEGER DEFAULT 0,
+		discount_amount INTEGER DEFAULT 0,
+		infaq_amount INTEGER DEFAULT 0,
+		total_amount INTEGER NOT NULL,
+		payment_method TEXT DEFAULT 'qris',
+		payment_reference TEXT DEFAULT '',
+		payment_status TEXT DEFAULT 'unpaid',
+		shopper_notes TEXT DEFAULT '',
+		driver_name TEXT DEFAULT 'Pak Joko (Kurir Kilat Masjid)',
+		driver_phone TEXT DEFAULT '+628123456789',
+		eta_minutes INTEGER DEFAULT 15,
+		expires_at TIMESTAMP,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		sync_status TEXT DEFAULT 'pending'
+	)`)
+
+	db.Exec(`CREATE TABLE IF NOT EXISTS online_order_items (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		order_id INTEGER NOT NULL,
+		order_no TEXT NOT NULL,
+		product_id INTEGER NOT NULL,
+		product_name TEXT NOT NULL,
+		price INTEGER NOT NULL,
+		qty INTEGER NOT NULL,
+		subtotal INTEGER NOT NULL,
+		shopper_note TEXT DEFAULT '',
+		FOREIGN KEY (order_id) REFERENCES online_orders(id)
 	)`)
 
 	db.Exec("INSERT OR IGNORE INTO schema_migrations (version,name,checksum) VALUES (1,'initial','v2.2')")
@@ -599,6 +643,59 @@ func initDB() {
 	db.Exec("UPDATE settings SET value='0' WHERE key='ppn_rate'")
 	db.Exec("UPDATE settings SET value='https://ymb-mart.vercel.app' WHERE key='public_presensi_url' AND (value='' OR value LIKE '%localhost%' OR value LIKE '%127.0.0.1%')")
 	db.Exec("UPDATE settings SET value='Baiturrahman Mart' WHERE key='store_name' AND (value='YMB Mart' OR value='Masjid Jami'' Baiturrahman')")
+
+	// Start background cleaner for expired reservations
+	go startExpiredOrderReleaser()
+}
+
+func startExpiredOrderReleaser() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		if db == nil {
+			continue
+		}
+		rows, err := db.Query(`SELECT id, order_no FROM online_orders 
+			WHERE status = 'pending_payment' AND expires_at IS NOT NULL AND expires_at < CURRENT_TIMESTAMP`)
+		if err != nil {
+			continue
+		}
+		var expiredOrders []struct {
+			id      int
+			orderNo string
+		}
+		for rows.Next() {
+			var o struct {
+				id      int
+				orderNo string
+			}
+			if err := rows.Scan(&o.id, &o.orderNo); err == nil {
+				expiredOrders = append(expiredOrders, o)
+			}
+		}
+		rows.Close()
+
+		for _, o := range expiredOrders {
+			itemRows, err := db.Query(`SELECT product_id, qty FROM online_order_items WHERE order_no = ?`, o.orderNo)
+			if err == nil {
+				for itemRows.Next() {
+					var pid, qty int
+					if err := itemRows.Scan(&pid, &qty); err == nil {
+						db.Exec(`UPDATE products SET reserved_stock = MAX(0, COALESCE(reserved_stock, 0) - ?) WHERE id = ?`, qty, pid)
+					}
+				}
+				itemRows.Close()
+			}
+			db.Exec(`UPDATE online_orders SET status = 'cancelled', payment_status = 'expired', updated_at = CURRENT_TIMESTAMP WHERE id = ?`, o.id)
+			wsBroadcast(WSMessage{
+				Type: "ONLINE_ORDER_EXPIRED",
+				Data: map[string]interface{}{
+					"order_no": o.orderNo,
+					"status":   "cancelled",
+				},
+			})
+		}
+	}
 }
 
 var wibLocation = time.FixedZone("WIB", 7*3600)

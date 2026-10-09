@@ -37,7 +37,9 @@ import {
 
 import { useCartStore, CartItem, PlacedOrder } from '@/stores/useCartStore';
 import { useAddressStore } from '@/stores/useAddressStore';
+import { useAuthStore } from '@/stores/useAuthStore';
 import { AddressModal } from '@/components/common/AddressModal';
+import { createMobileOrder, payMobileOrder, cancelMobileOrder } from '@/services/api';
 import { Colors, Spacing } from '@/constants/theme';
 import { formatRupiah } from '@/utils/currency';
 
@@ -78,9 +80,14 @@ export default function CartScreen() {
   const infaqAmount = includeInfaq ? 1500 : 0;
   const grandTotal = Math.max(0, subtotal + deliveryFee - voucherDiscount + infaqAmount);
 
+  // User authentication
+  const authUser = useAuthStore((state) => state.user);
+
   // QRIS Modal & Payment State
   const [showQrisModal, setShowQrisModal] = useState(false);
   const [isCheckingPayment, setIsCheckingPayment] = useState(false);
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+  const [activeOrderNo, setActiveOrderNo] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(895); // 14m 55s
 
   useEffect(() => {
@@ -97,49 +104,109 @@ export default function CartScreen() {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  const handleCheckout = () => {
-    setShowQrisModal(true);
+  const handleCheckout = async () => {
+    if (cartList.length === 0) {
+      Alert.alert('Keranjang Kosong', 'Silakan pilih produk terlebih dahulu.');
+      return;
+    }
+
+    setIsSubmittingOrder(true);
+    try {
+      const payload = {
+        member_id: authUser?.memberId || '',
+        customer_name: selectedAddress?.recipientName || authUser?.name || 'Pelanggan Baiturrahman',
+        customer_phone: selectedAddress?.phone || authUser?.phone || '081234567890',
+        fulfillment_type: fulfillment,
+        address_text: `${selectedAddress?.label || 'Rumah'}: ${selectedAddress?.addressLine || 'Alamat Belum Diset'}`,
+        infaq_amount: infaqAmount,
+        voucher_discount: voucherDiscount,
+        delivery_fee: deliveryFee,
+        payment_method: paymentMethod,
+        shopper_notes: '',
+        items: cartList.map((item) => ({
+          product_id: item.product.id,
+          qty: item.qty,
+          shopper_note: item.shopperNote || '',
+        })),
+      };
+
+      const res = await createMobileOrder(payload);
+      if (!res.success) {
+        Alert.alert(
+          'Stok Tidak Cukup / Gagal Pesan',
+          res.error || 'Mohon periksa kembali ketersediaan stok produk Anda.'
+        );
+        return;
+      }
+
+      if (res.order_no) {
+        setActiveOrderNo(res.order_no);
+        setCountdown(895); // Reset 15 mins timer
+        setShowQrisModal(true);
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Gagal memproses pesanan ke server.');
+    } finally {
+      setIsSubmittingOrder(false);
+    }
   };
 
-  const handleConfirmPaid = () => {
+  const handleConfirmPaid = async () => {
+    if (!activeOrderNo) return;
     setIsCheckingPayment(true);
 
-    const now = new Date();
-    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-    const newOrderId = `YMB-${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}-${Math.floor(100 + Math.random() * 900)}`;
+    try {
+      const res = await payMobileOrder(activeOrderNo);
+      if (!res.success) {
+        Alert.alert('Verifikasi Gagal', res.error || 'Pembayaran belum terdeteksi. Silakan coba sesaat lagi.');
+        setIsCheckingPayment(false);
+        return;
+      }
 
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-    const dateStr = `Hari Ini, ${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
+      const now = new Date();
+      const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+      const dateStr = `Hari Ini, ${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
 
-    const placedOrder: PlacedOrder = {
-      orderId: newOrderId,
-      items: [...cartList],
-      subtotal,
-      deliveryFee,
-      discount: voucherDiscount,
-      infaq: infaqAmount,
-      grandTotal,
-      fulfillment,
-      paymentMethod,
-      recipientName: selectedAddress.recipientName,
-      address: selectedAddress.addressLine,
-      createdAt: `${timeStr} WIB`,
-      dateStr,
-      status: 'active',
-      driverName: 'Pak Joko (Kurir Kilat Masjid)',
-      driverPhone: '+628123456789',
-      etaMinutes: 15,
-    };
+      const placedOrder: PlacedOrder = {
+        orderId: activeOrderNo,
+        items: [...cartList],
+        subtotal,
+        deliveryFee,
+        discount: voucherDiscount,
+        infaq: infaqAmount,
+        grandTotal,
+        fulfillment,
+        paymentMethod,
+        recipientName: selectedAddress?.recipientName || 'Pelanggan',
+        address: selectedAddress?.addressLine || '',
+        createdAt: `${timeStr} WIB`,
+        dateStr,
+        status: 'active',
+        driverName: 'Pak Joko (Kurir Kilat Masjid)',
+        driverPhone: '+628123456789',
+        etaMinutes: 15,
+      };
 
-    addOrder(placedOrder);
-    setLastOrder(placedOrder);
+      addOrder(placedOrder);
+      setLastOrder(placedOrder);
 
-    setTimeout(() => {
-      setIsCheckingPayment(false);
       setShowQrisModal(false);
       clearCart();
-      router.push(`/order/tracking?id=${newOrderId}` as any);
-    }, 1200);
+      router.push(`/order/tracking?id=${activeOrderNo}` as any);
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Terjadi kesalahan verifikasi pembayaran.');
+    } finally {
+      setIsCheckingPayment(false);
+    }
+  };
+
+  const handleCancelOrder = () => {
+    if (activeOrderNo) {
+      cancelMobileOrder(activeOrderNo).catch(() => {});
+      setActiveOrderNo(null);
+    }
+    setShowQrisModal(false);
   };
 
   const handleBack = () => {
@@ -520,12 +587,22 @@ export default function CartScreen() {
         </View>
 
         <TouchableOpacity
-          style={styles.payBtn}
+          style={[styles.payBtn, isSubmittingOrder && { opacity: 0.8 }]}
           onPress={handleCheckout}
+          disabled={isSubmittingOrder}
           activeOpacity={0.85}
         >
-          <Text style={styles.payBtnText}>Bayar Sekarang (QRIS)</Text>
-          <ChevronRight size={18} color="#FFF" />
+          {isSubmittingOrder ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <ActivityIndicator size="small" color="#FFFFFF" />
+              <Text style={styles.payBtnText}>Mengunci Stok...</Text>
+            </View>
+          ) : (
+            <>
+              <Text style={styles.payBtnText}>Bayar Sekarang (QRIS)</Text>
+              <ChevronRight size={18} color="#FFF" />
+            </>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -535,7 +612,7 @@ export default function CartScreen() {
         transparent={true}
         animationType="fade"
         onRequestClose={() => {
-          if (!isCheckingPayment) setShowQrisModal(false);
+          if (!isCheckingPayment) handleCancelOrder();
         }}
       >
         <View style={styles.modalBackdrop}>
@@ -554,7 +631,7 @@ export default function CartScreen() {
               </View>
               <TouchableOpacity
                 style={styles.closeBtn}
-                onPress={() => !isCheckingPayment && setShowQrisModal(false)}
+                onPress={() => !isCheckingPayment && handleCancelOrder()}
                 disabled={isCheckingPayment}
                 activeOpacity={0.7}
               >
@@ -624,7 +701,7 @@ export default function CartScreen() {
 
               <TouchableOpacity
                 style={styles.cancelPayBtn}
-                onPress={() => setShowQrisModal(false)}
+                onPress={handleCancelOrder}
                 disabled={isCheckingPayment}
                 activeOpacity={0.7}
               >
