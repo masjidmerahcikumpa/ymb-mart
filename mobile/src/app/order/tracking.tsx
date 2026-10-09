@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   StatusBar,
   Alert,
   Platform,
+  Linking,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -29,12 +31,13 @@ import {
 import { Colors, Spacing } from '@/constants/theme';
 import { formatRupiah } from '@/utils/currency';
 import { useCartStore, CartItem, PlacedOrder } from '@/stores/useCartStore';
+import { fetchOrderDetails, BackendOrder } from '@/services/api';
 
 export default function OrderTrackingScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
 
-  // Read order from cart store
+  // Read order from cart store fallback
   const getOrderById = useCartStore((state) => state.getOrderById);
   const rawLastOrder = useCartStore((state) => state.lastOrder);
   const lastOrder = useMemo(() => {
@@ -50,6 +53,33 @@ export default function OrderTrackingScreen() {
     lastOrder?.orderId ||
     'YMB-20261002-881';
 
+  // Live Backend State
+  const [backendOrder, setBackendOrder] = useState<BackendOrder | null>(null);
+  const [isLoadingOrder, setIsLoadingOrder] = useState(false);
+
+  const loadOrder = useCallback(async () => {
+    if (!orderId) return;
+    try {
+      const data = await fetchOrderDetails(orderId);
+      if (data) {
+        setBackendOrder(data);
+      }
+    } catch (err) {
+      console.warn('Error fetching order tracking:', err);
+    }
+  }, [orderId]);
+
+  useEffect(() => {
+    setIsLoadingOrder(true);
+    loadOrder().finally(() => setIsLoadingOrder(false));
+
+    // Poll status every 10 seconds if order not yet completed or cancelled
+    const timer = setInterval(() => {
+      loadOrder();
+    }, 10000);
+    return () => clearInterval(timer);
+  }, [loadOrder]);
+
   const cartItems: CartItem[] = useMemo(() => {
     if (lastOrder && lastOrder.items.length > 0) {
       return lastOrder.items;
@@ -57,35 +87,42 @@ export default function OrderTrackingScreen() {
     return Object.values(items);
   }, [lastOrder, items]);
 
-  const [etaMinutes, setEtaMinutes] = useState(12);
-  const [showReceipt, setShowReceipt] = useState(false);
-  const [activeStep, setActiveStep] = useState(3); // 1: Diterima, 2: Dikemas, 3: Diantar, 4: Selesai
+  // Derived step & courier info
+  const orderStatus = backendOrder?.status || (lastOrder?.status === 'active' ? 'delivering' : 'completed');
 
-  // Simulated countdown for courier ETA
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setEtaMinutes((prev) => (prev > 1 ? prev - 1 : 1));
-    }, 60000);
-    return () => clearInterval(timer);
-  }, []);
+  const activeStep = useMemo(() => {
+    if (orderStatus === 'pending_payment') return 1;
+    if (orderStatus === 'paid') return 2;
+    if (orderStatus === 'delivering') return 3;
+    if (orderStatus === 'completed') return 4;
+    return 3;
+  }, [orderStatus]);
+
+  const driverName = backendOrder?.driver_name || lastOrder?.driverName || 'Pak Joko (Kurir Kilat Masjid)';
+  const driverPhone = backendOrder?.driver_phone || lastOrder?.driverPhone || '+628123456789';
+  const etaMinutes = backendOrder?.eta_minutes ?? 12;
+
+  const [showReceipt, setShowReceipt] = useState(false);
 
   const handleCallCourier = () => {
+    const cleanPhone = driverPhone.replace(/[^0-9]/g, '');
     Alert.alert(
       'Hubungi Kurir',
-      'Menghubungi Pak Budi Santoso (0812-9876-5432)...',
+      `Menghubungi ${driverName} (${driverPhone})?`,
       [
         { text: 'Batal', style: 'cancel' },
-        { text: 'Panggil', onPress: () => {} },
+        { text: 'Panggil', onPress: () => Linking.openURL(`tel:${cleanPhone}`).catch(() => {}) },
       ]
     );
   };
 
   const handleWhatsAppCourier = () => {
-    Alert.alert(
-      'Chat WhatsApp Kurir',
-      'Membuka chat WhatsApp dengan Pak Budi: "Halo Pak Budi, saya pemesan #YMB-20260925-001..."',
-      [{ text: 'Kirim Pesan' }]
-    );
+    let cleanPhone = driverPhone.replace(/[^0-9]/g, '');
+    if (cleanPhone.startsWith('0')) cleanPhone = '62' + cleanPhone.slice(1);
+    const msg = `Halo ${driverName}, saya pemesan pesanan #${orderId} di Baiturrahman Mart.`;
+    Linking.openURL(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`).catch(() => {
+      Alert.alert('Gagal Membuka WhatsApp', 'Pastikan aplikasi WhatsApp terpasang di perangkat Anda.');
+    });
   };
 
   return (
@@ -142,14 +179,20 @@ export default function OrderTrackingScreen() {
             {/* Route Dashed Path */}
             <View style={styles.routeLine} />
 
-            {/* Courier Motor Indicator (In-Transit) */}
-            <View style={styles.courierPin}>
+            {/* Courier Motor Indicator */}
+            <View style={[
+              styles.courierPin,
+              activeStep <= 2 && { left: '16%' },
+              activeStep >= 4 && { left: '80%' },
+            ]}>
               <View style={styles.pulseRing} />
               <View style={styles.courierIconCircle}>
-                <Text style={{ fontSize: 16 }}>🛵</Text>
+                <Text style={{ fontSize: 16 }}>{activeStep >= 4 ? '🏠' : '🛵'}</Text>
               </View>
               <View style={styles.courierTag}>
-                <Text style={styles.courierTagText}>Pak Budi (1.2 km)</Text>
+                <Text style={styles.courierTagText}>
+                  {activeStep === 4 ? 'Tiba di Rumah' : activeStep <= 2 ? 'Di Toko' : `${driverName.split(' ')[0]} (1.2 km)`}
+                </Text>
               </View>
             </View>
 
@@ -166,7 +209,7 @@ export default function OrderTrackingScreen() {
           <View style={styles.mapFooter}>
             <View style={styles.expressTag}>
               <Zap size={13} color={Colors.light.secondary} fill={Colors.light.secondary} />
-              <Text style={styles.expressTagText}>Pengiriman Kilat Express • Kurir Toko</Text>
+              <Text style={styles.expressTagText}>Pengiriman Kilat Express • Kurir Toko Baiturrahman</Text>
             </View>
           </View>
         </View>
@@ -178,12 +221,26 @@ export default function OrderTrackingScreen() {
               <Clock size={22} color={Colors.light.primary} />
             </View>
             <View>
-              <Text style={styles.etaTitle}>Estimasi Tiba Dalam</Text>
-              <Text style={styles.etaTime}>{etaMinutes} Menit Lagi</Text>
+              <Text style={styles.etaTitle}>
+                {activeStep === 4 ? 'Pesanan Selesai' : activeStep === 3 ? 'Estimasi Tiba Dalam' : 'Status Pengiriman'}
+              </Text>
+              <Text style={styles.etaTime}>
+                {activeStep === 4 ? 'Sudah Diterima' : activeStep === 3 ? `${etaMinutes} Menit Lagi` : 'Sedang Diproses Toko'}
+              </Text>
             </View>
           </View>
-          <View style={styles.etaStatusPill}>
-            <Text style={styles.etaStatusText}>Di Jalan</Text>
+          <View style={[
+            styles.etaStatusPill,
+            activeStep === 4 && { backgroundColor: '#E8F5E9' },
+            activeStep <= 2 && { backgroundColor: '#FFF3E0' },
+          ]}>
+            <Text style={[
+              styles.etaStatusText,
+              activeStep === 4 && { color: '#059669' },
+              activeStep <= 2 && { color: '#D97706' },
+            ]}>
+              {activeStep === 4 ? 'Selesai' : activeStep === 3 ? 'Di Jalan' : activeStep === 2 ? 'Dikemas' : 'Menunggu'}
+            </Text>
           </View>
         </View>
 
@@ -195,13 +252,13 @@ export default function OrderTrackingScreen() {
             </View>
             <View style={{ flex: 1, marginLeft: Spacing.sm }}>
               <View style={styles.courierNameRow}>
-                <Text style={styles.courierName}>Pak Budi Santoso</Text>
+                <Text style={styles.courierName}>{driverName}</Text>
                 <View style={styles.badgeVerified}>
                   <Text style={styles.badgeVerifiedText}>KURIR RESMI</Text>
                 </View>
               </View>
-              <Text style={styles.vehicleInfo}>Honda Vario Hitam • B 1234 XYZ</Text>
-              <Text style={styles.ratingText}>⭐ 4.9 • 240+ Pengantaran Sukses</Text>
+              <Text style={styles.vehicleInfo}>Honda Vario • B 1234 XYZ</Text>
+              <Text style={styles.ratingText}>⭐ 4.9 • Pengantaran Amanah & Cepat</Text>
             </View>
           </View>
 
@@ -235,55 +292,67 @@ export default function OrderTrackingScreen() {
             {/* Step 1: Diterima */}
             <View style={styles.stepRow}>
               <View style={styles.stepIndicatorCol}>
-                <View style={[styles.stepDot, styles.stepDotDone]}>
+                <View style={[styles.stepDot, activeStep >= 1 ? styles.stepDotDone : undefined]}>
                   <CheckCircle2 size={14} color="#FFF" />
                 </View>
-                <View style={[styles.stepLine, styles.stepLineDone]} />
+                <View style={[styles.stepLine, activeStep >= 2 ? styles.stepLineDone : undefined]} />
               </View>
               <View style={styles.stepContent}>
-                <Text style={styles.stepTitleDone}>Pesanan Diterima</Text>
-                <Text style={styles.stepSub}>Pembayaran QRIS terverifikasi otomatis (18:15 WIB)</Text>
+                <Text style={activeStep >= 1 ? styles.stepTitleDone : styles.stepTitlePending}>Pesanan Diterima</Text>
+                <Text style={styles.stepSub}>Pembayaran QRIS telah terverifikasi otomatis</Text>
               </View>
             </View>
 
             {/* Step 2: Dikemas Personal Shopper */}
             <View style={styles.stepRow}>
               <View style={styles.stepIndicatorCol}>
-                <View style={[styles.stepDot, styles.stepDotDone]}>
-                  <CheckCircle2 size={14} color="#FFF" />
+                <View style={[
+                  styles.stepDot,
+                  activeStep > 2 ? styles.stepDotDone : activeStep === 2 ? styles.stepDotActive : undefined
+                ]}>
+                  {activeStep > 2 ? <CheckCircle2 size={14} color="#FFF" /> : <Text style={{ fontSize: 10 }}>📦</Text>}
                 </View>
-                <View style={[styles.stepLine, styles.stepLineDone]} />
+                <View style={[styles.stepLine, activeStep >= 3 ? styles.stepLineDone : undefined]} />
               </View>
               <View style={styles.stepContent}>
-                <Text style={styles.stepTitleDone}>Sedang Dikemas Personal Shopper</Text>
-                <Text style={styles.stepSub}>Staf toko memilihkan barang segar sesuai catatan (18:22 WIB)</Text>
+                <Text style={activeStep > 2 ? styles.stepTitleDone : activeStep === 2 ? styles.stepTitleActive : styles.stepTitlePending}>
+                  Sedang Dikemas Personal Shopper
+                </Text>
+                <Text style={styles.stepSub}>Staf toko memilihkan barang segar sesuai catatan belanja</Text>
               </View>
             </View>
 
-            {/* Step 3: Kurir Menuju Lokasi (Active) */}
+            {/* Step 3: Kurir Menuju Lokasi */}
             <View style={styles.stepRow}>
               <View style={styles.stepIndicatorCol}>
-                <View style={[styles.stepDot, styles.stepDotActive]}>
-                  <Text style={{ fontSize: 10 }}>🛵</Text>
+                <View style={[
+                  styles.stepDot,
+                  activeStep > 3 ? styles.stepDotDone : activeStep === 3 ? styles.stepDotActive : undefined
+                ]}>
+                  {activeStep > 3 ? <CheckCircle2 size={14} color="#FFF" /> : <Text style={{ fontSize: 10 }}>🛵</Text>}
                 </View>
-                <View style={styles.stepLine} />
+                <View style={[styles.stepLine, activeStep >= 4 ? styles.stepLineDone : undefined]} />
               </View>
               <View style={styles.stepContent}>
-                <Text style={styles.stepTitleActive}>Kurir Sedang Menuju Lokasimu</Text>
-                <Text style={styles.stepSubActive}>Pak Budi sedang meluncur ke alamat rumah Anda</Text>
+                <Text style={activeStep > 3 ? styles.stepTitleDone : activeStep === 3 ? styles.stepTitleActive : styles.stepTitlePending}>
+                  Kurir Sedang Menuju Lokasimu
+                </Text>
+                <Text style={activeStep === 3 ? styles.stepSubActive : styles.stepSub}>
+                  {driverName} sedang meluncur ke alamat tujuan
+                </Text>
               </View>
             </View>
 
             {/* Step 4: Selesai */}
             <View style={styles.stepRow}>
               <View style={styles.stepIndicatorCol}>
-                <View style={styles.stepDot}>
-                  <View style={styles.dotInner} />
+                <View style={[styles.stepDot, activeStep === 4 ? styles.stepDotDone : undefined]}>
+                  {activeStep === 4 ? <CheckCircle2 size={14} color="#FFF" /> : <View style={styles.dotInner} />}
                 </View>
               </View>
               <View style={styles.stepContent}>
-                <Text style={styles.stepTitlePending}>Pesanan Tiba & Selesai</Text>
-                <Text style={styles.stepSub}>Konfirmasi barang diterima & berikan ulasan</Text>
+                <Text style={activeStep === 4 ? styles.stepTitleDone : styles.stepTitlePending}>Pesanan Tiba & Selesai</Text>
+                <Text style={styles.stepSub}>Pesanan telah diterima oleh pembeli</Text>
               </View>
             </View>
           </View>
@@ -309,7 +378,17 @@ export default function OrderTrackingScreen() {
 
           {showReceipt && (
             <View style={styles.receiptBody}>
-              {cartItems.length > 0 ? (
+              {backendOrder && backendOrder.items && backendOrder.items.length > 0 ? (
+                backendOrder.items.map((it, idx) => (
+                  <View key={idx} style={styles.receiptItemRow}>
+                    <Text style={styles.receiptItemQty}>{it.qty}x</Text>
+                    <Text style={styles.receiptItemName} numberOfLines={1}>
+                      {it.product_name}
+                    </Text>
+                    <Text style={styles.receiptItemPrice}>{formatRupiah(it.subtotal)}</Text>
+                  </View>
+                ))
+              ) : cartItems.length > 0 ? (
                 cartItems.map(({ product, qty }) => (
                   <View key={product.id} style={styles.receiptItemRow}>
                     <Text style={styles.receiptItemQty}>{qty}x</Text>
@@ -324,63 +403,71 @@ export default function OrderTrackingScreen() {
               ) : (
                 <View style={styles.receiptItemRow}>
                   <Text style={styles.receiptItemQty}>1x</Text>
-                  <Text style={styles.receiptItemName}>Beras Ramos Setra Premium 5kg</Text>
-                  <Text style={styles.receiptItemPrice}>{formatRupiah(64900)}</Text>
+                  <Text style={styles.receiptItemName}>Produk Belanja Toko</Text>
+                  <Text style={styles.receiptItemPrice}>{formatRupiah(backendOrder?.total_amount || 0)}</Text>
                 </View>
               )}
 
               <View style={styles.receiptDivider} />
 
-              {lastOrder && (
-                <>
-                  <View style={[styles.receiptTotalRow, { marginBottom: 4 }]}>
-                    <Text style={styles.receiptTotalLabel}>Subtotal Produk</Text>
-                    <Text style={styles.receiptItemPrice}>{formatRupiah(lastOrder.subtotal)}</Text>
-                  </View>
-                  {lastOrder.discount > 0 && (
-                    <View style={[styles.receiptTotalRow, { marginBottom: 4 }]}>
-                      <Text style={styles.receiptTotalLabel}>Diskon Kupon</Text>
-                      <Text style={[styles.receiptItemPrice, { color: Colors.light.danger }]}>
-                        -{formatRupiah(lastOrder.discount)}
-                      </Text>
-                    </View>
-                  )}
-                  <View style={[styles.receiptTotalRow, { marginBottom: 4 }]}>
-                    <Text style={styles.receiptTotalLabel}>Ongkos Kirim Kilat</Text>
-                    <Text style={styles.receiptItemPrice}>
-                      {lastOrder.deliveryFee === 0 ? 'GRATIS' : formatRupiah(lastOrder.deliveryFee)}
-                    </Text>
-                  </View>
-                  {lastOrder.infaq > 0 && (
-                    <View style={[styles.receiptTotalRow, { marginBottom: 4 }]}>
-                      <Text style={styles.receiptTotalLabel}>Sedekah Subuh Baiturrahman</Text>
-                      <Text style={styles.receiptItemPrice}>{formatRupiah(lastOrder.infaq)}</Text>
-                    </View>
-                  )}
-                  <View style={styles.receiptDivider} />
-                  <View style={[styles.receiptTotalRow, { marginBottom: 8 }]}>
-                    <Text style={[styles.receiptTotalLabel, { fontWeight: '800', color: Colors.light.text }]}>
-                      Total Pembayaran
-                    </Text>
-                    <Text style={[styles.receiptItemPrice, { fontWeight: '800', color: Colors.light.primary, fontSize: 14 }]}>
-                      {formatRupiah(lastOrder.grandTotal)}
-                    </Text>
-                  </View>
-                </>
+              <View style={[styles.receiptTotalRow, { marginBottom: 4 }]}>
+                <Text style={styles.receiptTotalLabel}>Subtotal Produk</Text>
+                <Text style={styles.receiptItemPrice}>
+                  {formatRupiah(backendOrder?.items_subtotal ?? lastOrder?.subtotal ?? 0)}
+                </Text>
+              </View>
+
+              {(backendOrder ? backendOrder.discount_amount > 0 : (lastOrder?.discount ?? 0) > 0) && (
+                <View style={[styles.receiptTotalRow, { marginBottom: 4 }]}>
+                  <Text style={styles.receiptTotalLabel}>Diskon Kupon</Text>
+                  <Text style={[styles.receiptItemPrice, { color: Colors.light.danger }]}>
+                    -{formatRupiah(backendOrder?.discount_amount ?? lastOrder?.discount ?? 0)}
+                  </Text>
+                </View>
               )}
+
+              <View style={[styles.receiptTotalRow, { marginBottom: 4 }]}>
+                <Text style={styles.receiptTotalLabel}>Ongkos Kirim Kilat</Text>
+                <Text style={styles.receiptItemPrice}>
+                  {(backendOrder ? backendOrder.delivery_fee === 0 : lastOrder?.deliveryFee === 0)
+                    ? 'GRATIS'
+                    : formatRupiah(backendOrder?.delivery_fee ?? lastOrder?.deliveryFee ?? 0)}
+                </Text>
+              </View>
+
+              {(backendOrder ? backendOrder.infaq_amount > 0 : (lastOrder?.infaq ?? 0) > 0) && (
+                <View style={[styles.receiptTotalRow, { marginBottom: 4 }]}>
+                  <Text style={styles.receiptTotalLabel}>Infaq Sosial Masjid</Text>
+                  <Text style={styles.receiptItemPrice}>
+                    +{formatRupiah(backendOrder?.infaq_amount ?? lastOrder?.infaq ?? 0)}
+                  </Text>
+                </View>
+              )}
+
+              <View style={styles.receiptDivider} />
+
+              <View style={[styles.receiptTotalRow, { marginBottom: 8 }]}>
+                <Text style={[styles.receiptTotalLabel, { fontWeight: '800', color: Colors.light.text }]}>
+                  Total Pembayaran
+                </Text>
+                <Text style={[styles.receiptItemPrice, { fontWeight: '800', color: Colors.light.primary, fontSize: 14 }]}>
+                  {formatRupiah(backendOrder?.total_amount ?? lastOrder?.grandTotal ?? 0)}
+                </Text>
+              </View>
 
               <View style={styles.receiptTotalRow}>
                 <Text style={styles.receiptTotalLabel}>Status Pembayaran</Text>
                 <View style={styles.paidBadge}>
                   <Text style={styles.paidBadgeText}>
-                    LUNAS ({lastOrder?.paymentMethod?.toUpperCase() || 'QRIS'})
+                    LUNAS ({backendOrder?.payment_method?.toUpperCase() || lastOrder?.paymentMethod?.toUpperCase() || 'QRIS'})
                   </Text>
                 </View>
               </View>
+
               <View style={styles.receiptAddressBox}>
                 <Text style={styles.receiptAddressLabel}>Alamat Antar:</Text>
                 <Text style={styles.receiptAddressVal}>
-                  {lastOrder?.address || 'Jl. Cikumpa No. 12 (Samping Musala Al-Ikhlas)'}
+                  {backendOrder?.address_text || lastOrder?.address || 'Jl. Cikumpa No. 12 (Samping Musala Al-Ikhlas)'}
                 </Text>
               </View>
             </View>

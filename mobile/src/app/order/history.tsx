@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,8 @@ import {
   StatusBar,
   Modal,
   Alert,
+  RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -32,27 +34,108 @@ import {
 import { Colors, Spacing } from '@/constants/theme';
 import { formatRupiah } from '@/utils/currency';
 import { useCartStore, PlacedOrder, OrderStatus } from '@/stores/useCartStore';
+import { useAuthStore } from '@/stores/useAuthStore';
+import { fetchOrdersHistory, BackendOrder } from '@/services/api';
 import { BottomNavBar } from '@/components/common/BottomNavBar';
 
 type FilterTab = 'all' | 'active' | 'completed' | 'cancelled';
 
+function mapBackendOrderToPlacedOrder(bo: BackendOrder): PlacedOrder {
+  let status: OrderStatus = 'active';
+  if (bo.status === 'completed') status = 'completed';
+  if (bo.status === 'cancelled') status = 'cancelled';
+  if (bo.status === 'pending_payment' || bo.status === 'paid' || bo.status === 'delivering') status = 'active';
+
+  return {
+    orderId: bo.order_no,
+    subtotal: bo.items_subtotal,
+    deliveryFee: bo.delivery_fee,
+    discount: bo.discount_amount,
+    infaq: bo.infaq_amount,
+    grandTotal: bo.total_amount,
+    fulfillment: bo.fulfillment_type || 'delivery',
+    paymentMethod: bo.payment_method || 'qris',
+    recipientName: bo.customer_name || 'Pelanggan',
+    address: bo.address_text || '',
+    createdAt: bo.created_at || 'Baru Saja',
+    dateStr: bo.created_at ? bo.created_at.split(' ')[0] : 'Hari Ini',
+    status,
+    driverName: bo.driver_name || 'Pak Joko (Kurir Kilat Masjid)',
+    driverPhone: bo.driver_phone || '+628123456789',
+    etaMinutes: bo.eta_minutes || 15,
+    items: (bo.items || []).map((it) => ({
+      product: {
+        id: it.product_id,
+        sku: `SKU-${it.product_id}`,
+        name: it.product_name,
+        price: it.price,
+        promoPrice: it.price,
+        promoActive: false,
+        category: 'Umum',
+        stock: 99,
+        unit: 'pcs',
+        barcode: '',
+        isHalal: true,
+        imageUrl: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=500&q=80',
+      },
+      qty: it.qty,
+      shopperNote: it.shopper_note,
+    })),
+  };
+}
+
 export default function OrderHistoryScreen() {
   const router = useRouter();
 
-  const orders = useCartStore((state) => state.orders);
+  const authUser = useAuthStore((state) => state.user);
+  const localOrders = useCartStore((state) => state.orders);
   const reorderItems = useCartStore((state) => state.reorderItems);
 
+  const [backendOrders, setBackendOrders] = useState<BackendOrder[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState<PlacedOrder | null>(null);
 
+  const loadHistory = useCallback(async () => {
+    try {
+      const data = await fetchOrdersHistory({
+        phone: authUser?.phone,
+        member_id: authUser?.memberId,
+      });
+      if (Array.isArray(data)) {
+        setBackendOrders(data);
+      }
+    } catch (err) {
+      console.warn('Error loading order history:', err);
+    }
+  }, [authUser?.phone, authUser?.memberId]);
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
+
+  const onRefresh = async () => {
+    setIsRefreshing(true);
+    await loadHistory();
+    setIsRefreshing(false);
+  };
+
+  // Merge backend orders with local store
+  const allOrders: PlacedOrder[] = useMemo(() => {
+    const mappedBackend = backendOrders.map(mapBackendOrderToPlacedOrder);
+    const backendIds = new Set(mappedBackend.map((o) => o.orderId));
+    const nonDuplicatedLocal = localOrders.filter((o) => !backendIds.has(o.orderId));
+    return [...mappedBackend, ...nonDuplicatedLocal];
+  }, [backendOrders, localOrders]);
+
   // Filtered orders list
   const filteredOrders = useMemo(() => {
-    if (activeTab === 'all') return orders;
-    return orders.filter((o) => o.status === activeTab);
-  }, [orders, activeTab]);
+    if (activeTab === 'all') return allOrders;
+    return allOrders.filter((o) => o.status === activeTab);
+  }, [allOrders, activeTab]);
 
-  const activeCount = useMemo(() => orders.filter((o) => o.status === 'active').length, [orders]);
-  const completedCount = useMemo(() => orders.filter((o) => o.status === 'completed').length, [orders]);
+  const activeCount = useMemo(() => allOrders.filter((o) => o.status === 'active').length, [allOrders]);
+  const completedCount = useMemo(() => allOrders.filter((o) => o.status === 'completed').length, [allOrders]);
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -110,7 +193,7 @@ export default function OrderHistoryScreen() {
             activeOpacity={0.7}
           >
             <Text style={[styles.filterChipText, activeTab === 'all' && styles.filterChipTextActive]}>
-              Semua ({orders.length})
+              Semua ({allOrders.length})
             </Text>
           </TouchableOpacity>
 
@@ -144,6 +227,14 @@ export default function OrderHistoryScreen() {
         style={styles.container}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            colors={[Colors.light.primary]}
+            tintColor={Colors.light.primary}
+          />
+        }
       >
         {filteredOrders.length === 0 ? (
           <View style={styles.emptyState}>

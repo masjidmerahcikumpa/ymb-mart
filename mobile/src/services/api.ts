@@ -316,3 +316,68 @@ export async function cancelMobileOrder(orderNo: string): Promise<{ success: boo
   }
 }
 
+export interface BackendOrderItem {
+  product_id: number;
+  product_name: string;
+  price: number;
+  qty: number;
+  subtotal: number;
+  shopper_note?: string;
+}
+
+export interface BackendOrder {
+  id: number;
+  order_no: string;
+  member_id: string;
+  customer_name: string;
+  customer_phone: string;
+  fulfillment_type: 'delivery' | 'pickup';
+  address_text: string;
+  status: 'pending_payment' | 'paid' | 'delivering' | 'completed' | 'cancelled';
+  items_subtotal: number;
+  delivery_fee: number;
+  discount_amount: number;
+  infaq_amount: number;
+  total_amount: number;
+  payment_method: string;
+  payment_status: string;
+  shopper_notes?: string;
+  driver_name?: string;
+  driver_phone?: string;
+  eta_minutes?: number;
+  expires_at?: string;
+  created_at: string;
+  items: BackendOrderItem[];
+}
+
+export async function fetchOrderDetails(orderNo: string): Promise<BackendOrder | null> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/api/mobile/orders?order_no=${encodeURIComponent(orderNo)}`, 8000);
+    if (!res.ok) return null;
+    const data: BackendOrder[] = await res.json();
+    return data && data.length > 0 ? data[0] : null;
+  } catch (err) {
+    console.warn('[API] fetchOrderDetails failed:', err);
+    return null;
+  }
+}
+
+export async function fetchOrdersHistory(params: { phone?: string; member_id?: string }): Promise<BackendOrder[]> {
+  try {
+    let url = `${API_BASE_URL}/api/mobile/orders`;
+    const query = new URLSearchParams();
+    if (params.phone) query.append('phone', params.phone);
+    if (params.member_id) query.append('member_id', params.member_id);
+    const qs = query.toString();
+    if (qs) url += `?${qs}`;
+
+    const res = await fetchWithTimeout(url, 8000);
+    if (!res.ok) return [];
+    return await res.json();
+  } catch (err) {
+    console.warn('[API] fetchOrdersHistory failed:', err);
+    return [];
+  }
+}
+
+
