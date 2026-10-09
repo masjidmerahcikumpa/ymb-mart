@@ -30,7 +30,8 @@ import { formatRupiah } from '@/utils/currency';
 import { useCartStore, CartItem } from '@/stores/useCartStore';
 import { FloatingCartBar } from '@/components/home/FloatingCartBar';
 import { BottomNavBar } from '@/components/common/BottomNavBar';
-import { Product } from '@/types/product';
+import { fetchCategories, fetchProducts } from '@/services/api';
+import { Category, Product } from '@/types/product';
 
 export default function ExploreScreen() {
   const router = useRouter();
@@ -40,6 +41,30 @@ export default function ExploreScreen() {
   const [selectedCatId, setSelectedCatId] = useState<string | number>('all');
   const [onlyPromo, setOnlyPromo] = useState(false);
   const [sortBy, setSortBy] = useState<'default' | 'priceAsc' | 'priceDesc'>('default');
+  const [categories, setCategories] = useState<Category[]>(MOCK_CATEGORIES);
+  const [products, setProducts] = useState<Product[]>(MOCK_PRODUCTS);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    async function initExploreData() {
+      try {
+        const [cats, prods] = await Promise.all([
+          fetchCategories(),
+          fetchProducts(),
+        ]);
+        if (isMounted) {
+          setCategories(cats);
+          setProducts(prods);
+        }
+      } catch (err) {
+        console.warn('[ExploreScreen] Error loading data:', err);
+      }
+    }
+    initExploreData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Cart store
   const items = useCartStore((state) => state.items);
@@ -54,13 +79,13 @@ export default function ExploreScreen() {
 
   // Categories list with "Semua" option
   const allCategories = useMemo(
-    () => [{ id: 'all', name: 'Semua', icon: '🏪' }, ...MOCK_CATEGORIES],
-    []
+    () => [{ id: 'all', name: 'Semua', icon: '🏪' }, ...categories],
+    [categories]
   );
 
   // Filtered & Sorted Products
   const filteredProducts = useMemo(() => {
-    let result = MOCK_PRODUCTS.filter((product) => {
+    let result = products.filter((product) => {
       // Category filter
       if (selectedCatId !== 'all' && String(product.category) !== String(selectedCatId)) {
         return false;

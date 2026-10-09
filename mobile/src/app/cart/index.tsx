@@ -35,7 +35,9 @@ import {
   Clock,
 } from 'lucide-react-native';
 
-import { useCartStore, CartItem } from '@/stores/useCartStore';
+import { useCartStore, CartItem, PlacedOrder } from '@/stores/useCartStore';
+import { useAddressStore } from '@/stores/useAddressStore';
+import { AddressModal } from '@/components/common/AddressModal';
 import { Colors, Spacing } from '@/constants/theme';
 import { formatRupiah } from '@/utils/currency';
 
@@ -48,6 +50,8 @@ export default function CartScreen() {
   const removeItem = useCartStore((state) => state.removeItem);
   const setShopperNote = useCartStore((state) => state.setShopperNote);
   const clearCart = useCartStore((state) => state.clearCart);
+  const setLastOrder = useCartStore((state) => state.setLastOrder);
+  const addOrder = useCartStore((state) => state.addOrder);
 
   const cartList: CartItem[] = useMemo(() => Object.values(items), [items]);
   const totalItems = useMemo(() => cartList.reduce((acc, it) => acc + it.qty, 0), [cartList]);
@@ -63,6 +67,10 @@ export default function CartScreen() {
   const [includeInfaq, setIncludeInfaq] = useState(true);
   const [voucherApplied, setVoucherApplied] = useState(true);
   const [paymentMethod, setPaymentMethod] = useState<'qris' | 'va' | 'cod'>('qris');
+  const [showAddressModal, setShowAddressModal] = useState(false);
+
+  // Address store
+  const selectedAddress = useAddressStore((state) => state.getSelectedAddress());
 
   // Calculations
   const deliveryFee = fulfillment === 'delivery' ? (subtotal >= 30000 ? 0 : 8000) : 0;
@@ -95,10 +103,42 @@ export default function CartScreen() {
 
   const handleConfirmPaid = () => {
     setIsCheckingPayment(true);
+
+    const now = new Date();
+    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    const newOrderId = `YMB-${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}-${Math.floor(100 + Math.random() * 900)}`;
+
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    const dateStr = `Hari Ini, ${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
+
+    const placedOrder: PlacedOrder = {
+      orderId: newOrderId,
+      items: [...cartList],
+      subtotal,
+      deliveryFee,
+      discount: voucherDiscount,
+      infaq: infaqAmount,
+      grandTotal,
+      fulfillment,
+      paymentMethod,
+      recipientName: selectedAddress.recipientName,
+      address: selectedAddress.addressLine,
+      createdAt: `${timeStr} WIB`,
+      dateStr,
+      status: 'active',
+      driverName: 'Pak Joko (Kurir Kilat Masjid)',
+      driverPhone: '+628123456789',
+      etaMinutes: 15,
+    };
+
+    addOrder(placedOrder);
+    setLastOrder(placedOrder);
+
     setTimeout(() => {
       setIsCheckingPayment(false);
       setShowQrisModal(false);
-      router.push('/order/tracking' as any);
+      clearCart();
+      router.push(`/order/tracking?id=${newOrderId}` as any);
     }, 1200);
   };
 
@@ -241,23 +281,29 @@ export default function CartScreen() {
             <View style={styles.addressHeaderRow}>
               <View style={styles.iconTag}>
                 <MapPin size={16} color={Colors.light.primary} />
-                <Text style={styles.addressTagText}>Alamat Pengantaran</Text>
+                <Text style={styles.addressTagText}>
+                  Alamat Pengantaran ({selectedAddress.label})
+                </Text>
               </View>
               <TouchableOpacity
-                onPress={() => Alert.alert('Ubah Alamat', 'Pilih dari daftar alamat tersimpan atau tandai di peta.')}
+                onPress={() => setShowAddressModal(true)}
                 activeOpacity={0.7}
               >
                 <Text style={styles.changeAddressText}>Ubah</Text>
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.recipientName}>Ahmad Dani • 0812-3456-7890</Text>
-            <Text style={styles.addressLine}>Jl. Cikumpa No. 12, RT 03 / RW 02, Sukmajaya</Text>
-            <View style={styles.benchmarkBox}>
-              <Text style={styles.benchmarkText}>
-                📌 Patokan: Samping Musala Al-Ikhlas, rumah pagar hitam
-              </Text>
-            </View>
+            <Text style={styles.recipientName}>
+              {selectedAddress.recipientName} • {selectedAddress.phone}
+            </Text>
+            <Text style={styles.addressLine}>{selectedAddress.addressLine}</Text>
+            {selectedAddress.benchmarkNote ? (
+              <View style={styles.benchmarkBox}>
+                <Text style={styles.benchmarkText}>
+                  📌 Patokan: {selectedAddress.benchmarkNote}
+                </Text>
+              </View>
+            ) : null}
           </View>
         )}
 
@@ -588,6 +634,12 @@ export default function CartScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* 5. Address Selection & Creation Modal */}
+      <AddressModal
+        visible={showAddressModal}
+        onClose={() => setShowAddressModal(false)}
+      />
     </SafeAreaView>
   );
 }

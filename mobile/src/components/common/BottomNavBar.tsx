@@ -61,7 +61,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeTab = 'home' }
         {/* 3. Riwayat */}
         <TouchableOpacity
           style={styles.tabBtn}
-          onPress={() => router.push('/order/tracking' as any)}
+          onPress={() => router.push('/order/history' as any)}
           activeOpacity={0.7}
         >
           <ClipboardList
@@ -83,7 +83,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ activeTab = 'home' }
         {/* 4. Akun */}
         <TouchableOpacity
           style={styles.tabBtn}
-          onPress={() => alert('Akun & Poin YMB Gold')}
+          onPress={() => router.push('/profile' as any)}
           activeOpacity={0.7}
         >
           <User

@@ -28,16 +28,34 @@ import {
 
 import { Colors, Spacing } from '@/constants/theme';
 import { formatRupiah } from '@/utils/currency';
-import { useCartStore, CartItem } from '@/stores/useCartStore';
+import { useCartStore, CartItem, PlacedOrder } from '@/stores/useCartStore';
 
 export default function OrderTrackingScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
-  const orderId = (typeof id === 'string' && id) || 'YMB-20260925-001';
 
-  // Read items from cart store for receipt preview
+  // Read order from cart store
+  const getOrderById = useCartStore((state) => state.getOrderById);
+  const rawLastOrder = useCartStore((state) => state.lastOrder);
+  const lastOrder = useMemo(() => {
+    if (typeof id === 'string' && id) {
+      return getOrderById(id) || rawLastOrder;
+    }
+    return rawLastOrder;
+  }, [id, getOrderById, rawLastOrder]);
   const items = useCartStore((state) => state.items);
-  const cartItems: CartItem[] = useMemo(() => Object.values(items), [items]);
+
+  const orderId =
+    (typeof id === 'string' && id) ||
+    lastOrder?.orderId ||
+    'YMB-20261002-881';
+
+  const cartItems: CartItem[] = useMemo(() => {
+    if (lastOrder && lastOrder.items.length > 0) {
+      return lastOrder.items;
+    }
+    return Object.values(items);
+  }, [lastOrder, items]);
 
   const [etaMinutes, setEtaMinutes] = useState(12);
   const [showReceipt, setShowReceipt] = useState(false);
@@ -313,15 +331,57 @@ export default function OrderTrackingScreen() {
 
               <View style={styles.receiptDivider} />
 
+              {lastOrder && (
+                <>
+                  <View style={[styles.receiptTotalRow, { marginBottom: 4 }]}>
+                    <Text style={styles.receiptTotalLabel}>Subtotal Produk</Text>
+                    <Text style={styles.receiptItemPrice}>{formatRupiah(lastOrder.subtotal)}</Text>
+                  </View>
+                  {lastOrder.discount > 0 && (
+                    <View style={[styles.receiptTotalRow, { marginBottom: 4 }]}>
+                      <Text style={styles.receiptTotalLabel}>Diskon Kupon</Text>
+                      <Text style={[styles.receiptItemPrice, { color: Colors.light.danger }]}>
+                        -{formatRupiah(lastOrder.discount)}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={[styles.receiptTotalRow, { marginBottom: 4 }]}>
+                    <Text style={styles.receiptTotalLabel}>Ongkos Kirim Kilat</Text>
+                    <Text style={styles.receiptItemPrice}>
+                      {lastOrder.deliveryFee === 0 ? 'GRATIS' : formatRupiah(lastOrder.deliveryFee)}
+                    </Text>
+                  </View>
+                  {lastOrder.infaq > 0 && (
+                    <View style={[styles.receiptTotalRow, { marginBottom: 4 }]}>
+                      <Text style={styles.receiptTotalLabel}>Sedekah Subuh Baiturrahman</Text>
+                      <Text style={styles.receiptItemPrice}>{formatRupiah(lastOrder.infaq)}</Text>
+                    </View>
+                  )}
+                  <View style={styles.receiptDivider} />
+                  <View style={[styles.receiptTotalRow, { marginBottom: 8 }]}>
+                    <Text style={[styles.receiptTotalLabel, { fontWeight: '800', color: Colors.light.text }]}>
+                      Total Pembayaran
+                    </Text>
+                    <Text style={[styles.receiptItemPrice, { fontWeight: '800', color: Colors.light.primary, fontSize: 14 }]}>
+                      {formatRupiah(lastOrder.grandTotal)}
+                    </Text>
+                  </View>
+                </>
+              )}
+
               <View style={styles.receiptTotalRow}>
                 <Text style={styles.receiptTotalLabel}>Status Pembayaran</Text>
                 <View style={styles.paidBadge}>
-                  <Text style={styles.paidBadgeText}>LUNAS (QRIS)</Text>
+                  <Text style={styles.paidBadgeText}>
+                    LUNAS ({lastOrder?.paymentMethod?.toUpperCase() || 'QRIS'})
+                  </Text>
                 </View>
               </View>
               <View style={styles.receiptAddressBox}>
                 <Text style={styles.receiptAddressLabel}>Alamat Antar:</Text>
-                <Text style={styles.receiptAddressVal}>Jl. Cikumpa No. 12 (Samping Musala Al-Ikhlas)</Text>
+                <Text style={styles.receiptAddressVal}>
+                  {lastOrder?.address || 'Jl. Cikumpa No. 12 (Samping Musala Al-Ikhlas)'}
+                </Text>
               </View>
             </View>
           )}

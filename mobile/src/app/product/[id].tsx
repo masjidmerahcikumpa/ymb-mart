@@ -29,13 +29,30 @@ import { MOCK_PRODUCTS } from '@/constants/mockData';
 import { Colors, Spacing } from '@/constants/theme';
 import { formatRupiah } from '@/utils/currency';
 import { useCartStore } from '@/stores/useCartStore';
+import { fetchProductById } from '@/services/api';
+import { Product } from '@/types/product';
 
 export default function ProductDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
 
-  // Find product by id (fallback to product #1 if not found)
-  const product = MOCK_PRODUCTS.find((p) => p.id === Number(id)) ?? MOCK_PRODUCTS[0];
+  const [product, setProduct] = useState<Product>(
+    () => MOCK_PRODUCTS.find((p) => p.id === Number(id)) ?? MOCK_PRODUCTS[0]
+  );
+
+  React.useEffect(() => {
+    let isMounted = true;
+    if (id) {
+      fetchProductById(Number(id)).then((found) => {
+        if (isMounted && found) {
+          setProduct(found);
+        }
+      });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
 
   const items = useCartStore((state) => state.items);
   const cartItem = items[product.id];
