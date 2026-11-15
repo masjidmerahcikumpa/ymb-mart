@@ -1,0 +1,11 @@
+# Cursor Rules for Baiturrahman Mart (YMB Mart)
+# Referensi lengkap: AI_RULES.md, docs/prd.md, docs/architecture.md
+
+- Project Stack: Go Backend (CGO-free SQLite + Turso libSQL) + React 19 Frontend (Vite + TypeScript + Tailwind CSS).
+- Never use window.alert() or window.confirm(). Always use SweetAlert2 from `frontend-app/src/utils/alert.ts`.
+- Primary brand color: Baiturrahman Maroon `#8b1538` for primary actions (Bayar F9, Submit). Money/Success: `#10b981`.
+- Keep scrollbars hidden universal (`scrollbar-width: none !important;`).
+- Offline-First: Any local mutations must save to local SQLite with `sync_status = 'pending'` and let `sync_engine.go` handle Turso sync.
+- Build Requirement: When editing in `frontend-app/src/`, always run `npm run build` inside `frontend-app` to update `frontend_dist/` before git push or binary run.
+- Tone: Terse, direct, high information density, direct to solution/code.
+
