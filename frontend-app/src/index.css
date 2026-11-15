@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+@theme {
+  --color-maroon: #8b1538;
+  --color-maroon-dark: #6b0f2a;
+  --color-maroon-light: #a31c44;
+  --color-emerald-deep: #065f46;
+  --color-gold-accent: #d97706;
+}
+
+@layer base {
+  :root {
+    --primary: #8b1538;
+    --primary-foreground: #ffffff;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-800 antialiased selection:bg-rose-100 selection:text-rose-900;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* POS Thermal Printer Optimization (58mm / 80mm) */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #printable-receipt, #printable-receipt * {
+    visibility: visible;
+  }
+  #printable-receipt {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 58mm;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    color: #000;
+    font-family: monospace;
+    font-size: 11px;
+    line-height: 1.2;
+  }
+  @page {
+    size: auto;
+    margin: 0;
+  }
+}
+
+/* Custom Scrollbar Utilities & Global Clean Scrollbar */
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none !important; /* IE and Edge */
+  scrollbar-width: none !important; /* Firefox */
+}
+
+/* Hide scrollbar for sidebar nav universally */
+aside nav::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+aside nav {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}

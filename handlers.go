@@ -281,6 +281,9 @@ func requireAuth(r *http.Request, requiredRole string) bool {
 	if token == "" {
 		return false
 	}
+	token = strings.TrimPrefix(token, "Bearer ")
+	token = strings.TrimPrefix(token, "bearer ")
+	token = strings.TrimSpace(token)
 	role, ok := validateSession(token)
 	if !ok {
 		return false
@@ -500,8 +503,22 @@ func handleResetUserPIN(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	defaultPIN := "123456"
-	hash, err := bcrypt.GenerateFromPassword([]byte(defaultPIN), 10)
+	var req struct {
+		PIN string `json:"pin"`
+	}
+	decodeJSON(w, r, &req)
+
+	targetPIN := strings.TrimSpace(req.PIN)
+	if targetPIN == "" {
+		targetPIN = "123456"
+	}
+	pinRegex := regexp.MustCompile(`^\d{6}$`)
+	if !pinRegex.MatchString(targetPIN) {
+		jsonResponse(w, map[string]string{"error": "PIN kasir harus tepat 6 angka (0-9)"}, 400)
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(targetPIN), 10)
 	if err != nil {
 		jsonResponse(w, map[string]string{"error": "Gagal mengenkripsi PIN baru"}, 500)
 		return
@@ -625,19 +642,27 @@ func handleGetCategories(w http.ResponseWriter, r *http.Request) {
 
 func handleAddProduct(w http.ResponseWriter, r *http.Request) {
 	var p Product
-	if err := decodeJSON(w,r, &p); err != nil {
+	if err := decodeJSON(w, r, &p); err != nil {
 		jsonResponse(w, map[string]string{"error": "Invalid request"}, 400)
 		return
 	}
+	p.SKU = strings.TrimSpace(p.SKU)
+	p.Name = strings.TrimSpace(p.Name)
 	if p.Name == "" || p.SKU == "" {
 		jsonResponse(w, map[string]string{"error": "Nama dan SKU wajib diisi"}, 400)
 		return
 	}
-	_, err := db.Exec("INSERT INTO products (sku,name,description,price,cost,category,stock,min_stock,unit,barcode,tax_rate,sync_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,'pending')",
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM products WHERE sku = ?", p.SKU).Scan(&count)
+	if err == nil && count > 0 {
+		jsonResponse(w, map[string]string{"error": "SKU '" + p.SKU + "' sudah terdaftar di sistem"}, 400)
+		return
+	}
+	_, err = db.Exec("INSERT INTO products (sku,name,description,price,cost,category,stock,min_stock,unit,barcode,tax_rate,sync_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,'pending')",
 		p.SKU, p.Name, p.Description, p.Price, p.Cost, p.Category, p.Stock, p.MinStock, p.Unit, p.Barcode, p.TaxRate)
 	if err != nil {
 		logError("handleAddProduct", err)
-		jsonResponse(w, map[string]string{"error": "Gagal tambah produk"}, 500)
+		jsonResponse(w, map[string]string{"error": "Gagal tambah produk: " + err.Error()}, 500)
 		return
 	}
 	TriggerSync()
@@ -696,6 +721,15 @@ func handleOpenShift(w http.ResponseWriter, r *http.Request) {
 	if req.OpeningCash == 0 {
 		req.OpeningCash = 500000
 	}
+	if req.Cashier == "" {
+		_, sess := getSessionInfo(r)
+		if sess != nil && sess.username != "" {
+			req.Cashier = sess.username
+		}
+	}
+	if req.Cashier == "" {
+		req.Cashier = "admin"
+	}
 	res, err := db.Exec("INSERT INTO shifts (shift_name,cashier,opening_cash,status) VALUES (?,?,?,?)",
 		req.ShiftName, req.Cashier, req.OpeningCash, "open")
 	if err != nil {
@@ -721,7 +755,14 @@ func handleOpenShift(w http.ResponseWriter, r *http.Request) {
 	})
 	go TriggerSync()
 
-	jsonResponse(w, map[string]interface{}{"status": "ok", "shift_id": sid, "opening_cash": req.OpeningCash}, 200)
+	jsonResponse(w, map[string]interface{}{
+		"status":       "ok",
+		"id":           sid,
+		"shift_id":     sid,
+		"shift_name":   req.ShiftName,
+		"cashier":      req.Cashier,
+		"opening_cash": req.OpeningCash,
+	}, 200)
 }
 
 func handleGetShifts(w http.ResponseWriter, r *http.Request) {
@@ -779,6 +820,110 @@ func handleGetActiveShifts(w http.ResponseWriter, r *http.Request) {
 		shifts = []Shift{}
 	}
 	jsonResponse(w, shifts, 200)
+}
+
+func handleGetCurrentShift(w http.ResponseWriter, r *http.Request) {
+	_, sess := getSessionInfo(r)
+	var s Shift
+	var err error
+	if sess != nil && sess.username != "" && sess.role != "admin" {
+		err = db.QueryRow(`SELECT s.id,s.shift_name,s.cashier,COALESCE(u.display_name,s.cashier),s.opened_at,s.closed_at,s.opening_cash,s.closing_cash,s.expected_cash,s.cash_sales,s.cash_out,s.cash_discrepancy,s.total_sales,s.total_tx,s.status FROM shifts s LEFT JOIN users u ON s.cashier=u.username WHERE s.status='open' AND s.cashier=? ORDER BY s.id DESC LIMIT 1`, sess.username).
+			Scan(&s.ID, &s.ShiftName, &s.Cashier, &s.CashierName, &s.OpenedAt, &s.ClosedAt, &s.OpeningCash, &s.ClosingCash, &s.ExpectedCash, &s.CashSales, &s.CashOut, &s.Discrepancy, &s.TotalSales, &s.TotalTx, &s.Status)
+	} else {
+		err = db.QueryRow(`SELECT s.id,s.shift_name,s.cashier,COALESCE(u.display_name,s.cashier),s.opened_at,s.closed_at,s.opening_cash,s.closing_cash,s.expected_cash,s.cash_sales,s.cash_out,s.cash_discrepancy,s.total_sales,s.total_tx,s.status FROM shifts s LEFT JOIN users u ON s.cashier=u.username WHERE s.status='open' ORDER BY s.id DESC LIMIT 1`).
+			Scan(&s.ID, &s.ShiftName, &s.Cashier, &s.CashierName, &s.OpenedAt, &s.ClosedAt, &s.OpeningCash, &s.ClosingCash, &s.ExpectedCash, &s.CashSales, &s.CashOut, &s.Discrepancy, &s.TotalSales, &s.TotalTx, &s.Status)
+	}
+	if err != nil {
+		jsonResponse(w, nil, 200)
+		return
+	}
+	var cs int
+	db.QueryRow("SELECT COALESCE(SUM(grand_total),0) FROM transactions WHERE shift_id=? AND payment='CASH' AND status='completed'", s.ID).Scan(&cs)
+	s.CashSales = cs
+	jsonResponse(w, s, 200)
+}
+
+func handleCloseCurrentShift(w http.ResponseWriter, r *http.Request) {
+	_, sess := getSessionInfo(r)
+	var req struct {
+		ShiftID     int    `json:"shift_id"`
+		ClosingCash *int   `json:"closing_cash"`
+		ActualCash  *int   `json:"actual_cash"`
+		Notes       string `json:"notes"`
+	}
+	decodeJSON(w, r, &req)
+
+	shiftID := req.ShiftID
+	if shiftID == 0 {
+		var err error
+		if sess != nil && sess.username != "" && sess.role != "admin" {
+			err = db.QueryRow("SELECT id FROM shifts WHERE status='open' AND cashier=? ORDER BY id DESC LIMIT 1", sess.username).Scan(&shiftID)
+		} else {
+			err = db.QueryRow("SELECT id FROM shifts WHERE status='open' ORDER BY id DESC LIMIT 1").Scan(&shiftID)
+		}
+		if err != nil || shiftID == 0 {
+			jsonResponse(w, map[string]string{"error": "Tidak ada shift aktif yang terbuka"}, 404)
+			return
+		}
+	}
+
+	var shift Shift
+	err := db.QueryRow("SELECT id,opening_cash,shift_name FROM shifts WHERE id=? AND status='open'", shiftID).
+		Scan(&shift.ID, &shift.OpeningCash, &shift.ShiftName)
+	if err != nil {
+		jsonResponse(w, map[string]string{"error": "Shift tidak ditemukan atau sudah ditutup"}, 404)
+		return
+	}
+
+	var cashSales, qrisSales, cashOut, cashIn, totalSales, totalTx int
+	db.QueryRow("SELECT COALESCE(SUM(grand_total),0) FROM transactions WHERE shift_id=? AND payment='CASH' AND status='completed'", shiftID).Scan(&cashSales)
+	db.QueryRow("SELECT COALESCE(SUM(grand_total),0) FROM transactions WHERE shift_id=? AND payment!='CASH' AND status='completed'", shiftID).Scan(&qrisSales)
+	db.QueryRow("SELECT COALESCE(SUM(amount),0) FROM cash_log WHERE shift_id=? AND (type='cash_drop' OR type='cash_out')", shiftID).Scan(&cashOut)
+	db.QueryRow("SELECT COALESCE(SUM(amount),0) FROM cash_log WHERE shift_id=? AND type='cash_in'", shiftID).Scan(&cashIn)
+	db.QueryRow("SELECT COALESCE(SUM(grand_total),0), COUNT(*) FROM transactions WHERE shift_id=? AND status='completed'", shiftID).Scan(&totalSales, &totalTx)
+
+	expected := shift.OpeningCash + cashSales + cashIn - cashOut
+	closingCash := expected
+	discrepancy := 0
+	if req.ActualCash != nil {
+		closingCash = *req.ActualCash
+		discrepancy = closingCash - expected
+	} else if req.ClosingCash != nil {
+		closingCash = *req.ClosingCash
+		discrepancy = closingCash - expected
+	}
+
+	db.Exec("UPDATE shifts SET closed_at=?,closing_cash=?,expected_cash=?,cash_sales=?,cash_out=?,cash_discrepancy=?,total_sales=?,total_tx=?,status='closed',sync_status='pending' WHERE id=?",
+		now(), closingCash, expected, cashSales, cashOut, discrepancy, totalSales, totalTx, shiftID)
+	go TriggerSync()
+	if qrisSales > 0 {
+		db.Exec("INSERT INTO cash_log (shift_id,type,amount,description) VALUES (?,?,?,?)",
+			shiftID, "qris_sales", qrisSales, fmt.Sprintf("Penjualan QRIS/Non-Tunai shift %s", shift.ShiftName))
+	}
+	desc := fmt.Sprintf("Closing cash shift %s", shift.ShiftName)
+	if req.Notes != "" {
+		desc = fmt.Sprintf("Closing cash shift %s: %s", shift.ShiftName, req.Notes)
+	}
+	db.Exec("INSERT INTO cash_log (shift_id,type,amount,description) VALUES (?,?,?,?)",
+		shiftID, "closing", closingCash, desc)
+
+	wsBroadcast(WSMessage{
+		Type: "shift_close",
+		Data: map[string]interface{}{"shift_id": shiftID},
+	})
+
+	jsonResponse(w, map[string]interface{}{
+		"status":      "ok",
+		"shift_id":    shiftID,
+		"opening":     shift.OpeningCash,
+		"cash_sales":  cashSales,
+		"qris_sales":  qrisSales,
+		"total_sales": totalSales,
+		"total_tx":    totalTx,
+		"expected":    expected,
+		"closing":     closingCash,
+		"discrepancy": discrepancy,
+	}, 200)
 }
 
 func handleCloseShift(w http.ResponseWriter, r *http.Request) {
@@ -854,15 +999,8 @@ func handleCloseShift(w http.ResponseWriter, r *http.Request) {
 
 func handleCloseShiftSelf(w http.ResponseWriter, r *http.Request) {
 	// Session check
-	token, _ := getSessionUser(r)
-	if token == "" {
-		jsonResponse(w, map[string]string{"error": "Login required"}, 401)
-		return
-	}
-	sessionsMu.RLock()
-	sess, ok := sessions[token]
-	sessionsMu.RUnlock()
-	if !ok || sess == nil {
+	token, sess := getSessionInfo(r)
+	if token == "" || sess == nil {
 		jsonResponse(w, map[string]string{"error": "Login required"}, 401)
 		return
 	}
@@ -1009,7 +1147,13 @@ func handleCashIn(w http.ResponseWriter, r *http.Request) {
 
 func handleGetCashLog(w http.ResponseWriter, r *http.Request) {
 	id := parseID(r.URL.Path)
-	rows, err := db.Query("SELECT id,shift_id,type,amount,description,created_at FROM cash_log WHERE shift_id=? ORDER BY created_at", id)
+	var rows *sql.Rows
+	var err error
+	if id > 0 {
+		rows, err = db.Query("SELECT id,shift_id,type,amount,description,created_at FROM cash_log WHERE shift_id=? ORDER BY created_at DESC", id)
+	} else {
+		rows, err = db.Query("SELECT id,shift_id,type,amount,description,created_at FROM cash_log ORDER BY created_at DESC LIMIT 150")
+	}
 	if err != nil {
 		logError("handleGetCashLog", err)
 		jsonResponse(w, []CashLog{}, 200)
@@ -1092,6 +1236,27 @@ func handleCheckout(w http.ResponseWriter, r *http.Request) {
 	if len(req.Items) == 0 {
 		jsonResponse(w, map[string]string{"error": "Cart kosong"}, 400)
 		return
+	}
+
+	// Shift validation: every transaction must belong to an active shift
+	shiftID := req.ShiftID
+	if shiftID <= 0 {
+		var sID int
+		err := db.QueryRow("SELECT id FROM shifts WHERE status='open' AND (cashier=? OR cashier='admin') ORDER BY id DESC LIMIT 1", req.Cashier).Scan(&sID)
+		if err == nil && sID > 0 {
+			shiftID = sID
+			req.ShiftID = sID
+		} else {
+			jsonResponse(w, map[string]string{"error": "Shift kasir belum dibuka. Silakan buka shift terlebih dahulu sebelum memproses transaksi."}, 400)
+			return
+		}
+	} else {
+		var sStatus string
+		err := db.QueryRow("SELECT status FROM shifts WHERE id=?", shiftID).Scan(&sStatus)
+		if err != nil || sStatus != "open" {
+			jsonResponse(w, map[string]string{"error": "Shift kasir tidak aktif atau sudah ditutup. Buka shift baru terlebih dahulu."}, 400)
+			return
+		}
 	}
 
 	txID := generateID("TX", 8)
@@ -1247,9 +1412,9 @@ func handleCheckout(w http.ResponseWriter, r *http.Request) {
 	auditLog("checkout", "transaction", txID, req.Cashier, fmt.Sprintf("Total: %d, Payment: %s", grandTotal, req.Payment))
 
 	txData := map[string]interface{}{
-		"id": txID, "total": total, "discount": discount, "tax": tax,
+		"status": "ok", "id": txID, "tx_id": txID, "total": total, "discount": discount, "tax": tax,
 		"grand_total": grandTotal, "payment": req.Payment,
-		"amount_paid": amountPaid, "change": change, "items": items,
+		"amount_paid": amountPaid, "change": change, "change_amount": change, "items": items,
 		"customer": req.CustomerName, "cashier": req.Cashier, "shift_id": req.ShiftID,
 		"time": nowWIB().Format("15:04:05"), "date": nowWIB().Format("2006-01-02"),
 	}
@@ -1280,10 +1445,11 @@ func handleHold(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req HoldReq
-	decodeJSON(w,r, &req)
+	decodeJSON(w, r, &req)
 	holdID := generateID("H", 6)
-	db.Exec("INSERT INTO holds (hold_id,items_json,customer_name) VALUES (?,?,?)", holdID, string(req.Items), req.CustomerName)
-	jsonResponse(w, map[string]string{"status": "ok", "hold_id": holdID}, 200)
+	res, _ := db.Exec("INSERT INTO holds (hold_id,items_json,customer_name) VALUES (?,?,?)", holdID, string(req.Items), req.CustomerName)
+	lastID, _ := res.LastInsertId()
+	jsonResponse(w, map[string]interface{}{"status": "ok", "id": lastID, "hold_id": holdID}, 200)
 }
 
 func handleGetHolds(w http.ResponseWriter, r *http.Request) {
@@ -1314,8 +1480,13 @@ func handleGetHolds(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleDeleteHold(w http.ResponseWriter, r *http.Request) {
-	id := parseID(r.URL.Path)
-	db.Exec("DELETE FROM holds WHERE id=?", id)
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	target := parts[len(parts)-1]
+	if id, err := strconv.Atoi(target); err == nil && id > 0 {
+		db.Exec("DELETE FROM holds WHERE id=?", id)
+	} else if target != "" {
+		db.Exec("DELETE FROM holds WHERE hold_id=?", target)
+	}
 	jsonResponse(w, map[string]string{"status": "ok"}, 200)
 }
 
@@ -1360,8 +1531,9 @@ func handleGetTransactions(w http.ResponseWriter, r *http.Request) {
 		txMap := map[string]interface{}{
 			"id": t.ID, "tx_id": t.TxID, "shift_id": t.ShiftID, "total": t.Total,
 			"discount": t.Discount, "tax": t.Tax, "grand_total": t.GrandTotal,
-			"payment": t.Payment, "cashier": t.Cashier, "status": t.Status,
-			"created_at": t.CreatedAt, "items": items,
+			"payment": t.Payment, "amount_paid": t.AmountPaid, "change_amount": t.ChangeAmt,
+			"customer_name": t.Customer, "cashier": t.Cashier, "notes": t.Notes,
+			"status": t.Status, "created_at": t.CreatedAt, "items": items,
 		}
 		txs = append(txs, txMap)
 	}
@@ -1376,8 +1548,21 @@ func handleVoidTransaction(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, map[string]string{"error": "Login required"}, 401)
 		return
 	}
-	parts := strings.Split(r.URL.Path, "/")
-	txID := parts[len(parts)-2]
+	cleanPath := strings.Trim(r.URL.Path, "/")
+	parts := strings.Split(cleanPath, "/")
+	var txID string
+	for i, p := range parts {
+		if p == "transactions" && i+1 < len(parts) {
+			txID = parts[i+1]
+			break
+		}
+	}
+	if txID == "" && len(parts) >= 2 {
+		txID = parts[len(parts)-1]
+		if txID == "void" && len(parts) >= 3 {
+			txID = parts[len(parts)-2]
+		}
+	}
 
 	// Check if already voided
 	var status string
@@ -1856,8 +2041,13 @@ func handleGetETransReport(w http.ResponseWriter, r *http.Request) {
 
 // === Receipt ===
 func handleReceipt(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(r.URL.Path, "/")
-	txID := parts[len(parts)-2]
+	cleanPath := strings.Trim(r.URL.Path, "/")
+	parts := strings.Split(cleanPath, "/")
+	if len(parts) < 3 {
+		jsonResponse(w, map[string]string{"error": "ID Transaksi tidak valid"}, 400)
+		return
+	}
+	txID := parts[len(parts)-1]
 
 	var t Transaction
 	err := db.QueryRow("SELECT tx_id,total,discount,tax,grand_total,payment,amount_paid,change_amount,customer_name,cashier,created_at FROM transactions WHERE tx_id=?", txID).
@@ -1881,18 +2071,21 @@ func handleReceipt(w http.ResponseWriter, r *http.Request) {
 		items = []TxItem{}
 	}
 
-	storeName := "POS Simulator"
+	storeName := "Baiturrahman Mart"
 	storeAddr := ""
+	receiptFooter := "Terima kasih atas kunjungan Anda!\nBarakallahu fiikum."
 	db.QueryRow("SELECT value FROM settings WHERE key='store_name'").Scan(&storeName)
 	db.QueryRow("SELECT value FROM settings WHERE key='store_address'").Scan(&storeAddr)
+	db.QueryRow("SELECT value FROM settings WHERE key='receipt_footer'").Scan(&receiptFooter)
 
 	receipt := map[string]interface{}{
 		"store_name": storeName, "address": storeAddr,
 		"tx_id": t.TxID, "date": t.CreatedAt, "cashier": t.Cashier,
+		"customer_name": t.Customer,
 		"items": items, "subtotal": t.Total, "discount": t.Discount,
 		"tax": t.Tax, "total": t.GrandTotal, "payment": t.Payment,
 		"amount_paid": t.AmountPaid, "change": t.ChangeAmt,
-		"footer": "Terima kasih atas kunjungan Anda!",
+		"footer": receiptFooter,
 	}
 	jsonResponse(w, receipt, 200)
 }
@@ -2755,15 +2948,26 @@ func handleUpdateAISettings(w http.ResponseWriter, r *http.Request) {
 }
 
 // === SESSION MIDDLEWARE ===
-func getSessionUser(r *http.Request) (string, string) {
+func getSessionInfo(r *http.Request) (string, *session) {
 	token := r.Header.Get("Authorization")
 	if token == "" {
-		return "", ""
+		return "", nil
 	}
+	token = strings.TrimPrefix(token, "Bearer ")
+	token = strings.TrimPrefix(token, "bearer ")
+	token = strings.TrimSpace(token)
 	sessionsMu.RLock()
 	sess, exists := sessions[token]
 	sessionsMu.RUnlock()
 	if !exists || time.Now().After(sess.expiresAt) {
+		return "", nil
+	}
+	return token, sess
+}
+
+func getSessionUser(r *http.Request) (string, string) {
+	token, sess := getSessionInfo(r)
+	if sess == nil {
 		return "", ""
 	}
 	return token, sess.role
@@ -2832,7 +3036,12 @@ func handleChangePassword(w http.ResponseWriter, r *http.Request) {
 
 // === MEMBER TRANSACTION HISTORY ===
 func handleMemberTransactions(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(r.URL.Path, "/")
+	cleanPath := strings.Trim(r.URL.Path, "/")
+	parts := strings.Split(cleanPath, "/")
+	if len(parts) < 3 {
+		jsonResponse(w, map[string]string{"error": "Member ID invalid"}, 400)
+		return
+	}
 	memberID := parts[len(parts)-2]
 
 	rows, err := db.Query(`SELECT t.tx_id, t.total, t.discount, t.tax, t.grand_total, t.payment, t.created_at
@@ -3561,7 +3770,16 @@ func handleGetSyncStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status := GetSyncStatus()
-	jsonResponse(w, status, 200)
+	jsonResponse(w, map[string]interface{}{
+		"status":          status.Mode,
+		"is_online":       status.IsOnline,
+		"cloud_connected": status.IsOnline || cloudDB != nil,
+		"last_sync":       status.LastSync,
+		"pending_count":   status.PendingCount,
+		"is_syncing":      status.IsSyncing,
+		"last_error":      status.LastError,
+		"mode":            status.Mode,
+	}, 200)
 }
 
 func handleTriggerSync(w http.ResponseWriter, r *http.Request) {
@@ -3570,11 +3788,11 @@ func handleTriggerSync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if os.Getenv("VERCEL") == "1" {
-		jsonResponse(w, map[string]interface{}{"status": "cloud_direct", "message": "Database Turso Cloud aktif langsung"}, 200)
+		jsonResponse(w, map[string]interface{}{"status": "ok", "message": "Database Turso Cloud aktif langsung"}, 200)
 		return
 	}
 	go DoSync()
-	jsonResponse(w, map[string]interface{}{"status": "sync_triggered"}, 200)
+	jsonResponse(w, map[string]interface{}{"status": "ok", "message": "Sinkronisasi berhasil dipicu"}, 200)
 }
 
 // === PRESENSI KASIR (QR SCAN SMARTPHONE) ===
@@ -3670,6 +3888,20 @@ func handleRecordPresensi(w http.ResponseWriter, r *http.Request) {
 
 	newID, _ := res.LastInsertId()
 
+	// Broadcast attendance event to all live displays (Presensi dynamic QR screen, POS screen, etc)
+	wsBroadcast(WSMessage{
+		Type: "attendance_recorded",
+		Data: map[string]interface{}{
+			"id":           newID,
+			"cashier_name": cashierName,
+			"username":     user.Username,
+			"type":         req.Type,
+			"date":         dateStr,
+			"time":         timeStr,
+			"notes":        req.Notes,
+		},
+	})
+
 	// Async trigger cloud sync if online
 	go DoSync()
 
@@ -3682,6 +3914,73 @@ func handleRecordPresensi(w http.ResponseWriter, r *http.Request) {
 		"type":         req.Type,
 		"date":         dateStr,
 		"time":         timeStr,
+	}, 200)
+}
+
+func handleGetPresensiQRToken(w http.ResponseWriter, r *http.Request) {
+	nowSec := time.Now().Unix()
+	window := nowSec / 30
+	secondsLeft := 30 - (nowSec % 30)
+
+	h := sha256.New()
+	h.Write([]byte(fmt.Sprintf("ymb_presensi_salt_%d", window)))
+	tokenHash := hex.EncodeToString(h.Sum(nil))[:16]
+	token := fmt.Sprintf("QR-%d-%s", window, tokenHash)
+
+	var publicURL string
+	db.QueryRow("SELECT value FROM settings WHERE key='public_presensi_url'").Scan(&publicURL)
+	if publicURL == "" || strings.Contains(publicURL, "localhost") || strings.Contains(publicURL, "127.0.0.1") {
+		publicURL = "http://" + r.Host
+	}
+
+	jsonResponse(w, map[string]interface{}{
+		"status":       "ok",
+		"token":        token,
+		"expires_in":   secondsLeft,
+		"rotation_sec": 30,
+		"server_time":  nowWIB().Format("15:04:05"),
+		"public_url":   publicURL,
+	}, 200)
+}
+
+func handleGetPresensiToday(w http.ResponseWriter, r *http.Request) {
+	todayStr := nowWIB().Format("2006-01-02")
+	rows, err := db.Query(`SELECT id, user_id, username, cashier_name, type, date, time, notes, created_at 
+		FROM attendance WHERE date = ? ORDER BY id DESC LIMIT 50`, todayStr)
+	if err != nil {
+		logError("handleGetPresensiToday", err)
+		jsonResponse(w, map[string]interface{}{"list": []AttendanceRecord{}, "total": 0, "masuk": 0, "pulang": 0}, 200)
+		return
+	}
+	defer rows.Close()
+
+	var list []AttendanceRecord
+	for rows.Next() {
+		var a AttendanceRecord
+		var uID sql.NullInt64
+		if err := rows.Scan(&a.ID, &uID, &a.Username, &a.CashierName, &a.Type, &a.Date, &a.Time, &a.Notes, &a.CreatedAt); err == nil {
+			if uID.Valid {
+				a.UserID = int(uID.Int64)
+			}
+			list = append(list, a)
+		}
+	}
+	if list == nil {
+		list = []AttendanceRecord{}
+	}
+
+	var totalToday, masukToday, pulangToday int
+	db.QueryRow("SELECT COUNT(*) FROM attendance WHERE date = ?", todayStr).Scan(&totalToday)
+	db.QueryRow("SELECT COUNT(*) FROM attendance WHERE date = ? AND type = 'masuk'", todayStr).Scan(&masukToday)
+	db.QueryRow("SELECT COUNT(*) FROM attendance WHERE date = ? AND type = 'pulang'", todayStr).Scan(&pulangToday)
+
+	jsonResponse(w, map[string]interface{}{
+		"status": "ok",
+		"date":   todayStr,
+		"total":  totalToday,
+		"masuk":  masukToday,
+		"pulang": pulangToday,
+		"list":   list,
 	}, 200)
 }
 

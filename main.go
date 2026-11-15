@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+	"strings"
 
 	_ "modernc.org/sqlite"
 	_ "github.com/tursodatabase/libsql-client-go/libsql"
@@ -55,6 +56,10 @@ func createSession(role string, username string) string {
 }
 
 func validateSession(token string) (string, bool) {
+	token = strings.TrimPrefix(token, "Bearer ")
+	token = strings.TrimPrefix(token, "bearer ")
+	token = strings.TrimSpace(token)
+
 	sessionsMu.RLock()
 	s, ok := sessions[token]
 	sessionsMu.RUnlock()
@@ -91,6 +96,10 @@ func validateSession(token string) (string, bool) {
 }
 
 func deleteSession(token string) {
+	token = strings.TrimPrefix(token, "Bearer ")
+	token = strings.TrimPrefix(token, "bearer ")
+	token = strings.TrimSpace(token)
+
 	sessionsMu.Lock()
 	delete(sessions, token)
 	sessionsMu.Unlock()

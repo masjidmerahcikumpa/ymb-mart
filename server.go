@@ -18,6 +18,9 @@ import (
 //go:embed frontend/*
 var frontendFS embed.FS
 
+//go:embed frontend_dist/*
+var distFS embed.FS
+
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
@@ -80,7 +83,7 @@ func setupRouter() *http.ServeMux {
 		}
 	}))
 	mux.HandleFunc("/api/users/", adminOnly(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/toggle") {
+		if strings.HasSuffix(r.URL.Path, "/toggle") || strings.HasSuffix(r.URL.Path, "/toggle-status") {
 			handleToggleUserStatus(w, r)
 		} else if strings.HasSuffix(r.URL.Path, "/reset-pin") {
 			handleResetUserPIN(w, r)
@@ -107,6 +110,8 @@ func setupRouter() *http.ServeMux {
 	mux.HandleFunc("/api/categories", handleGetCategories)
 	mux.HandleFunc("/api/shifts/open", handleOpenShift)
 	mux.HandleFunc("/api/shifts/active", handleGetActiveShifts)
+	mux.HandleFunc("/api/shifts/current", handleGetCurrentShift)
+	mux.HandleFunc("/api/shifts/close", requireCSRF(handleCloseCurrentShift))
 	mux.HandleFunc("/api/shifts", requireCSRF(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" {
 			handleOpenShift(w, r)
@@ -125,6 +130,7 @@ func setupRouter() *http.ServeMux {
 	})
 	mux.HandleFunc("/api/cash/drop", requireCSRF(adminOnly(handleCashDrop)))
 	mux.HandleFunc("/api/cash/in", requireCSRF(adminOnly(handleCashIn)))
+	mux.HandleFunc("/api/cash/log", handleGetCashLog)
 	mux.HandleFunc("/api/cash/log/", handleGetCashLog)
 	mux.HandleFunc("/api/members", requireCSRF(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
@@ -159,7 +165,7 @@ func setupRouter() *http.ServeMux {
 		}
 	})
 	mux.HandleFunc("/api/transactions/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "PUT" {
+		if r.Method == "PUT" || r.Method == "POST" {
 			handleVoidTransaction(w, r)
 		}
 	})
@@ -202,10 +208,12 @@ func setupRouter() *http.ServeMux {
 	mux.HandleFunc("/api/settings", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
 			handleGetSettings(w, r)
-		} else if r.Method == "PUT" {
+		} else if r.Method == "PUT" || r.Method == "POST" {
 			adminOnly(handleUpdateSettings)(w, r)
 		}
 	})
+	mux.HandleFunc("/api/presensi/qr-token", handleGetPresensiQRToken)
+	mux.HandleFunc("/api/presensi/today", handleGetPresensiToday)
 	mux.HandleFunc("/api/presensi", handlePresensi)
 	mux.HandleFunc("/api/sync/status", handleGetSyncStatus)
 	mux.HandleFunc("/api/sync/trigger", handleTriggerSync)
@@ -232,7 +240,7 @@ func setupRouter() *http.ServeMux {
 		}
 	})
 
-	// Frontend routes (prefer embedded assets, fallback to live disk)
+	// Frontend routes (prefer embedded modern Vite SPA, fallback to legacy frontend)
 	frontendHandler := func(name string) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			var data []byte
@@ -261,15 +269,141 @@ func setupRouter() *http.ServeMux {
 		}
 	}
 
-	mux.HandleFunc("/kasir", frontendHandler("kasir.html"))
-	mux.HandleFunc("/admin", frontendHandler("admin.html"))
-	mux.HandleFunc("/customer", frontendHandler("customer.html"))
-	mux.HandleFunc("/presensi", frontendHandler("presensi.html"))
+	// Modern React SPA handler: serves frontend_dist/index.html with fallback to legacy HTML
+	spaHandler := func(legacyName string) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			var data []byte
+			var err error
+			data, err = distFS.ReadFile("frontend_dist/index.html")
+			if err != nil || len(data) == 0 {
+				dir := getDataDir()
+				if d, e := os.ReadFile(filepath.Join(dir, "frontend_dist", "index.html")); e == nil {
+					data = d
+					err = nil
+				} else if d, e := os.ReadFile(filepath.Join("frontend_dist", "index.html")); e == nil {
+					data = d
+					err = nil
+				}
+			}
+
+			// Fallback to legacy file if modern SPA dist is not present
+			if err != nil || len(data) == 0 {
+				frontendHandler(legacyName)(w, r)
+				return
+			}
+
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			w.Header().Set("Pragma", "no-cache")
+			w.Header().Set("Expires", "0")
+			w.Write(data)
+		}
+	}
+
+	// Serve Vite compiled assets (/assets/*)
+	mux.HandleFunc("/assets/", func(w http.ResponseWriter, r *http.Request) {
+		assetName := strings.TrimPrefix(r.URL.Path, "/assets/")
+		cleanName := filepath.Clean(assetName)
+		if strings.Contains(cleanName, "..") {
+			http.NotFound(w, r)
+			return
+		}
+
+		var data []byte
+		var err error
+		data, err = distFS.ReadFile("frontend_dist/assets/" + cleanName)
+		if err != nil || len(data) == 0 {
+			dir := getDataDir()
+			if d, e := os.ReadFile(filepath.Join(dir, "frontend_dist", "assets", cleanName)); e == nil {
+				data = d
+				err = nil
+			} else if d, e := os.ReadFile(filepath.Join("frontend_dist", "assets", cleanName)); e == nil {
+				data = d
+				err = nil
+			}
+		}
+
+		if len(data) == 0 {
+			http.NotFound(w, r)
+			return
+		}
+
+		ext := strings.ToLower(filepath.Ext(cleanName))
+		mime := "application/octet-stream"
+		switch ext {
+		case ".js", ".mjs":
+			mime = "application/javascript"
+		case ".css":
+			mime = "text/css"
+		case ".svg":
+			mime = "image/svg+xml"
+		case ".png":
+			mime = "image/png"
+		case ".jpg", ".jpeg":
+			mime = "image/jpeg"
+		case ".woff2":
+			mime = "font/woff2"
+		case ".woff":
+			mime = "font/woff"
+		case ".json":
+			mime = "application/json"
+		}
+
+		w.Header().Set("Content-Type", mime)
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		w.Write(data)
+	})
+
+	// Static icons & favicon from dist
+	staticDistFile := func(filename, mime string) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			var data []byte
+			var err error
+			data, err = distFS.ReadFile("frontend_dist/" + filename)
+			if err != nil || len(data) == 0 {
+				dir := getDataDir()
+				if d, e := os.ReadFile(filepath.Join(dir, "frontend_dist", filename)); e == nil {
+					data = d
+					err = nil
+				} else if d, e := os.ReadFile(filepath.Join("frontend_dist", filename)); e == nil {
+					data = d
+					err = nil
+				}
+			}
+			if len(data) == 0 {
+				http.NotFound(w, r)
+				return
+			}
+			w.Header().Set("Content-Type", mime)
+			w.Header().Set("Cache-Control", "public, max-age=86400")
+			w.Write(data)
+		}
+	}
+	mux.HandleFunc("/favicon.svg", staticDistFile("favicon.svg", "image/svg+xml"))
+	mux.HandleFunc("/icons.svg", staticDistFile("icons.svg", "image/svg+xml"))
+
+	// SPA Main Routes
+	mux.HandleFunc("/kasir", spaHandler("kasir.html"))
+	mux.HandleFunc("/admin", spaHandler("admin.html"))
+	mux.HandleFunc("/customer", spaHandler("customer.html"))
+	mux.HandleFunc("/presensi", spaHandler("presensi.html"))
+	mux.HandleFunc("/receipt", spaHandler("receipt.html"))
+	mux.HandleFunc("/receipt/", spaHandler("receipt.html"))
+	mux.HandleFunc("/admin-login", spaHandler("admin-login.html"))
+	mux.HandleFunc("/admin-dashboard", spaHandler("admin.html"))
+
 	mux.HandleFunc("/sw.js", func(w http.ResponseWriter, r *http.Request) {
-		data, _ := frontendFS.ReadFile("frontend/sw.js")
+		data, _ := distFS.ReadFile("frontend_dist/sw.js")
+		if len(data) == 0 {
+			data, _ = frontendFS.ReadFile("frontend/sw.js")
+		}
 		if len(data) == 0 {
 			dir := getDataDir()
-			if d, e := os.ReadFile(filepath.Join(dir, "frontend", "sw.js")); e == nil {
+			if d, e := os.ReadFile(filepath.Join(dir, "frontend_dist", "sw.js")); e == nil {
+				data = d
+			} else if d, e := os.ReadFile(filepath.Join(dir, "frontend", "sw.js")); e == nil {
+				data = d
+			} else if d, e := os.ReadFile("frontend_dist/sw.js"); e == nil {
 				data = d
 			} else if d, e := os.ReadFile("frontend/sw.js"); e == nil {
 				data = d
@@ -279,13 +413,21 @@ func setupRouter() *http.ServeMux {
 		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		w.Write(data)
 	})
+
 	logoHandler := func(w http.ResponseWriter, r *http.Request) {
-		data, _ := frontendFS.ReadFile("frontend/logo.png")
+		data, _ := distFS.ReadFile("frontend_dist/logo.png")
+		if len(data) == 0 {
+			data, _ = frontendFS.ReadFile("frontend/logo.png")
+		}
 		if len(data) == 0 {
 			dir := getDataDir()
-			if d, e := os.ReadFile(filepath.Join(dir, "frontend", "logo.png")); e == nil {
+			if d, e := os.ReadFile(filepath.Join(dir, "frontend_dist", "logo.png")); e == nil {
+				data = d
+			} else if d, e := os.ReadFile(filepath.Join(dir, "frontend", "logo.png")); e == nil {
 				data = d
 			} else if d, e := os.ReadFile(filepath.Join(dir, "LOGO-YMB.png")); e == nil {
+				data = d
+			} else if d, e := os.ReadFile("frontend_dist/logo.png"); e == nil {
 				data = d
 			} else if d, e := os.ReadFile("frontend/logo.png"); e == nil {
 				data = d
@@ -306,10 +448,17 @@ func setupRouter() *http.ServeMux {
 	mux.HandleFunc("/LOGO-YMB.png", logoHandler)
 
 	mux.HandleFunc("/manifest.json", func(w http.ResponseWriter, r *http.Request) {
-		data, _ := frontendFS.ReadFile("frontend/manifest.json")
+		data, _ := distFS.ReadFile("frontend_dist/manifest.json")
+		if len(data) == 0 {
+			data, _ = frontendFS.ReadFile("frontend/manifest.json")
+		}
 		if len(data) == 0 {
 			dir := getDataDir()
-			if d, e := os.ReadFile(filepath.Join(dir, "frontend", "manifest.json")); e == nil {
+			if d, e := os.ReadFile(filepath.Join(dir, "frontend_dist", "manifest.json")); e == nil {
+				data = d
+			} else if d, e := os.ReadFile(filepath.Join(dir, "frontend", "manifest.json")); e == nil {
+				data = d
+			} else if d, e := os.ReadFile("frontend_dist/manifest.json"); e == nil {
 				data = d
 			} else if d, e := os.ReadFile("frontend/manifest.json"); e == nil {
 				data = d
@@ -318,16 +467,15 @@ func setupRouter() *http.ServeMux {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(data)
 	})
+
+	// Root fallback: serves SPA index.html for client-side routing
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" {
-			frontendHandler("index.html")(w, r)
-		} else {
+		if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/ws") || r.URL.Path == "/health" {
 			http.NotFound(w, r)
+			return
 		}
+		spaHandler("index.html")(w, r)
 	})
-	mux.HandleFunc("/receipt", frontendHandler("receipt.html"))
-	mux.HandleFunc("/admin-login", frontendHandler("admin-login.html"))
-	mux.HandleFunc("/admin-dashboard", frontendHandler("admin.html")) // redirect to admin
 
 	return mux
 }
