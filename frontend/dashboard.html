@@ -4,7 +4,8 @@
 if(sessionStorage.getItem("token")){location.href="/admin";}
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js');
 </script>
-<script src="https://cdn.tailwindcss.com"></script><script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<link rel="stylesheet" href="/vendor/tailwind.dashboard.min.css">
+<script src="/vendor/chart.umd.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>*{font-family:'Inter',sans-serif}::-webkit-scrollbar{width:6px}::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px}</style>
 </head><body class="bg-slate-50 min-h-screen text-slate-800">

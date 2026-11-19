@@ -5,8 +5,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="/vendor/sweetalert2.all.min.js"></script>
+<script src="/vendor/chart.umd.min.js"></script>
 <style>
 :root {
   --primary: #8b1538;
@@ -593,16 +593,26 @@ tr:hover td{background:#f8fafc}
 
   <!-- PRODUCTS -->
   <div id="panel-products" class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <h2 style="font-size:16px;font-weight:700;color:#0f172a">Katalog Master Produk</h2>
-      <button class="btn btn-primary" onclick="showAddProduct()">+ Tambah Produk</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <h2 style="font-size:16px;font-weight:700;color:#0f172a;margin:0">Katalog Master Produk</h2>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary-subtle btn-sm" onclick="exportInventoryCSV(false)" style="display:inline-flex;align-items:center;gap:6px">
+          📥 <span>Ekspor CSV</span>
+        </button>
+        <button class="btn btn-primary btn-sm" onclick="showAddProduct()">+ Tambah Produk</button>
+      </div>
     </div>
     <table><thead><tr><th class="sortable" onclick="sortTable('products-table',0)">SKU</th><th class="sortable" onclick="sortTable('products-table',1)">Nama</th><th class="sortable" onclick="sortTable('products-table',2,'num')" style="text-align:right">Harga</th><th class="sortable" onclick="sortTable('products-table',3,'num')" style="text-align:center">Stok</th><th class="sortable" onclick="sortTable('products-table',4)">Kategori</th><th style="text-align:center">Promo</th><th style="text-align:center">Aksi</th></tr></thead><tbody id="products-table"></tbody></table>
   </div>
 
   <!-- SHIFTS -->
   <div id="panel-shifts" class="card hidden">
-    <h2 style="font-size:16px;font-weight:700;color:#0f172a;margin-bottom:12px">Laporan & Rekap Shift Kasir</h2>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <h2 style="font-size:16px;font-weight:700;color:#0f172a;margin:0">Laporan & Rekap Shift Kasir</h2>
+      <button class="btn btn-secondary-subtle btn-sm" onclick="exportShiftsCSV()" style="display:inline-flex;align-items:center;gap:6px">
+        📥 <span>Ekspor CSV</span>
+      </button>
+    </div>
     <table><thead><tr><th class="sortable" onclick="sortTable('shifts-table',0)">ID</th><th class="sortable" onclick="sortTable('shifts-table',1)">Shift</th><th class="sortable" onclick="sortTable('shifts-table',2)">Kasir</th><th class="sortable" onclick="sortTable('shifts-table',3,'num')" style="text-align:right">Opening</th><th class="sortable" onclick="sortTable('shifts-table',4,'num')" style="text-align:right">Cash Sales</th><th class="sortable" onclick="sortTable('shifts-table',5,'num')" style="text-align:right">QRIS Sales</th><th class="sortable" onclick="sortTable('shifts-table',6,'num')" style="text-align:right">Total Sales</th><th class="sortable" onclick="sortTable('shifts-table',7,'num')" style="text-align:right">Expected</th><th class="sortable" onclick="sortTable('shifts-table',8,'num')" style="text-align:right">Closing</th><th class="sortable" onclick="sortTable('shifts-table',9,'num')" style="text-align:right">Disc</th><th class="sortable" onclick="sortTable('shifts-table',10)">Status</th></tr></thead><tbody id="shifts-table"></tbody></table>
   </div>
 
@@ -924,7 +934,17 @@ tr:hover td{background:#f8fafc}
 
   <!-- STOCK -->
   <div id="panel-stock" class="card hidden">
-    <h2 style="font-size:16px;font-weight:700;color:#0f172a;margin-bottom:12px">Monitoring & Valuasi Stok</h2>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <h2 style="font-size:16px;font-weight:700;color:#0f172a;margin:0">Monitoring & Valuasi Stok</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary-subtle btn-sm" onclick="exportInventoryCSV(false)" style="display:inline-flex;align-items:center;gap:6px">
+          📥 <span>Ekspor Semua Stok (CSV)</span>
+        </button>
+        <button class="btn btn-secondary-subtle btn-sm" onclick="exportInventoryCSV(true)" style="display:inline-flex;align-items:center;gap:6px;color:#dc2626;border-color:#fca5a5">
+          ⚠️ <span>Ekspor Stok Menipis (CSV)</span>
+        </button>
+      </div>
+    </div>
     <table><thead><tr><th class="sortable" onclick="sortTable('stock-table',0)">SKU</th><th class="sortable" onclick="sortTable('stock-table',1)">Nama</th><th class="sortable" onclick="sortTable('stock-table',2)">Kategori</th><th class="sortable" onclick="sortTable('stock-table',3,'num')" style="text-align:center">Stok</th><th class="sortable" onclick="sortTable('stock-table',4,'num')" style="text-align:right">Modal</th><th class="sortable" onclick="sortTable('stock-table',5,'num')" style="text-align:right">Jual</th><th class="sortable" onclick="sortTable('stock-table',6,'num')" style="text-align:right">Nilai Stok</th></tr></thead><tbody id="stock-table"></tbody></table>
     <div style="margin-top:16px;padding:16px;background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
@@ -1184,6 +1204,7 @@ tr:hover td{background:#f8fafc}
         <div class="form-group"><label>Nama Toko / Unit Usaha</label><input id="s-name" value=""></div>
         <div class="form-group"><label>Alamat Toko</label><input id="s-address" value=""></div>
         <div class="form-group"><label>Nomor Telepon / WhatsApp</label><input id="s-phone" value=""></div>
+        <div class="form-group"><label>Threshold Stok Rendah Global (Item tanpa min_stock khusus)</label><input id="s-low-stock" type="number" min="0" value="10" placeholder="Default: 10"></div>
         <div class="form-group" style="display:none"><label>PPN (%)</label><input id="s-ppn" type="number" value="0" min="0" max="100" step="0.5"></div>
         <div class="form-group">
           <label>QRIS Statis Toko (Gambar / File QRIS)</label>
@@ -1410,17 +1431,31 @@ async function fetchCsrfToken(){
   try{var r=await fetch("/api/csrf-token",{headers:{"Authorization":token}});var d=await r.json();csrfToken=d.csrf_token||d.token||""}catch(e){csrfToken=""}
 }
 fetchCsrfToken();
-function authFetch(url,opts){
+async function authFetch(url,opts){
   opts=opts||{};opts.headers=opts.headers||{};
-  opts.headers["Authorization"]=sessionStorage.getItem("token")||"";
+  var token=sessionStorage.getItem("token")||"";
+  opts.headers["Authorization"]=token;
+  var method=(opts.method||"GET").toUpperCase();
+  if(!csrfToken && token && method!=="GET" && method!=="HEAD" && method!=="OPTIONS"){
+    await fetchCsrfToken();
+  }
   opts.headers["X-CSRF-Token"]=csrfToken;
-  return fetch(url,opts).then(function(r){
-    if(r.status===401){
-      sessionStorage.clear();
-      location.href="/admin-login";
-    }
+  var r=await fetch(url,opts);
+  if(r.status===401){
+    sessionStorage.clear();
+    location.href="/admin-login";
     return r;
-  });
+  }
+  if(r.status===403 && !opts._csrfRetried && method!=="GET" && method!=="HEAD" && method!=="OPTIONS"){
+    var err=await r.clone().json().catch(function(){return{}});
+    if(err.error && err.error.indexOf("CSRF")!==-1){
+      opts._csrfRetried=true;
+      await fetchCsrfToken();
+      opts.headers["X-CSRF-Token"]=csrfToken;
+      return fetch(url,opts);
+    }
+  }
+  return r;
 }
 async function logout(){await authFetch("/api/logout",{method:"POST"});sessionStorage.clear();location.href="/admin-login"}
 
@@ -2180,8 +2215,15 @@ function renderDashRecentTx(list){
 
 // Alerts
 async function checkAlerts(){
-  try{const r=await fetch("/api/alerts/low-stock");const d=await r.json();
-  if(d.length>0){document.getElementById("alert-bar").style.display="block";document.getElementById("alert-text").textContent="Stok rendah: "+d.map(p=>p.name+" ("+p.stock+")").join(", ")}
+  try{
+    const r=await fetch("/api/alerts/low-stock");
+    const d=await r.json();
+    if(d.length>0){
+      document.getElementById("alert-bar").style.display="block";
+      document.getElementById("alert-text").textContent="Stok menipis: "+d.map(p=>p.name+" (sisa "+p.stock+(p.min_stock>0?" / min "+p.min_stock:" / min def "+(p.threshold||10))+")").join(", ");
+    } else {
+      document.getElementById("alert-bar").style.display="none";
+    }
   }catch(e){}
 }
 
@@ -2289,6 +2331,31 @@ async function adminCloseShift(id){
   if(!await swalConfirm("Tutup shift #"+id+"? Shift ini akan diakhiri oleh admin.", "Tutup Shift", "Ya, Tutup Shift", false))return;
   await authFetch("/api/shifts/"+id,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({closing_cash:0})});
   loadShifts();
+}
+
+async function exportShiftsCSV(){
+  try {
+    const token = localStorage.getItem("token") || "";
+    const res = await fetch("/api/reports/shifts/export-csv?token=" + encodeURIComponent(token), {
+      headers: { "Authorization": token }
+    });
+    if(!res.ok){
+      alert("Gagal mengunduh laporan shift.");
+      return;
+    }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `laporan_shift_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  } catch(e) {
+    console.error("exportShiftsCSV error:", e);
+    alert("Terjadi kesalahan saat mengunduh CSV shift.");
+  }
 }
 
 // CASH
@@ -2781,6 +2848,33 @@ async function loadStockReport(){
   const sel = document.getElementById("adj-product");
   if(sel){
     sel.innerHTML = r.map(p=>`<option value="${p.id}">${esc(p.name)} (stok: ${p.stock})${p.barcode?' - ['+p.barcode+']':''}</option>`).join("");
+  }
+}
+
+async function exportInventoryCSV(onlyLowStock){
+  try {
+    const token = localStorage.getItem("token") || "";
+    let urlEndpoint = "/api/reports/inventory/export-csv?token=" + encodeURIComponent(token);
+    if(onlyLowStock) urlEndpoint += "&low_stock=1";
+    const res = await fetch(urlEndpoint, {
+      headers: { "Authorization": token }
+    });
+    if(!res.ok){
+      alert("Gagal mengunduh laporan inventori.");
+      return;
+    }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${onlyLowStock ? 'laporan_stok_menipis_' : 'laporan_inventori_'}${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  } catch(e) {
+    console.error("exportInventoryCSV error:", e);
+    alert("Terjadi kesalahan saat mengunduh CSV inventori.");
   }
 }
 
@@ -3741,6 +3835,9 @@ async function loadSettings(){
   if(document.getElementById("s-etrans-fee")){
     document.getElementById("s-etrans-fee").value=s.etrans_admin_fee||"1500";
   }
+  if(document.getElementById("s-low-stock")){
+    document.getElementById("s-low-stock").value=s.low_stock_threshold||"10";
+  }
 }
 async function saveSettings(){
   var body={
@@ -3750,7 +3847,8 @@ async function saveSettings(){
     ppn_rate:document.getElementById("s-ppn").value,
     qris_image:document.getElementById("s-qris")?document.getElementById("s-qris").value:"",
     public_presensi_url:document.getElementById("s-public-presensi-url")?document.getElementById("s-public-presensi-url").value.trim():"",
-    etrans_admin_fee:document.getElementById("s-etrans-fee")?document.getElementById("s-etrans-fee").value.trim():"1500"
+    etrans_admin_fee:document.getElementById("s-etrans-fee")?document.getElementById("s-etrans-fee").value.trim():"1500",
+    low_stock_threshold:document.getElementById("s-low-stock")?document.getElementById("s-low-stock").value.trim():"10"
   };
   await authFetch("/api/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
   alert("Pengaturan berhasil disimpan!");

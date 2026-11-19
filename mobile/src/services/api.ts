@@ -8,6 +8,9 @@ export const API_BASE_URL =
     ? 'https://ymb-mart.vercel.app'
     : 'https://ymb-mart.vercel.app');
 
+export const PAYMENT_CLIENT_SECRET =
+  process.env.EXPO_PUBLIC_PAYMENT_SECRET || 'ymb-mart-secret-webhook-key-2026';
+
 const REQUEST_TIMEOUT_MS = 8000;
 
 interface BackendProductRaw {
@@ -219,6 +222,7 @@ export interface CreateOrderPayload {
   delivery_fee?: number;
   payment_method?: 'qris' | 'va' | 'cod';
   shopper_notes?: string;
+  push_token?: string;
   items: CreateOrderItemPayload[];
 }
 
@@ -279,6 +283,7 @@ export async function payMobileOrder(orderNo: string): Promise<PayOrderResponse>
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
+        'X-Payment-Secret': PAYMENT_CLIENT_SECRET,
       },
       body: JSON.stringify({ order_no: orderNo }),
     });
@@ -313,6 +318,64 @@ export async function cancelMobileOrder(orderNo: string): Promise<{ success: boo
     return await res.json();
   } catch (err: any) {
     return { success: false, error: err.message || 'Gagal batalkan pesanan' };
+  }
+}
+
+export interface BackendAddressPayload {
+  id?: number;
+  member_id?: string;
+  phone: string;
+  label: string;
+  recipient_name: string;
+  address_line: string;
+  benchmark_note?: string;
+  latitude?: number;
+  longitude?: number;
+  is_primary?: boolean;
+}
+
+export async function fetchCustomerAddresses(phone: string, memberId?: string): Promise<any[]> {
+  try {
+    const params = new URLSearchParams();
+    if (phone) params.append('phone', phone);
+    if (memberId) params.append('member_id', memberId);
+    const res = await fetchWithTimeout(`${API_BASE_URL}/api/mobile/addresses?${params.toString()}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch (e) {
+    console.warn('[API] fetchCustomerAddresses error:', e);
+    return [];
+  }
+}
+
+export async function saveCustomerAddress(payload: BackendAddressPayload): Promise<{ success: boolean; id?: string; message?: string; error?: string }> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/api/mobile/addresses`, 10000, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    return await res.json();
+  } catch (e: any) {
+    console.warn('[API] saveCustomerAddress error:', e);
+    return { success: false, error: e.message || 'Gagal menyimpan alamat' };
+  }
+}
+
+export async function deleteCustomerAddress(id: string | number): Promise<{ success: boolean; message?: string; error?: string }> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/api/mobile/addresses?id=${encodeURIComponent(id)}`, 10000, {
+      method: 'DELETE',
+      headers: { Accept: 'application/json' },
+    });
+    return await res.json();
+  } catch (e: any) {
+    console.warn('[API] deleteCustomerAddress error:', e);
+    return { success: false, error: e.message || 'Gagal menghapus alamat' };
   }
 }
 
@@ -377,6 +440,31 @@ export async function fetchOrdersHistory(params: { phone?: string; member_id?: s
   } catch (err) {
     console.warn('[API] fetchOrdersHistory failed:', err);
     return [];
+  }
+}
+
+export async function registerPushToken(
+  customerPhone: string,
+  pushToken: string,
+  deviceName?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE_URL}/api/mobile/push-token`, 8000, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        customer_phone: customerPhone,
+        push_token: pushToken,
+        device_name: deviceName || 'Mobile App',
+      }),
+    });
+    const data = await res.json();
+    return { success: res.ok, error: data.error };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Network error' };
   }
 }
 

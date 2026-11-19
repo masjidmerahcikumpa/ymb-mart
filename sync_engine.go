@@ -5,24 +5,37 @@ import (
 	"database/sql"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
 
 type SyncStatus struct {
-	IsOnline     bool   `json:"is_online"`
-	LastSync     string `json:"last_sync"`
-	PendingCount int    `json:"pending_count"`
-	IsSyncing    bool   `json:"is_syncing"`
-	LastError    string `json:"last_error"`
-	Mode         string `json:"mode"`
+	IsOnline            bool   `json:"is_online"`
+	LastSync            string `json:"last_sync"`
+	PendingCount        int    `json:"pending_count"`
+	IsSyncing           bool   `json:"is_syncing"`
+	LastError           string `json:"last_error"`
+	Mode                string `json:"mode"`
+	ConsecutiveFailures int    `json:"consecutive_failures"`
+	NextRetryInSec      int    `json:"next_retry_in_sec"`
 }
 
+const (
+	baseSyncInterval = 15 * time.Second
+	maxSyncInterval  = 300 * time.Second // 5 minutes max
+)
+
 var (
-	cloudDB           *sql.DB
-	syncMu            sync.Mutex
-	currentSyncStatus = SyncStatus{
+	cloudDB             *sql.DB
+	cloudTargetHost     string
+	cloudTargetPort     string
+	syncMu              sync.Mutex
+	consecutiveFailures int
+	nextSyncAttempt     time.Time
+	currentSyncStatus   = SyncStatus{
 		IsOnline:  false,
 		LastSync:  "-",
 		Mode:      "local_offline_first",
@@ -30,10 +43,49 @@ var (
 	syncTriggerChan = make(chan struct{}, 1)
 )
 
+func calculateBackoff(failures int) time.Duration {
+	if failures <= 0 {
+		return baseSyncInterval
+	}
+	// Exponential backoff: base * 2^failures (30s, 60s, 120s, 240s, capped at maxSyncInterval)
+	multiplier := 1 << failures
+	delay := baseSyncInterval * time.Duration(multiplier)
+	if delay > maxSyncInterval || delay < 0 {
+		delay = maxSyncInterval
+	}
+
+	// Add ±15% jitter to prevent reconnect storms
+	jitterRange := int64(delay / 6)
+	if jitterRange > 0 {
+		jitter := (time.Now().UnixNano() % (2 * jitterRange)) - jitterRange
+		delay = delay + time.Duration(jitter)
+	}
+
+	return delay
+}
+
 func InitSyncEngine(tursoURL, tursoToken string) {
 	if tursoURL == "" || tursoToken == "" {
 		fmt.Println("[Sync] No Turso credentials provided; running in pure offline mode")
 		return
+	}
+
+	cloudTargetPort = "443"
+	cleanURL := tursoURL
+	if idx := strings.Index(cleanURL, "://"); idx != -1 {
+		cleanURL = cleanURL[idx+3:]
+	}
+	if idx := strings.Index(cleanURL, "/"); idx != -1 {
+		cleanURL = cleanURL[:idx]
+	}
+	if idx := strings.Index(cleanURL, "?"); idx != -1 {
+		cleanURL = cleanURL[:idx]
+	}
+	if h, p, err := net.SplitHostPort(cleanURL); err == nil {
+		cloudTargetHost = h
+		cloudTargetPort = p
+	} else {
+		cloudTargetHost = cleanURL
 	}
 
 	connStr := fmt.Sprintf("%s?authToken=%s", tursoURL, tursoToken)
@@ -46,7 +98,7 @@ func InitSyncEngine(tursoURL, tursoToken string) {
 	cloudDB.SetMaxOpenConns(5)
 	cloudDB.SetMaxIdleConns(2)
 
-	fmt.Println("[Sync] Sync Engine initialized with Turso Cloud")
+	fmt.Printf("[Sync] Sync Engine initialized with Turso Cloud (target: %s:%s)\n", cloudTargetHost, cloudTargetPort)
 
 	// Start background sync worker
 	go syncWorker()
@@ -57,15 +109,48 @@ func syncWorker() {
 	time.Sleep(1 * time.Second)
 	TriggerSync()
 
-	ticker := time.NewTicker(15 * time.Second)
-	defer ticker.Stop()
+	timer := time.NewTimer(baseSyncInterval)
+	defer timer.Stop()
 
 	for {
 		select {
-		case <-ticker.C:
-			DoSync()
+		case <-timer.C:
+			err := DoSync()
+			syncMu.Lock()
+			if err != nil {
+				consecutiveFailures++
+			} else {
+				consecutiveFailures = 0
+			}
+			delay := calculateBackoff(consecutiveFailures)
+			nextSyncAttempt = time.Now().Add(delay)
+			currentSyncStatus.ConsecutiveFailures = consecutiveFailures
+			currentSyncStatus.NextRetryInSec = int(delay.Seconds())
+			syncMu.Unlock()
+
+			timer.Reset(delay)
+
 		case <-syncTriggerChan:
-			DoSync()
+			err := DoSync()
+			syncMu.Lock()
+			if err != nil {
+				consecutiveFailures++
+			} else {
+				consecutiveFailures = 0
+			}
+			delay := calculateBackoff(consecutiveFailures)
+			nextSyncAttempt = time.Now().Add(delay)
+			currentSyncStatus.ConsecutiveFailures = consecutiveFailures
+			currentSyncStatus.NextRetryInSec = int(delay.Seconds())
+			syncMu.Unlock()
+
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			timer.Reset(delay)
 		}
 	}
 }
@@ -95,7 +180,7 @@ func GetSyncStatus() SyncStatus {
 
 	// Update pending count from local DB
 	if db != nil {
-		var txCount, shiftCount, cashCount, userCount, prodCount, opnCount, attCount, memCount int
+		var txCount, shiftCount, cashCount, userCount, prodCount, opnCount, attCount, memCount, orderCount, addrCount int
 		db.QueryRow("SELECT COUNT(*) FROM transactions WHERE sync_status = 'pending'").Scan(&txCount)
 		db.QueryRow("SELECT COUNT(*) FROM shifts WHERE sync_status = 'pending'").Scan(&shiftCount)
 		db.QueryRow("SELECT COUNT(*) FROM cash_log WHERE sync_status = 'pending'").Scan(&cashCount)
@@ -104,31 +189,73 @@ func GetSyncStatus() SyncStatus {
 		db.QueryRow("SELECT COUNT(*) FROM stock_opname_sessions WHERE sync_status = 'pending'").Scan(&opnCount)
 		db.QueryRow("SELECT COUNT(*) FROM attendance WHERE sync_status = 'pending'").Scan(&attCount)
 		db.QueryRow("SELECT COUNT(*) FROM members WHERE sync_status = 'pending'").Scan(&memCount)
-		currentSyncStatus.PendingCount = txCount + shiftCount + cashCount + userCount + prodCount + opnCount + attCount + memCount
+		db.QueryRow("SELECT COUNT(*) FROM online_orders WHERE sync_status = 'pending'").Scan(&orderCount)
+		db.QueryRow("SELECT COUNT(*) FROM customer_addresses WHERE sync_status = 'pending'").Scan(&addrCount)
+		currentSyncStatus.PendingCount = txCount + shiftCount + cashCount + userCount + prodCount + opnCount + attCount + memCount + orderCount + addrCount
 	}
+
+	// Dynamic countdown for next sync retry
+	if !nextSyncAttempt.IsZero() {
+		rem := int(time.Until(nextSyncAttempt).Seconds())
+		if rem < 0 {
+			rem = 0
+		}
+		currentSyncStatus.NextRetryInSec = rem
+	}
+	currentSyncStatus.ConsecutiveFailures = consecutiveFailures
 
 	return currentSyncStatus
 }
 
-func hasInternetConnectivity() bool {
-	conn, err := net.DialTimeout("tcp", "8.8.8.8:53", 600*time.Millisecond)
-	if err == nil {
+// checkAPIConnectivity verifies connectivity directly against the actual cloud database and API endpoints
+func checkAPIConnectivity() (bool, error) {
+	if cloudDB == nil {
+		return false, fmt.Errorf("cloud database not configured")
+	}
+
+	// 1. If cloud target host is configured, test direct TCP connectivity to cloud host:port
+	if cloudTargetHost != "" {
+		port := cloudTargetPort
+		if port == "" {
+			port = "443"
+		}
+		targetAddr := net.JoinHostPort(cloudTargetHost, port)
+		conn, err := net.DialTimeout("tcp", targetAddr, 1500*time.Millisecond)
+		if err != nil {
+			return false, fmt.Errorf("cloud host unreachable (%s): %w", targetAddr, err)
+		}
 		conn.Close()
-		return true
 	}
-	conn2, err2 := net.DialTimeout("tcp", "1.1.1.1:53", 600*time.Millisecond)
-	if err2 == nil {
-		conn2.Close()
-		return true
+
+	// 2. Verified API health check via Turso database ping (verifies TLS handshake, auth token, and database engine)
+	ctx, cancel := context.WithTimeout(context.Background(), 2500*time.Millisecond)
+	defer cancel()
+
+	if err := cloudDB.PingContext(ctx); err != nil {
+		return false, fmt.Errorf("cloud API health check failed: %w", err)
 	}
-	return false
+
+	// 3. Optional health URL check if configured (e.g. SYNC_HEALTH_URL or custom monitoring)
+	if healthURL := os.Getenv("SYNC_HEALTH_URL"); healthURL != "" {
+		client := &http.Client{Timeout: 2 * time.Second}
+		resp, err := client.Get(healthURL)
+		if err != nil {
+			return false, fmt.Errorf("sync health URL failed: %w", err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+			return false, fmt.Errorf("sync health URL returned HTTP %d", resp.StatusCode)
+		}
+	}
+
+	return true, nil
 }
 
-func DoSync() {
+func DoSync() error {
 	syncMu.Lock()
 	if currentSyncStatus.IsSyncing {
 		syncMu.Unlock()
-		return
+		return nil
 	}
 	currentSyncStatus.IsSyncing = true
 	syncMu.Unlock()
@@ -140,29 +267,21 @@ func DoSync() {
 	}()
 
 	if cloudDB == nil || db == nil {
-		return
+		return fmt.Errorf("database not initialized")
 	}
 
-	// Fast pre-check: if no internet, skip Turso connection immediately (zero DNS lag)
-	if !hasInternetConnectivity() {
+	// Ping actual API health (instead of generic DNS 8.8.8.8)
+	online, connErr := checkAPIConnectivity()
+	if !online || connErr != nil {
 		syncMu.Lock()
 		currentSyncStatus.IsOnline = false
-		currentSyncStatus.LastError = "offline: no internet"
+		if connErr != nil {
+			currentSyncStatus.LastError = connErr.Error()
+		} else {
+			currentSyncStatus.LastError = "offline: cloud API unreachable"
+		}
 		syncMu.Unlock()
-		return
-	}
-
-	// 1. Non-blocking connectivity test to Turso with 3s timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
-	pingErr := cloudDB.PingContext(ctx)
-	if pingErr != nil {
-		syncMu.Lock()
-		currentSyncStatus.IsOnline = false
-		currentSyncStatus.LastError = pingErr.Error()
-		syncMu.Unlock()
-		return
+		return connErr
 	}
 
 	syncMu.Lock()
@@ -170,27 +289,43 @@ func DoSync() {
 	currentSyncStatus.LastError = ""
 	syncMu.Unlock()
 
+	var syncErr error
+
 	// 2. PUSH Pending Local Products to Turso Cloud (New / Edited products)
 	prodPushErr := pushLocalProductsToCloud()
 	if prodPushErr != nil {
 		fmt.Printf("[Sync] Product push error: %v\n", prodPushErr)
+		syncErr = prodPushErr
 	}
 
 	// 3. PUSH Pending Local Transactions & Shifts to Turso Cloud
 	pushErr := pushLocalTransactionsToCloud()
 	if pushErr != nil {
 		fmt.Printf("[Sync] Push error: %v\n", pushErr)
+		if syncErr == nil {
+			syncErr = pushErr
+		}
 	}
 
 	// 4. PULL Master Data from Turso Cloud to Local SQLite
 	pullErr := pullMasterDataFromCloud()
 	if pullErr != nil {
 		fmt.Printf("[Sync] Pull error: %v\n", pullErr)
+		if syncErr == nil {
+			syncErr = pullErr
+		}
 	}
 
 	syncMu.Lock()
-	currentSyncStatus.LastSync = nowWIB().Format("2006-01-02 15:04:05")
+	if syncErr == nil {
+		currentSyncStatus.LastSync = nowWIB().Format("2006-01-02 15:04:05")
+		currentSyncStatus.LastError = ""
+	} else {
+		currentSyncStatus.LastError = syncErr.Error()
+	}
 	syncMu.Unlock()
+
+	return syncErr
 }
 
 func pullMasterDataFromCloud() error {
@@ -249,9 +384,16 @@ func pullMasterDataFromCloud() error {
 	}
 
 	// D. Pull Products (Master inventory, prices, promos)
-	// Check if local has pending transactions before pulling stock
-	var pendingTx int
+	// Check if local has pending transactions, movements, or open opname sessions before pulling stock
+	var pendingTx, pendingInvMovements, openOpnameSessions, pendingOpnameSessions, pendingOpnameItems int
 	db.QueryRow("SELECT COUNT(*) FROM transactions WHERE sync_status='pending'").Scan(&pendingTx)
+	db.QueryRow("SELECT COUNT(*) FROM inventory_movements WHERE sync_status='pending'").Scan(&pendingInvMovements)
+	db.QueryRow("SELECT COUNT(*) FROM stock_opname_sessions WHERE status='open'").Scan(&openOpnameSessions)
+	db.QueryRow("SELECT COUNT(*) FROM stock_opname_sessions WHERE sync_status='pending'").Scan(&pendingOpnameSessions)
+	db.QueryRow("SELECT COUNT(*) FROM stock_opname_items WHERE sync_status='pending'").Scan(&pendingOpnameItems)
+
+	hasPendingStockChanges := (pendingTx > 0) || (pendingInvMovements > 0) || 
+		(openOpnameSessions > 0) || (pendingOpnameSessions > 0) || (pendingOpnameItems > 0)
 
 	pRows, err := cloudDB.Query("SELECT id, sku, name, description, price, cost, category, stock, min_stock, unit, barcode, promo_price, promo_active, tax_rate, active FROM products")
 	if err == nil {
@@ -262,23 +404,42 @@ func pullMasterDataFromCloud() error {
 			var taxRate float64
 			if err := pRows.Scan(&id, &sku, &name, &desc, &price, &cost, &cat, &stock, &minStock, &unit, &barcode, &promoPrice, &promoActive, &taxRate, &active); err == nil {
 				// Protect local pending changes from being overwritten
+				var localID int
 				var localSyncStatus string
-				db.QueryRow("SELECT sync_status FROM products WHERE sku = ?", sku).Scan(&localSyncStatus)
-				if localSyncStatus == "pending" {
+				checkErr := db.QueryRow("SELECT id, sync_status FROM products WHERE sku = ?", sku).Scan(&localID, &localSyncStatus)
+				if checkErr == nil && localSyncStatus == "pending" {
+					// Local product has unpushed modifications - skip pull to avoid overwrite
 					continue
 				}
 
-				var localID int
-				checkErr := db.QueryRow("SELECT id FROM products WHERE sku = ?", sku).Scan(&localID)
-				if checkErr == sql.ErrNoRows {
-					// Not found locally, insert new with cloud ID
+				if checkErr == sql.ErrNoRows && barcode != "" {
+					// Not found locally by SKU, check if exists by barcode
+					db.QueryRow("SELECT id, sync_status FROM products WHERE barcode = ?", barcode).Scan(&localID, &localSyncStatus)
+					if localSyncStatus == "pending" {
+						continue
+					}
+				}
+
+				if localID == 0 {
+					// Not found locally, insert new product from cloud
 					db.Exec(`INSERT INTO products (id, sku, name, description, price, cost, category, stock, min_stock, unit, barcode, promo_price, promo_active, tax_rate, active, sync_status) 
 						VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')`,
 						id, sku, name, desc, price, cost, cat, stock, minStock, unit, barcode, promoPrice, promoActive, taxRate, active)
 				} else {
-					// Already exists locally, update existing row
-					if pendingTx > 0 {
-						// Don't overwrite local stock if there are pending offline transactions that haven't been pushed
+					// Check per-product opname protection (whether this specific item is in an active open opname session)
+					protectStock := hasPendingStockChanges
+					if !protectStock {
+						var inActiveOpname int
+						db.QueryRow(`SELECT COUNT(*) FROM stock_opname_items soi 
+							JOIN stock_opname_sessions sos ON soi.session_id = sos.id 
+							WHERE sos.status = 'open' AND soi.product_id = ?`, localID).Scan(&inActiveOpname)
+						if inActiveOpname > 0 {
+							protectStock = true
+						}
+					}
+
+					if protectStock {
+						// Don't overwrite local stock if there are pending transactions, open opname sessions, or unpushed inventory movements
 						db.Exec(`UPDATE products SET name=?, description=?, price=?, cost=?, category=?, min_stock=?, unit=?, barcode=?, promo_price=?, promo_active=?, tax_rate=?, active=?, sync_status='synced' WHERE id=?`,
 							name, desc, price, cost, cat, minStock, unit, barcode, promoPrice, promoActive, taxRate, active, localID)
 					} else {
@@ -382,6 +543,122 @@ func pullMasterDataFromCloud() error {
 					VALUES (?, ?, ?, ?, ?, ?, ?, 'synced')
 					ON CONFLICT(session_id, product_id) DO UPDATE SET system_qty=excluded.system_qty, physical_qty=excluded.physical_qty, difference=excluded.difference, scanned_at=excluded.scanned_at, user=excluded.user, sync_status='synced'`,
 					sessID, prodID, sysQty, pVal, dVal, sVal, uVal)
+			}
+		}
+	}
+
+	// I. Pull Online Orders from Cloud (Orders created/paid via mobile app)
+	ooRows, err := cloudDB.Query(`SELECT order_no, COALESCE(member_id, ''), customer_name, customer_phone, 
+		fulfillment_type, address_text, status, items_subtotal, delivery_fee, discount_amount, 
+		infaq_amount, total_amount, payment_method, COALESCE(payment_reference, ''), payment_status, 
+		COALESCE(shopper_notes, ''), driver_name, driver_phone, eta_minutes, 
+		COALESCE(expires_at, ''), created_at, updated_at 
+		FROM online_orders ORDER BY id DESC LIMIT 100`)
+	if err == nil {
+		defer ooRows.Close()
+		for ooRows.Next() {
+			var ordNo, memID, cName, cPhone, fulfill, addr, st, payMethod, payRef, payStatus, sNotes, dName, dPhone, expAt, cAt, uAt string
+			var itemsSubtotal, deliveryFee, discountAmount, infaqAmount, totalAmount, etaMinutes int
+			if err := ooRows.Scan(&ordNo, &memID, &cName, &cPhone, &fulfill, &addr, &st,
+				&itemsSubtotal, &deliveryFee, &discountAmount, &infaqAmount, &totalAmount,
+				&payMethod, &payRef, &payStatus, &sNotes, &dName, &dPhone, &etaMinutes,
+				&expAt, &cAt, &uAt); err == nil {
+
+				var localID int
+				var localStatus, localSyncStatus string
+				checkErr := db.QueryRow("SELECT id, status, sync_status FROM online_orders WHERE order_no = ?", ordNo).Scan(&localID, &localStatus, &localSyncStatus)
+
+				if checkErr == sql.ErrNoRows {
+					// New online order arrived from cloud!
+					res, iErr := db.Exec(`INSERT INTO online_orders (
+						order_no, member_id, customer_name, customer_phone, fulfillment_type, 
+						address_text, status, items_subtotal, delivery_fee, discount_amount, 
+						infaq_amount, total_amount, payment_method, payment_reference, 
+						payment_status, shopper_notes, driver_name, driver_phone, eta_minutes, 
+						expires_at, created_at, updated_at, sync_status
+					) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')`,
+						ordNo, memID, cName, cPhone, fulfill, addr, st, itemsSubtotal, deliveryFee, discountAmount,
+						infaqAmount, totalAmount, payMethod, payRef, payStatus, sNotes, dName, dPhone, etaMinutes,
+						nullStr(expAt), cAt, uAt)
+
+					if iErr == nil {
+						newOrderID, _ := res.LastInsertId()
+						// Pull items for this order from cloud
+						itemRows, itemErr := cloudDB.Query("SELECT product_id, product_name, price, qty, subtotal, shopper_note FROM online_order_items WHERE order_no = ?", ordNo)
+						if itemErr == nil {
+							for itemRows.Next() {
+								var pid, price, qty, subtotal int
+								var pName, sNote string
+								if err := itemRows.Scan(&pid, &pName, &price, &qty, &subtotal, &sNote); err == nil {
+									db.Exec(`INSERT INTO online_order_items (order_id, order_no, product_id, product_name, price, qty, subtotal, shopper_note)
+										VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+										newOrderID, ordNo, pid, pName, price, qty, subtotal, sNote)
+								}
+							}
+							itemRows.Close()
+						}
+
+						// If order is paid or processing, broadcast to store cashier immediately!
+						if st == "paid" || st == "processing" {
+							wsBroadcast(WSMessage{
+								Type: "ONLINE_ORDER_PAID",
+								Data: map[string]interface{}{
+									"order_no":      ordNo,
+									"customer_name": cName,
+									"total_amount":  totalAmount,
+									"status":        st,
+								},
+							})
+						}
+					}
+				} else {
+					// Existing order: update local if local is not currently pending modifications
+					if localSyncStatus != "pending" && localStatus != st {
+						db.Exec(`UPDATE online_orders 
+							SET status = ?, payment_status = ?, driver_name = ?, driver_phone = ?, eta_minutes = ?, updated_at = ?, sync_status = 'synced' 
+							WHERE order_no = ?`,
+							st, payStatus, dName, dPhone, etaMinutes, uAt, ordNo)
+
+						wsBroadcast(WSMessage{
+							Type: "ONLINE_ORDER_UPDATED",
+							Data: map[string]interface{}{
+								"order_no": ordNo,
+								"status":   st,
+							},
+						})
+					}
+				}
+			}
+		}
+	}
+
+	// J. Pull Customer Addresses from Cloud
+	caRows, err := cloudDB.Query(`SELECT id, COALESCE(member_id, ''), phone, label, recipient_name, 
+		address_line, COALESCE(benchmark_note, ''), COALESCE(latitude, 0), COALESCE(longitude, 0), 
+		is_primary, created_at, updated_at FROM customer_addresses`)
+	if err == nil {
+		defer caRows.Close()
+		for caRows.Next() {
+			var id, isPrimary int
+			var memID, ph, lbl, rName, aLine, bNote, cAt, uAt string
+			var lat, lng float64
+			if err := caRows.Scan(&id, &memID, &ph, &lbl, &rName, &aLine, &bNote, &lat, &lng, &isPrimary, &cAt, &uAt); err == nil {
+				var localSyncStatus string
+				db.QueryRow("SELECT sync_status FROM customer_addresses WHERE id = ?", id).Scan(&localSyncStatus)
+				if localSyncStatus == "pending" {
+					continue
+				}
+
+				db.Exec(`INSERT INTO customer_addresses (id, member_id, phone, label, recipient_name, address_line, 
+					benchmark_note, latitude, longitude, is_primary, created_at, updated_at, sync_status)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')
+					ON CONFLICT(id) DO UPDATE SET 
+						member_id=excluded.member_id, phone=excluded.phone, label=excluded.label, 
+						recipient_name=excluded.recipient_name, address_line=excluded.address_line, 
+						benchmark_note=excluded.benchmark_note, latitude=excluded.latitude, 
+						longitude=excluded.longitude, is_primary=excluded.is_primary, 
+						updated_at=excluded.updated_at, sync_status='synced'`,
+					id, memID, ph, lbl, rName, aLine, bNote, lat, lng, isPrimary, cAt, uAt)
 			}
 		}
 	}
@@ -841,6 +1118,188 @@ func pushLocalTransactionsToCloud() error {
 		}
 	}
 
+	// 9. Fetch and Push Pending Online Orders to Turso Cloud
+	type pendingOnlineOrderItem struct {
+		productID, price, qty, subtotal int
+		productName, shopperNote string
+	}
+	type pendingOnlineOrder struct {
+		id, itemsSubtotal, deliveryFee, discountAmount, infaqAmount, totalAmount, etaMinutes int
+		orderNo, memberID, customerName, customerPhone, fulfillmentType, addressText, status, paymentMethod, paymentRef, paymentStatus, shopperNotes, driverName, driverPhone, expiresAt, createdAt, updatedAt string
+		items []pendingOnlineOrderItem
+	}
+
+	var pendingOnlineOrders []pendingOnlineOrder
+	ooPushRows, err := db.Query(`SELECT id, order_no, COALESCE(member_id, ''), customer_name, customer_phone, 
+		fulfillment_type, address_text, status, items_subtotal, delivery_fee, discount_amount, 
+		infaq_amount, total_amount, payment_method, COALESCE(payment_reference, ''), payment_status, 
+		COALESCE(shopper_notes, ''), driver_name, driver_phone, eta_minutes, 
+		COALESCE(expires_at, ''), created_at, updated_at 
+		FROM online_orders WHERE sync_status = 'pending'`)
+	if err == nil {
+		for ooPushRows.Next() {
+			var o pendingOnlineOrder
+			if err := ooPushRows.Scan(&o.id, &o.orderNo, &o.memberID, &o.customerName, &o.customerPhone, &o.fulfillmentType,
+				&o.addressText, &o.status, &o.itemsSubtotal, &o.deliveryFee, &o.discountAmount, &o.infaqAmount,
+				&o.totalAmount, &o.paymentMethod, &o.paymentRef, &o.paymentStatus, &o.shopperNotes,
+				&o.driverName, &o.driverPhone, &o.etaMinutes, &o.expiresAt, &o.createdAt, &o.updatedAt); err == nil {
+
+				// Fetch items for this order
+				itemRows, iErr := db.Query("SELECT product_id, product_name, price, qty, subtotal, shopper_note FROM online_order_items WHERE order_no = ?", o.orderNo)
+				if iErr == nil {
+					for itemRows.Next() {
+						var it pendingOnlineOrderItem
+						if err := itemRows.Scan(&it.productID, &it.productName, &it.price, &it.qty, &it.subtotal, &it.shopperNote); err == nil {
+							o.items = append(o.items, it)
+						}
+					}
+					itemRows.Close()
+				}
+				pendingOnlineOrders = append(pendingOnlineOrders, o)
+			}
+		}
+		ooPushRows.Close()
+	}
+
+	cloudDB.Exec(`CREATE TABLE IF NOT EXISTS online_orders (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		order_no TEXT UNIQUE NOT NULL,
+		member_id TEXT DEFAULT '',
+		customer_name TEXT NOT NULL,
+		customer_phone TEXT NOT NULL,
+		fulfillment_type TEXT DEFAULT 'delivery',
+		address_text TEXT DEFAULT '',
+		status TEXT DEFAULT 'pending_payment',
+		items_subtotal INTEGER NOT NULL,
+		delivery_fee INTEGER DEFAULT 0,
+		discount_amount INTEGER DEFAULT 0,
+		infaq_amount INTEGER DEFAULT 0,
+		total_amount INTEGER NOT NULL,
+		payment_method TEXT DEFAULT 'qris',
+		payment_reference TEXT DEFAULT '',
+		payment_status TEXT DEFAULT 'unpaid',
+		shopper_notes TEXT DEFAULT '',
+		driver_name TEXT DEFAULT 'Pak Joko (Kurir Kilat Masjid)',
+		driver_phone TEXT DEFAULT '+628123456789',
+		eta_minutes INTEGER DEFAULT 15,
+		expires_at TIMESTAMP,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		sync_status TEXT DEFAULT 'pending'
+	)`)
+
+	cloudDB.Exec(`CREATE TABLE IF NOT EXISTS online_order_items (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		order_id INTEGER NOT NULL,
+		order_no TEXT NOT NULL,
+		product_id INTEGER NOT NULL,
+		product_name TEXT NOT NULL,
+		price INTEGER NOT NULL,
+		qty INTEGER NOT NULL,
+		subtotal INTEGER NOT NULL,
+		shopper_note TEXT DEFAULT ''
+	)`)
+
+	for _, o := range pendingOnlineOrders {
+		_, cErr := cloudDB.Exec(`INSERT INTO online_orders (
+			order_no, member_id, customer_name, customer_phone, fulfillment_type, 
+			address_text, status, items_subtotal, delivery_fee, discount_amount, 
+			infaq_amount, total_amount, payment_method, payment_reference, 
+			payment_status, shopper_notes, driver_name, driver_phone, eta_minutes, 
+			expires_at, created_at, updated_at, sync_status
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')
+		ON CONFLICT(order_no) DO UPDATE SET
+			status = excluded.status,
+			payment_status = excluded.payment_status,
+			driver_name = excluded.driver_name,
+			driver_phone = excluded.driver_phone,
+			eta_minutes = excluded.eta_minutes,
+			updated_at = excluded.updated_at,
+			sync_status = 'synced'`,
+			o.orderNo, o.memberID, o.customerName, o.customerPhone, o.fulfillmentType,
+			o.addressText, o.status, o.itemsSubtotal, o.deliveryFee, o.discountAmount,
+			o.infaqAmount, o.totalAmount, o.paymentMethod, o.paymentRef,
+			o.paymentStatus, o.shopperNotes, o.driverName, o.driverPhone, o.etaMinutes,
+			nullStr(o.expiresAt), o.createdAt, o.updatedAt)
+
+		if cErr == nil {
+			var cloudOrderID int
+			cloudDB.QueryRow("SELECT id FROM online_orders WHERE order_no = ?", o.orderNo).Scan(&cloudOrderID)
+
+			for _, it := range o.items {
+				cloudDB.Exec(`INSERT INTO online_order_items (order_id, order_no, product_id, product_name, price, qty, subtotal, shopper_note)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+					cloudOrderID, o.orderNo, it.productID, it.productName, it.price, it.qty, it.subtotal, it.shopperNote)
+			}
+
+			db.Exec("UPDATE online_orders SET sync_status = 'synced' WHERE id = ?", o.id)
+			fmt.Printf("[Sync] Online order %s pushed to Turso Cloud\n", o.orderNo)
+		} else {
+			fmt.Printf("[Sync] Error pushing online order %s to cloud: %v\n", o.orderNo, cErr)
+		}
+	}
+
+	// 10. Fetch and Push Pending Customer Addresses to Turso Cloud
+	cloudDB.Exec(`CREATE TABLE IF NOT EXISTS customer_addresses (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		member_id TEXT DEFAULT '',
+		phone TEXT NOT NULL,
+		label TEXT DEFAULT 'Rumah',
+		recipient_name TEXT NOT NULL,
+		address_line TEXT NOT NULL,
+		benchmark_note TEXT DEFAULT '',
+		latitude REAL DEFAULT 0,
+		longitude REAL DEFAULT 0,
+		is_primary INTEGER DEFAULT 0,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		sync_status TEXT DEFAULT 'pending'
+	)`)
+
+	type pendingCustAddr struct {
+		id, isPrimary int
+		memberID, phone, label, recipientName, addressLine, benchmarkNote, createdAt, updatedAt string
+		latitude, longitude float64
+	}
+	var pendingAddrs []pendingCustAddr
+	caPushRows, err := db.Query(`SELECT id, COALESCE(member_id, ''), phone, COALESCE(label, 'Rumah'), 
+		recipient_name, address_line, COALESCE(benchmark_note, ''), 
+		COALESCE(latitude, 0), COALESCE(longitude, 0), is_primary, created_at, updated_at 
+		FROM customer_addresses WHERE sync_status = 'pending'`)
+	if err == nil {
+		for caPushRows.Next() {
+			var a pendingCustAddr
+			if err := caPushRows.Scan(&a.id, &a.memberID, &a.phone, &a.label, &a.recipientName,
+				&a.addressLine, &a.benchmarkNote, &a.latitude, &a.longitude, &a.isPrimary,
+				&a.createdAt, &a.updatedAt); err == nil {
+				pendingAddrs = append(pendingAddrs, a)
+			}
+		}
+		caPushRows.Close()
+	}
+
+	for _, a := range pendingAddrs {
+		_, cErr := cloudDB.Exec(`INSERT INTO customer_addresses (
+			id, member_id, phone, label, recipient_name, address_line, 
+			benchmark_note, latitude, longitude, is_primary, created_at, updated_at, sync_status
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced')
+		ON CONFLICT(id) DO UPDATE SET
+			member_id=excluded.member_id, phone=excluded.phone, label=excluded.label,
+			recipient_name=excluded.recipient_name, address_line=excluded.address_line,
+			benchmark_note=excluded.benchmark_note, latitude=excluded.latitude,
+			longitude=excluded.longitude, is_primary=excluded.is_primary,
+			updated_at=excluded.updated_at, sync_status='synced'`,
+			a.id, a.memberID, a.phone, a.label, a.recipientName, a.addressLine,
+			a.benchmarkNote, a.latitude, a.longitude, a.isPrimary, a.createdAt, a.updatedAt)
+
+		if cErr == nil {
+			db.Exec("UPDATE customer_addresses SET sync_status = 'synced' WHERE id = ?", a.id)
+			fmt.Printf("[Sync] Customer address ID %d (%s) pushed to Turso Cloud\n", a.id, a.recipientName)
+		} else {
+			fmt.Printf("[Sync] Error pushing customer address %d to cloud: %v\n", a.id, cErr)
+		}
+	}
+
 	// Clean up any stray pending flags in cloudDB
 	cloudDB.Exec("UPDATE transactions SET sync_status = 'synced' WHERE sync_status != 'synced'")
 	cloudDB.Exec("UPDATE shifts SET sync_status = 'synced' WHERE sync_status != 'synced'")
@@ -852,6 +1311,8 @@ func pushLocalTransactionsToCloud() error {
 	cloudDB.Exec("UPDATE members SET sync_status = 'synced' WHERE sync_status != 'synced'")
 	cloudDB.Exec("UPDATE stock_opname_sessions SET sync_status = 'synced' WHERE sync_status != 'synced'")
 	cloudDB.Exec("UPDATE stock_opname_items SET sync_status = 'synced' WHERE sync_status != 'synced'")
+	cloudDB.Exec("UPDATE online_orders SET sync_status = 'synced' WHERE sync_status != 'synced'")
+	cloudDB.Exec("UPDATE customer_addresses SET sync_status = 'synced' WHERE sync_status != 'synced'")
 
 	return nil
 }

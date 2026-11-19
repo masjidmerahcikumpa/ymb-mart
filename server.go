@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -41,6 +42,15 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	wsClients[conn] = true
 	wsMu.Unlock()
 
+	// State recovery: Send latest display state if available on fresh connection
+	lastDisplayStateMu.RLock()
+	if lastDisplayState != nil {
+		if data, err := json.Marshal(lastDisplayState); err == nil {
+			_ = conn.WriteMessage(websocket.TextMessage, data)
+		}
+	}
+	lastDisplayStateMu.RUnlock()
+
 	defer func() {
 		wsMu.Lock()
 		delete(wsClients, conn)
@@ -75,14 +85,14 @@ func setupRouter() *http.ServeMux {
 	mux.HandleFunc("/api/csrf-token", handleGetCSRFToken)
 	mux.HandleFunc("/api/logout", handleLogout)
 	mux.HandleFunc("/api/change-password", requireCSRF(handleChangePassword))
-	mux.HandleFunc("/api/users", adminOnly(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/users", requireCSRF(adminOnly(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" {
 			handleAddCashier(w, r)
 		} else {
 			handleGetUsers(w, r)
 		}
-	}))
-	mux.HandleFunc("/api/users/", adminOnly(func(w http.ResponseWriter, r *http.Request) {
+	})))
+	mux.HandleFunc("/api/users/", requireCSRF(adminOnly(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/toggle") || strings.HasSuffix(r.URL.Path, "/toggle-status") {
 			handleToggleUserStatus(w, r)
 		} else if strings.HasSuffix(r.URL.Path, "/reset-pin") {
@@ -90,25 +100,25 @@ func setupRouter() *http.ServeMux {
 		} else {
 			http.NotFound(w, r)
 		}
-	}))
+	})))
 	mux.HandleFunc("/api/products", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
 			handleGetProducts(w, r)
 		} else if r.Method == "POST" {
-			adminOnly(handleAddProduct)(w, r)
+			requireCSRF(adminOnly(handleAddProduct))(w, r)
 		}
 	})
 	mux.HandleFunc("/api/products/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/movements") {
 			handleProductMovements(w, r)
 		} else if r.Method == "PUT" {
-			adminOnly(handleUpdateProduct)(w, r)
+			requireCSRF(adminOnly(handleUpdateProduct))(w, r)
 		} else if r.Method == "DELETE" {
-			adminOnly(handleDeleteProduct)(w, r)
+			requireCSRF(adminOnly(handleDeleteProduct))(w, r)
 		}
 	})
 	mux.HandleFunc("/api/categories", handleGetCategories)
-	mux.HandleFunc("/api/shifts/open", handleOpenShift)
+	mux.HandleFunc("/api/shifts/open", requireCSRF(handleOpenShift))
 	mux.HandleFunc("/api/shifts/active", handleGetActiveShifts)
 	mux.HandleFunc("/api/shifts/current", handleGetCurrentShift)
 	mux.HandleFunc("/api/shifts/close", requireCSRF(handleCloseCurrentShift))
@@ -122,9 +132,9 @@ func setupRouter() *http.ServeMux {
 	mux.HandleFunc("/api/shifts/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" {
 			if strings.HasSuffix(r.URL.Path, "/close-self") {
-				handleCloseShiftSelf(w, r)
+				requireCSRF(handleCloseShiftSelf)(w, r)
 			} else {
-				adminOnly(handleCloseShift)(w, r)
+				requireCSRF(adminOnly(handleCloseShift))(w, r)
 			}
 		}
 	})
@@ -147,6 +157,7 @@ func setupRouter() *http.ServeMux {
 		}
 	})
 	mux.HandleFunc("/api/checkout", requireCSRF(handleCheckout))
+	mux.HandleFunc("/api/override/approve", requireCSRF(handleApprovePriceOverride))
 	mux.HandleFunc("/api/hold", requireCSRF(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
 			handleGetHolds(w, r)
@@ -156,7 +167,7 @@ func setupRouter() *http.ServeMux {
 	}))
 	mux.HandleFunc("/api/holds/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "DELETE" {
-			handleDeleteHold(w, r)
+			requireCSRF(handleDeleteHold)(w, r)
 		}
 	})
 	mux.HandleFunc("/api/transactions", func(w http.ResponseWriter, r *http.Request) {
@@ -166,7 +177,7 @@ func setupRouter() *http.ServeMux {
 	})
 	mux.HandleFunc("/api/transactions/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "PUT" || r.Method == "POST" {
-			handleVoidTransaction(w, r)
+			requireCSRF(adminOnly(handleVoidTransaction))(w, r)
 		}
 	})
 	mux.HandleFunc("/api/stats", requireAuthHandler(handleGetStats))
@@ -175,6 +186,10 @@ func setupRouter() *http.ServeMux {
 	mux.HandleFunc("/api/daily-report", handleDailyReport)
 	mux.HandleFunc("/api/stock-report", handleStockReport)
 	mux.HandleFunc("/api/reports/etrans", adminOnly(handleGetETransReport))
+	mux.HandleFunc("/api/reports/shifts/export-csv", adminOnly(handleExportShiftsCSV))
+	mux.HandleFunc("/api/reports/inventory/export-csv", adminOnly(handleExportInventoryCSV))
+	mux.HandleFunc("/api/shifts/export", adminOnly(handleExportShiftsCSV))
+	mux.HandleFunc("/api/inventory/export", adminOnly(handleExportInventoryCSV))
 	mux.HandleFunc("/api/e-voucher", requireCSRF(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
 			handleGetEVouchers(w, r)
@@ -186,7 +201,7 @@ func setupRouter() *http.ServeMux {
 	mux.HandleFunc("/api/receipt/", handleReceipt)
 	mux.HandleFunc("/api/alerts/low-stock", handleLowStock)
 	mux.HandleFunc("/api/backup", adminOnly(handleBackup))
-	mux.HandleFunc("/api/restore", adminOnly(handleRestore))
+	mux.HandleFunc("/api/restore", requireCSRF(adminOnly(handleRestore)))
 	mux.HandleFunc("/api/ai/webhook", handleAIWebhook)
 	mux.HandleFunc("/api/display-token", handleGenerateDisplayToken)
 	mux.HandleFunc("/api/stock-adjustment", requireCSRF(adminOnly(handleStockAdjustment)))
@@ -202,14 +217,14 @@ func setupRouter() *http.ServeMux {
 		if r.Method == "GET" {
 			handleGetAISettings(w, r)
 		} else if r.Method == "PUT" {
-			adminOnly(handleUpdateAISettings)(w, r)
+			requireCSRF(adminOnly(handleUpdateAISettings))(w, r)
 		}
 	})
 	mux.HandleFunc("/api/settings", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
 			handleGetSettings(w, r)
 		} else if r.Method == "PUT" || r.Method == "POST" {
-			adminOnly(handleUpdateSettings)(w, r)
+			requireCSRF(adminOnly(handleUpdateSettings))(w, r)
 		}
 	})
 	mux.HandleFunc("/api/presensi/qr-token", handleGetPresensiQRToken)
@@ -218,6 +233,7 @@ func setupRouter() *http.ServeMux {
 	mux.HandleFunc("/api/sync/status", handleGetSyncStatus)
 	mux.HandleFunc("/api/sync/trigger", handleTriggerSync)
 	mux.HandleFunc("/api/ws-broadcast", handleWSBroadcast)
+	mux.HandleFunc("/api/customer-display/state", handleGetCustomerDisplayState)
 	mux.HandleFunc("/ws", handleWebSocket)
 	mux.HandleFunc("/health", handleHealth)
 
@@ -237,6 +253,24 @@ func setupRouter() *http.ServeMux {
 	mux.HandleFunc("/api/mobile/orders/cancel", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" {
 			handleMobileCancelOrder(w, r)
+		}
+	})
+	mux.HandleFunc("/api/mobile/orders/status", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			handleMobileUpdateOrderStatus(w, r)
+		}
+	})
+	mux.HandleFunc("/api/mobile/orders/cleanup", handleCleanupExpiredOrders)
+	mux.HandleFunc("/api/mobile/push-token", handleMobileRegisterPushToken)
+	mux.HandleFunc("/api/mobile/addresses", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			handleMobileGetAddresses(w, r)
+		} else if r.Method == "POST" {
+			handleMobileSaveAddress(w, r)
+		} else if r.Method == "DELETE" {
+			handleMobileDeleteAddress(w, r)
+		} else {
+			http.Error(w, "Method not allowed", 405)
 		}
 	})
 
@@ -354,6 +388,58 @@ func setupRouter() *http.ServeMux {
 		w.Write(data)
 	})
 
+	// Serve bundled vendor libraries (/vendor/*: Chart.js, SweetAlert2, Tailwind CSS, etc.)
+	mux.HandleFunc("/vendor/", func(w http.ResponseWriter, r *http.Request) {
+		assetName := strings.TrimPrefix(r.URL.Path, "/vendor/")
+		cleanName := filepath.Clean(assetName)
+		if strings.Contains(cleanName, "..") {
+			http.NotFound(w, r)
+			return
+		}
+
+		var data []byte
+		var err error
+		data, err = frontendFS.ReadFile("frontend/vendor/" + cleanName)
+		if err != nil || len(data) == 0 {
+			dir := getDataDir()
+			if d, e := os.ReadFile(filepath.Join(dir, "frontend", "vendor", cleanName)); e == nil {
+				data = d
+				err = nil
+			} else if d, e := os.ReadFile(filepath.Join("frontend", "vendor", cleanName)); e == nil {
+				data = d
+				err = nil
+			}
+		}
+
+		if len(data) == 0 {
+			http.NotFound(w, r)
+			return
+		}
+
+		ext := strings.ToLower(filepath.Ext(cleanName))
+		mime := "application/octet-stream"
+		switch ext {
+		case ".js", ".mjs":
+			mime = "application/javascript"
+		case ".css":
+			mime = "text/css"
+		case ".woff2":
+			mime = "font/woff2"
+		case ".woff":
+			mime = "font/woff"
+		case ".ttf":
+			mime = "font/ttf"
+		case ".svg":
+			mime = "image/svg+xml"
+		case ".png":
+			mime = "image/png"
+		}
+
+		w.Header().Set("Content-Type", mime)
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		w.Write(data)
+	})
+
 	// Static icons & favicon from dist
 	staticDistFile := func(filename, mime string) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
@@ -382,15 +468,35 @@ func setupRouter() *http.ServeMux {
 	mux.HandleFunc("/favicon.svg", staticDistFile("favicon.svg", "image/svg+xml"))
 	mux.HandleFunc("/icons.svg", staticDistFile("icons.svg", "image/svg+xml"))
 
-	// SPA Main Routes
-	mux.HandleFunc("/kasir", spaHandler("kasir.html"))
-	mux.HandleFunc("/admin", spaHandler("admin.html"))
-	mux.HandleFunc("/customer", spaHandler("customer.html"))
-	mux.HandleFunc("/presensi", spaHandler("presensi.html"))
-	mux.HandleFunc("/receipt", spaHandler("receipt.html"))
-	mux.HandleFunc("/receipt/", spaHandler("receipt.html"))
-	mux.HandleFunc("/admin-login", spaHandler("admin-login.html"))
-	mux.HandleFunc("/admin-dashboard", spaHandler("admin.html"))
+	useModernUI := os.Getenv("USE_MODERN_UI") == "true" || os.Getenv("POS_UI") == "v2"
+
+	if useModernUI {
+		// SPA Main Routes (Modern React V2)
+		mux.HandleFunc("/kasir", spaHandler("kasir.html"))
+		mux.HandleFunc("/admin", spaHandler("admin.html"))
+		mux.HandleFunc("/customer", spaHandler("customer.html"))
+		mux.HandleFunc("/presensi", spaHandler("presensi.html"))
+		mux.HandleFunc("/receipt", spaHandler("receipt.html"))
+		mux.HandleFunc("/receipt/", spaHandler("receipt.html"))
+		mux.HandleFunc("/admin-login", spaHandler("admin-login.html"))
+		mux.HandleFunc("/admin-dashboard", spaHandler("admin.html"))
+		mux.HandleFunc("/dashboard", spaHandler("admin.html"))
+	} else {
+		// Default Main Routes: Original Proven POS (100% Identical to frontend/*.html)
+		mux.HandleFunc("/kasir", frontendHandler("kasir.html"))
+		mux.HandleFunc("/admin", frontendHandler("admin.html"))
+		mux.HandleFunc("/customer", frontendHandler("customer.html"))
+		mux.HandleFunc("/presensi", frontendHandler("presensi.html"))
+		mux.HandleFunc("/receipt", frontendHandler("receipt.html"))
+		mux.HandleFunc("/receipt/", frontendHandler("receipt.html"))
+		mux.HandleFunc("/admin-login", frontendHandler("admin-login.html"))
+		mux.HandleFunc("/admin-dashboard", frontendHandler("admin.html"))
+		mux.HandleFunc("/dashboard", frontendHandler("dashboard.html"))
+	}
+
+	// Preview routes for modern React SPA (can be tested anytime at /v2)
+	mux.HandleFunc("/v2", spaHandler("index.html"))
+	mux.HandleFunc("/v2/", spaHandler("index.html"))
 
 	mux.HandleFunc("/sw.js", func(w http.ResponseWriter, r *http.Request) {
 		data, _ := distFS.ReadFile("frontend_dist/sw.js")
@@ -468,13 +574,21 @@ func setupRouter() *http.ServeMux {
 		w.Write(data)
 	})
 
-	// Root fallback: serves SPA index.html for client-side routing
+	// Root route handler
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/ws") || r.URL.Path == "/health" {
 			http.NotFound(w, r)
 			return
 		}
-		spaHandler("index.html")(w, r)
+		if useModernUI {
+			spaHandler("index.html")(w, r)
+		} else {
+			if r.URL.Path == "/" {
+				frontendHandler("index.html")(w, r)
+			} else {
+				http.NotFound(w, r)
+			}
+		}
 	})
 
 	return mux
@@ -509,31 +623,33 @@ func main() {
 	fmt.Printf("[POS] Data dir: %s\n", getDataDir())
 	fmt.Printf("[POS] Version: 2.2 (Go)\n")
 
-	// Auto-open browser
-	go func() {
-		time.Sleep(2 * time.Second)
-		url := "http://localhost:" + port + "/"
-		cacheBust := fmt.Sprintf("%d", time.Now().UnixMilli())
-		freshURL := url + "?v=" + cacheBust
-		fmt.Printf("[POS] Opening browser: %s\n", freshURL)
-		if runtime.GOOS == "windows" {
-			// Use separate Chrome profile for POS (always kiosk-printing)
-		myPath, _ := os.Executable()
-		posDir := filepath.Dir(myPath)
-		chromeProfile := filepath.Join(posDir, "chrome-pos-profile")
-		exec.Command("cmd", "/c", "start", "chrome",
-			"--user-data-dir="+chromeProfile,
-			"--kiosk-printing",
-			"--disable-features=TranslateUI",
-			"--no-first-run",
-			"--disable-session-crashed-bubble",
-			freshURL).Start()
-		} else if runtime.GOOS == "darwin" {
-			exec.Command("open", freshURL).Start()
-		} else {
-			exec.Command("xdg-open", freshURL).Start()
-		}
-	}()
+	// Auto-open browser (can be disabled with NO_BROWSER=1)
+	if os.Getenv("NO_BROWSER") != "1" {
+		go func() {
+			time.Sleep(2 * time.Second)
+			url := "http://localhost:" + port + "/"
+			cacheBust := fmt.Sprintf("%d", time.Now().UnixMilli())
+			freshURL := url + "?v=" + cacheBust
+			fmt.Printf("[POS] Opening browser: %s\n", freshURL)
+			if runtime.GOOS == "windows" {
+				// Use separate Chrome profile for POS (always kiosk-printing)
+				myPath, _ := os.Executable()
+				posDir := filepath.Dir(myPath)
+				chromeProfile := filepath.Join(posDir, "chrome-pos-profile")
+				exec.Command("cmd", "/c", "start", "chrome",
+					"--user-data-dir="+chromeProfile,
+					"--kiosk-printing",
+					"--disable-features=TranslateUI",
+					"--no-first-run",
+					"--disable-session-crashed-bubble",
+					freshURL).Start()
+			} else if runtime.GOOS == "darwin" {
+				exec.Command("open", freshURL).Start()
+			} else {
+				exec.Command("xdg-open", freshURL).Start()
+			}
+		}()
+	}
 
 // Auto-start Cloudflare Tunnel ONLY if ENABLE_ADMIN_TUNNEL=true
 	if os.Getenv("ENABLE_ADMIN_TUNNEL") != "true" {

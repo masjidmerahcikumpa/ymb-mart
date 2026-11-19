@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
+	"encoding/csv"
 	"encoding/json"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/sha512"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -26,9 +30,11 @@ import (
 )
 
 var (
-	wsClients = make(map[*websocket.Conn]bool)
-	wsMu      sync.Mutex
-	checkoutMu sync.Mutex
+	wsClients          = make(map[*websocket.Conn]bool)
+	wsMu               sync.Mutex
+	checkoutMu         sync.Mutex
+	lastDisplayState   *WSMessage
+	lastDisplayStateMu sync.RWMutex
 )
 
 type WSMessage struct {
@@ -37,6 +43,19 @@ type WSMessage struct {
 }
 
 func wsBroadcast(msg WSMessage) {
+	// Track latest customer display state for automatic reconnection replay
+	switch msg.Type {
+	case "cart_update", "show_qris", "hide_qris", "new_transaction":
+		lastDisplayStateMu.Lock()
+		msgCopy := msg
+		lastDisplayState = &msgCopy
+		lastDisplayStateMu.Unlock()
+	case "reset_display":
+		lastDisplayStateMu.Lock()
+		lastDisplayState = nil
+		lastDisplayStateMu.Unlock()
+	}
+
 	wsMu.Lock()
 	defer wsMu.Unlock()
 	data, _ := json.Marshal(msg)
@@ -46,6 +65,19 @@ func wsBroadcast(msg WSMessage) {
 			delete(wsClients, client)
 		}
 	}
+}
+
+func handleGetCustomerDisplayState(w http.ResponseWriter, r *http.Request) {
+	lastDisplayStateMu.RLock()
+	defer lastDisplayStateMu.RUnlock()
+	if lastDisplayState == nil {
+		jsonResponse(w, map[string]interface{}{"active": false}, 200)
+		return
+	}
+	jsonResponse(w, map[string]interface{}{
+		"active": true,
+		"state":  lastDisplayState,
+	}, 200)
 }
 
 func jsonResponse(w http.ResponseWriter, data interface{}, status int) {
@@ -157,7 +189,14 @@ type csrfTokenEntry struct {
 	expiresAt    time.Time
 }
 
+func normalizeSessionToken(token string) string {
+	token = strings.TrimPrefix(token, "Bearer ")
+	token = strings.TrimPrefix(token, "bearer ")
+	return strings.TrimSpace(token)
+}
+
 func generateCSRFToken(sessionToken string) string {
+	sessionToken = normalizeSessionToken(sessionToken)
 	ts := strconv.FormatInt(time.Now().Unix(), 10)
 	mac := hmac.New(sha256.New, csrfSecret)
 	mac.Write([]byte(sessionToken + ":" + ts))
@@ -166,6 +205,14 @@ func generateCSRFToken(sessionToken string) string {
 
 	// Also cache in memory for local single-instance fast path
 	csrfTokens.Lock()
+	if len(csrfTokens.data) > 500 {
+		now := time.Now()
+		for k, v := range csrfTokens.data {
+			if now.After(v.expiresAt) {
+				delete(csrfTokens.data, k)
+			}
+		}
+	}
 	csrfTokens.data[token] = csrfTokenEntry{sessionToken: sessionToken, expiresAt: time.Now().Add(24 * time.Hour)}
 	csrfTokens.Unlock()
 
@@ -173,12 +220,11 @@ func generateCSRFToken(sessionToken string) string {
 }
 
 func validateCSRF(token string, sessionToken string) bool {
-	// If CSRF token is empty or not yet set by frontend, but request comes with a verified session:
-	// Since browser Same-Origin Policy forbids cross-origin JavaScript from reading or setting
-	// custom Authorization headers, a valid Bearer/Session token header is inherently immune to CSRF.
-	if token == "" {
-		_, valid := validateSession(sessionToken)
-		return valid
+	token = strings.TrimSpace(token)
+	sessionToken = normalizeSessionToken(sessionToken)
+	// Enforce non-empty CSRF token and valid session token
+	if token == "" || sessionToken == "" {
+		return false
 	}
 
 	// 1. Verify stateless HMAC signature
@@ -187,8 +233,9 @@ func validateCSRF(token string, sessionToken string) bool {
 		tsStr, sig := parts[0], parts[1]
 		ts, err := strconv.ParseInt(tsStr, 10, 64)
 		if err == nil {
-			// Valid for 24 hours
-			if time.Now().Unix()-ts <= 86400 && time.Now().Unix() >= ts-60 {
+			// Valid for 24 hours (86400s) with 60s clock skew tolerance
+			now := time.Now().Unix()
+			if now-ts <= 86400 && now >= ts-60 {
 				mac := hmac.New(sha256.New, csrfSecret)
 				mac.Write([]byte(sessionToken + ":" + tsStr))
 				expectedSig := hex.EncodeToString(mac.Sum(nil))
@@ -199,17 +246,59 @@ func validateCSRF(token string, sessionToken string) bool {
 		}
 	}
 
-	// 2. Fallback to in-memory check for legacy tokens
+	// 2. Fallback to in-memory check for cached tokens
 	csrfTokens.RLock()
 	entry, exists := csrfTokens.data[token]
 	csrfTokens.RUnlock()
-	if exists && time.Now().Before(entry.expiresAt) && entry.sessionToken == sessionToken {
+	if exists && time.Now().Before(entry.expiresAt) && normalizeSessionToken(entry.sessionToken) == sessionToken {
 		return true
 	}
 
-	// 3. Fallback to session validity
-	_, valid := validateSession(sessionToken)
-	return valid
+	// No bypass: if token is invalid or signature doesn't match, reject
+	return false
+}
+
+func generateOverrideToken(productID, originalPrice, overridePrice int, managerUsername string) string {
+	ts := strconv.FormatInt(time.Now().Unix(), 10)
+	payload := fmt.Sprintf("%d:%d:%d:%s:%s", productID, originalPrice, overridePrice, managerUsername, ts)
+	mac := hmac.New(sha256.New, csrfSecret)
+	mac.Write([]byte(payload))
+	sig := hex.EncodeToString(mac.Sum(nil))
+	return fmt.Sprintf("%s.%s.%s", ts, managerUsername, sig)
+}
+
+func validateOverrideToken(token string, productID, originalPrice, overridePrice int) (string, bool) {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return "", false
+	}
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return "", false
+	}
+	tsStr := parts[0]
+	managerUsername := parts[1]
+	sig := parts[2]
+
+	ts, err := strconv.ParseInt(tsStr, 10, 64)
+	if err != nil {
+		return "", false
+	}
+	now := time.Now().Unix()
+	// Valid for 2 hours with 60s clock skew tolerance
+	if now-ts > 7200 || now < ts-60 {
+		return "", false
+	}
+
+	payload := fmt.Sprintf("%d:%d:%d:%s:%s", productID, originalPrice, overridePrice, managerUsername, tsStr)
+	mac := hmac.New(sha256.New, csrfSecret)
+	mac.Write([]byte(payload))
+	expectedSig := hex.EncodeToString(mac.Sum(nil))
+
+	if subtle.ConstantTimeCompare([]byte(sig), []byte(expectedSig)) != 1 {
+		return "", false
+	}
+	return managerUsername, true
 }
 
 func handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -578,6 +667,24 @@ func handleGetProducts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer rows.Close()
+
+	// Check open opname sessions to flag locked products
+	lockedOpnameProducts := make(map[int]bool)
+	var openOpnames int
+	_ = db.QueryRow("SELECT COUNT(*) FROM stock_opname_sessions WHERE status = 'open'").Scan(&openOpnames)
+	if openOpnames > 0 {
+		opRows, err := db.Query("SELECT DISTINCT soi.product_id FROM stock_opname_items soi JOIN stock_opname_sessions sos ON soi.session_id = sos.id WHERE sos.status = 'open'")
+		if err == nil {
+			defer opRows.Close()
+			for opRows.Next() {
+				var pid int
+				if err := opRows.Scan(&pid); err == nil {
+					lockedOpnameProducts[pid] = true
+				}
+			}
+		}
+	}
+
 	var products []map[string]interface{}
 	for rows.Next() {
 		if isAdmin {
@@ -588,12 +695,15 @@ func handleGetProducts(w http.ResponseWriter, r *http.Request) {
 				onlineStock = 0
 			}
 			p.OnlineStock = onlineStock
+			isLocked := lockedOpnameProducts[p.ID]
+			p.IsOpnameLocked = isLocked
 			products = append(products, map[string]interface{}{
 				"id": p.ID, "sku": p.SKU, "name": p.Name, "description": p.Description,
 				"price": p.Price, "cost": p.Cost, "category": p.Category,
 				"stock": p.Stock, "reserved_stock": p.ReservedStock, "online_stock": onlineStock,
 				"min_stock": p.MinStock, "unit": p.Unit, "barcode": p.Barcode,
 				"promo_price": p.PromoPrice, "promo_active": p.PromoActive, "tax_rate": p.TaxRate, "active": p.Active,
+				"is_opname_locked": isLocked,
 			})
 		} else {
 			var id, price, stock, reservedStock, minStock, promoPrice, promoActive, active int
@@ -604,12 +714,14 @@ func handleGetProducts(w http.ResponseWriter, r *http.Request) {
 			if onlineStock < 0 {
 				onlineStock = 0
 			}
+			isLocked := lockedOpnameProducts[id]
 			products = append(products, map[string]interface{}{
 				"id": id, "sku": sku, "name": name, "description": description,
 				"price": price, "category": category,
 				"stock": stock, "reserved_stock": reservedStock, "online_stock": onlineStock,
 				"min_stock": minStock, "unit": unit, "barcode": barcode,
 				"promo_price": promoPrice, "promo_active": promoActive, "tax_rate": taxRate, "active": active,
+				"is_opname_locked": isLocked,
 			})
 		}
 	}
@@ -1228,6 +1340,81 @@ func handleGetMember(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, m, 200)
 }
 
+// === Manager Approval: Price Override ===
+func handleApprovePriceOverride(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ManagerUsername string `json:"manager_username"`
+		ManagerPassword string `json:"manager_password"`
+		ProductID       int    `json:"product_id"`
+		OriginalPrice   int    `json:"original_price"`
+		OverridePrice   int    `json:"override_price"`
+		Reason          string `json:"reason"`
+	}
+	if err := decodeJSON(w, r, &req); err != nil {
+		jsonResponse(w, map[string]string{"error": "Format request tidak valid"}, 400)
+		return
+	}
+
+	mgrUser := strings.TrimSpace(req.ManagerUsername)
+	mgrPass := strings.TrimSpace(req.ManagerPassword)
+	if mgrUser == "" || mgrPass == "" {
+		jsonResponse(w, map[string]string{"error": "Username dan PIN/Password manajer wajib diisi"}, 400)
+		return
+	}
+	if req.OverridePrice < 0 {
+		jsonResponse(w, map[string]string{"error": "Harga override tidak boleh bernilai negatif"}, 400)
+		return
+	}
+
+	var user User
+	err := db.QueryRow("SELECT id, username, password, display_name, role FROM users WHERE username=? AND active=1", mgrUser).
+		Scan(&user.ID, &user.Username, &user.Password, &user.DisplayName, &user.Role)
+	if err != nil {
+		jsonResponse(w, map[string]string{"error": "Akun manajer tidak ditemukan atau non-aktif"}, 401)
+		return
+	}
+
+	if user.Role != "admin" && user.Role != "manager" {
+		jsonResponse(w, map[string]string{"error": "Hanya akun dengan hak akses Manajer atau Admin yang dapat menyetujui perubahan harga"}, 403)
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(mgrPass)); err != nil {
+		jsonResponse(w, map[string]string{"error": "PIN atau password manajer salah"}, 401)
+		return
+	}
+
+	actualOriginalPrice := req.OriginalPrice
+	if req.ProductID > 0 {
+		var pPrice, pPromoPrice, pPromoActive int
+		err := db.QueryRow("SELECT price, promo_price, promo_active FROM products WHERE id=?", req.ProductID).
+			Scan(&pPrice, &pPromoPrice, &pPromoActive)
+		if err == nil {
+			actualOriginalPrice = pPrice
+			if pPromoActive == 1 && pPromoPrice > 0 {
+				actualOriginalPrice = pPromoPrice
+			}
+		}
+	}
+
+	reason := strings.TrimSpace(req.Reason)
+	if reason == "" {
+		reason = "Disetujui Manajer"
+	}
+
+	token := generateOverrideToken(req.ProductID, actualOriginalPrice, req.OverridePrice, user.Username)
+
+	jsonResponse(w, map[string]interface{}{
+		"status":           "ok",
+		"override_token":   token,
+		"manager_username": user.Username,
+		"manager_name":     user.DisplayName,
+		"original_price":   actualOriginalPrice,
+		"override_price":   req.OverridePrice,
+		"reason":           reason,
+	}, 200)
+}
+
 // === Checkout (with transaction + stock check) ===
 func handleCheckout(w http.ResponseWriter, r *http.Request) {
 	var req CheckoutReq
@@ -1312,8 +1499,9 @@ func handleCheckout(w http.ResponseWriter, r *http.Request) {
 				TaxRate:   0,
 				Notes:     ci.Notes,
 			})
-			sqlTx.Exec("INSERT INTO tx_items (tx_id,product_id,name,qty,price,discount,subtotal,notes) VALUES (?,?,?,?,?,?,?,?)",
-				txID, 0, itemName, ci.Qty, effectivePrice, 0, sub, ci.Notes)
+			sqlTx.Exec(`INSERT INTO tx_items (tx_id,product_id,name,qty,price,discount,subtotal,notes,override_price,override_manager,override_reason) 
+				VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+				txID, 0, itemName, ci.Qty, effectivePrice, 0, sub, ci.Notes, 0, "", "")
 			continue
 		}
 		var p Product
@@ -1321,6 +1509,15 @@ func handleCheckout(w http.ResponseWriter, r *http.Request) {
 			Scan(&p.ID, &p.Name, &p.Price, &p.PromoPrice, &p.PromoActive, &p.Stock, &p.TaxRate)
 		if err != nil {
 			failedItems = append(failedItems, fmt.Sprintf("Produk ID %d tidak ditemukan", ci.ProductID))
+			continue
+		}
+		// Guard: Check if product is locked in an active stock opname session
+		var opnameCount int
+		errOp := sqlTx.QueryRow(`SELECT COUNT(*) FROM stock_opname_items soi 
+			JOIN stock_opname_sessions sos ON soi.session_id = sos.id 
+			WHERE sos.status = 'open' AND soi.product_id = ?`, ci.ProductID).Scan(&opnameCount)
+		if errOp == nil && opnameCount > 0 {
+			failedItems = append(failedItems, fmt.Sprintf("%s (sedang dalam sesi Stock Opname)", p.Name))
 			continue
 		}
 		if p.Stock < ci.Qty {
@@ -1331,6 +1528,27 @@ func handleCheckout(w http.ResponseWriter, r *http.Request) {
 		if p.PromoActive == 1 && p.PromoPrice > 0 {
 			effectivePrice = p.PromoPrice
 		}
+		catalogPrice := effectivePrice
+		overrideManager := ""
+		overrideReason := ""
+
+		// Price override evaluation
+		reqOverridePrice := ci.OverridePrice
+		if reqOverridePrice == 0 && ci.Price > 0 && ci.Price != effectivePrice {
+			reqOverridePrice = ci.Price
+		}
+
+		if reqOverridePrice > 0 && reqOverridePrice != effectivePrice {
+			mgr, ok := validateOverrideToken(ci.OverrideToken, p.ID, effectivePrice, reqOverridePrice)
+			if !ok {
+				failedItems = append(failedItems, fmt.Sprintf("%s (perubahan harga Rp%d ke Rp%d memerlukan approval manajer yang sah)", p.Name, effectivePrice, reqOverridePrice))
+				continue
+			}
+			effectivePrice = reqOverridePrice
+			overrideManager = mgr
+			overrideReason = ci.OverrideReason
+		}
+
 		var itemDiscount int
 		if ci.DiscountType == "percent" {
 			// Round to nearest integer for Rupiah
@@ -1342,6 +1560,15 @@ func handleCheckout(w http.ResponseWriter, r *http.Request) {
 		sub := effectivePrice*ci.Qty - itemDiscount
 		if sub < 0 { sub = 0 }
 		total += sub
+		itemNotes := ci.Notes
+		if overrideManager != "" {
+			ovrNote := fmt.Sprintf("[Override: Rp%d->Rp%d by @%s: %s]", catalogPrice, effectivePrice, overrideManager, overrideReason)
+			if itemNotes != "" {
+				itemNotes += " " + ovrNote
+			} else {
+				itemNotes = ovrNote
+			}
+		}
 		items = append(items, checkoutItem{
 			ProductID: ci.ProductID,
 			Name:      p.Name,
@@ -1350,13 +1577,23 @@ func handleCheckout(w http.ResponseWriter, r *http.Request) {
 			Discount:  float64(itemDiscount),
 			Subtotal:  sub,
 			TaxRate:   p.TaxRate,
-			Notes:     ci.Notes,
+			Notes:     itemNotes,
 		})
-		sqlTx.Exec("INSERT INTO tx_items (tx_id,product_id,name,qty,price,discount,subtotal,notes) VALUES (?,?,?,?,?,?,?,?)",
-			txID, ci.ProductID, p.Name, ci.Qty, effectivePrice, ci.Discount, sub, ci.Notes)
+		sqlTx.Exec(`INSERT INTO tx_items (tx_id,product_id,name,qty,price,discount,subtotal,notes,override_price,override_manager,override_reason) 
+			VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+			txID, ci.ProductID, p.Name, ci.Qty, effectivePrice, ci.Discount, sub, itemNotes, reqOverridePrice, overrideManager, overrideReason)
 		sqlTx.Exec("UPDATE products SET stock=stock-? WHERE id=? AND stock>=?", ci.Qty, ci.ProductID, ci.Qty)
 		sqlTx.Exec("INSERT INTO inventory_movements (product_id,movement_type,quantity,stock_before,stock_after,reference_type,reference_id,source,reason,user) VALUES (?,?,?,?,?,?,?,?,?,?)",
 			ci.ProductID, "sale", -ci.Qty, p.Stock, p.Stock-ci.Qty, "transaction", txID, "checkout", "Sale via checkout", req.Cashier)
+	}
+
+	if len(failedItems) > 0 {
+		jsonResponse(w, map[string]interface{}{
+			"error":        "checkout_failed",
+			"message":      "Checkout gagal. Beberapa produk tidak dapat diproses: " + strings.Join(failedItems, ", "),
+			"failed_items": failedItems,
+		}, 400)
+		return
 	}
 
 	if len(items) == 0 {
@@ -1626,6 +1863,21 @@ func handleVoidTransaction(w http.ResponseWriter, r *http.Request) {
 	go TriggerSync()
 	jsonResponse(w, map[string]interface{}{"status": "ok", "message": "Transaction voided with full reversal"}, 200)
 }
+
+func getGlobalLowStockThreshold() int {
+	if db == nil {
+		return 10
+	}
+	var val string
+	err := db.QueryRow("SELECT value FROM settings WHERE key='low_stock_threshold'").Scan(&val)
+	if err == nil {
+		if t, err := strconv.Atoi(strings.TrimSpace(val)); err == nil && t >= 0 {
+			return t
+		}
+	}
+	return 10
+}
+
 func handleGetStats(w http.ResponseWriter, r *http.Request) {
 	today := nowWIB().Format("2006-01-02")
 	todayPattern := today + "%"
@@ -1634,7 +1886,8 @@ func handleGetStats(w http.ResponseWriter, r *http.Request) {
 	db.QueryRow("SELECT COALESCE(SUM(grand_total),0) FROM transactions WHERE created_at LIKE ? AND status='completed'", todayPattern).Scan(&totalSales)
 	db.QueryRow("SELECT COUNT(*) FROM transactions WHERE created_at LIKE ? AND status='completed'", todayPattern).Scan(&totalTx)
 	db.QueryRow("SELECT COALESCE(SUM(ti.subtotal - p.cost * ti.qty),0) FROM tx_items ti JOIN products p ON ti.product_id=p.id JOIN transactions t ON ti.tx_id=t.tx_id WHERE t.created_at LIKE ? AND t.status='completed'", todayPattern).Scan(&totalProfit)
-	db.QueryRow("SELECT COUNT(*) FROM products WHERE active=1 AND stock<10").Scan(&lowStock)
+	threshold := getGlobalLowStockThreshold()
+	db.QueryRow("SELECT COUNT(*) FROM products WHERE active=1 AND stock <= (CASE WHEN COALESCE(min_stock,0) > 0 THEN min_stock ELSE ? END)", threshold).Scan(&lowStock)
 	db.QueryRow("SELECT COUNT(*) FROM members WHERE active=1").Scan(&memberCount)
 
 	type topProd struct {
@@ -2221,7 +2474,8 @@ func handleDailyReport(w http.ResponseWriter, r *http.Request) {
 		Name  string `json:"name"`
 		Stock int    `json:"stock"`
 	}
-	lsRows, lsErr := db.Query("SELECT name, stock FROM products WHERE active=1 AND stock<10 ORDER BY stock ASC")
+	threshold := getGlobalLowStockThreshold()
+	lsRows, lsErr := db.Query("SELECT name, stock FROM products WHERE active=1 AND stock <= (CASE WHEN COALESCE(min_stock,0) > 0 THEN min_stock ELSE ? END) ORDER BY stock ASC", threshold)
 	var lowStock []lowStockItem
 	if lsErr == nil {
 		for lsRows.Next() {
@@ -2263,6 +2517,268 @@ func handleStockReport(w http.ResponseWriter, r *http.Request) {
 		products = []Product{}
 	}
 	jsonResponse(w, products, 200)
+}
+
+// === CSV Export: Shift Reports ===
+func handleExportShiftsCSV(w http.ResponseWriter, r *http.Request) {
+	status := strings.TrimSpace(r.URL.Query().Get("status"))
+	startDate := strings.TrimSpace(r.URL.Query().Get("start_date"))
+	endDate := strings.TrimSpace(r.URL.Query().Get("end_date"))
+	cashier := strings.TrimSpace(r.URL.Query().Get("cashier"))
+
+	query := `SELECT s.id, s.shift_name, s.cashier, COALESCE(u.display_name, s.cashier), 
+		s.opened_at, COALESCE(s.closed_at, ''), COALESCE(s.opening_cash, 0), COALESCE(s.closing_cash, 0), 
+		COALESCE(s.expected_cash, 0), 
+		CASE 
+			WHEN s.status = 'open' THEN COALESCE((SELECT SUM(grand_total) FROM transactions WHERE shift_id=s.id AND payment='CASH' AND status='completed'), 0)
+			ELSE COALESCE(s.cash_sales, 0)
+		END,
+		COALESCE(s.cash_out, 0), 
+		COALESCE(s.cash_discrepancy, 0), COALESCE(s.total_sales, 0), COALESCE(s.total_tx, 0), s.status 
+		FROM shifts s 
+		LEFT JOIN users u ON s.cashier = u.username 
+		WHERE 1=1`
+	var args []interface{}
+
+	if status != "" && status != "all" {
+		query += " AND s.status = ?"
+		args = append(args, status)
+	}
+	if startDate != "" {
+		query += " AND s.opened_at >= ?"
+		args = append(args, startDate)
+	}
+	if endDate != "" {
+		if len(endDate) == 10 {
+			endDate += " 23:59:59"
+		}
+		query += " AND s.opened_at <= ?"
+		args = append(args, endDate)
+	}
+	if cashier != "" && cashier != "all" {
+		query += " AND s.cashier = ?"
+		args = append(args, cashier)
+	}
+	query += " ORDER BY s.opened_at DESC"
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		logError("handleExportShiftsCSV", err)
+		http.Error(w, "Gagal mengambil data shift", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	filename := fmt.Sprintf("laporan_shift_%s.csv", nowWIB().Format("2006-01-02"))
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+
+	// UTF-8 BOM for Excel compatibility
+	w.Write([]byte{0xEF, 0xBB, 0xBF})
+
+	writer := csv.NewWriter(w)
+	defer writer.Flush()
+
+	header := []string{
+		"ID Shift",
+		"Nama Shift",
+		"Username Kasir",
+		"Nama Kasir",
+		"Waktu Buka",
+		"Waktu Tutup",
+		"Modal Awal (Rp)",
+		"Penjualan Tunai (Rp)",
+		"Penjualan Non-Tunai (Rp)",
+		"Total Penjualan (Rp)",
+		"Total Transaksi",
+		"Kas Keluar (Rp)",
+		"Kas Diharapkan (Rp)",
+		"Kas Akhir Kasir (Rp)",
+		"Selisih Kas (Rp)",
+		"Status",
+	}
+	if err := writer.Write(header); err != nil {
+		logError("handleExportShiftsCSV write header", err)
+		return
+	}
+
+	for rows.Next() {
+		var id, openingCash, closingCash, expectedCash, cashSales, cashOut, discrepancy, totalSales, totalTx int
+		var shiftName, cashierUser, cashierName, openedAt, closedAt, shiftStatus string
+
+		if err := rows.Scan(&id, &shiftName, &cashierUser, &cashierName, &openedAt, &closedAt,
+			&openingCash, &closingCash, &expectedCash, &cashSales, &cashOut, &discrepancy,
+			&totalSales, &totalTx, &shiftStatus); err != nil {
+			continue
+		}
+
+		if shiftStatus == "open" {
+			expectedCash = openingCash + cashSales - cashOut
+		}
+
+		nonCashSales := totalSales - cashSales
+		if nonCashSales < 0 {
+			nonCashSales = 0
+		}
+
+		record := []string{
+			strconv.Itoa(id),
+			shiftName,
+			cashierUser,
+			cashierName,
+			openedAt,
+			closedAt,
+			strconv.Itoa(openingCash),
+			strconv.Itoa(cashSales),
+			strconv.Itoa(nonCashSales),
+			strconv.Itoa(totalSales),
+			strconv.Itoa(totalTx),
+			strconv.Itoa(cashOut),
+			strconv.Itoa(expectedCash),
+			strconv.Itoa(closingCash),
+			strconv.Itoa(discrepancy),
+			shiftStatus,
+		}
+		_ = writer.Write(record)
+	}
+}
+
+// === CSV Export: Inventory / Stock Reports ===
+func handleExportInventoryCSV(w http.ResponseWriter, r *http.Request) {
+	category := strings.TrimSpace(r.URL.Query().Get("category"))
+	lowStockOnly := r.URL.Query().Get("low_stock") == "1" || strings.ToLower(r.URL.Query().Get("low_stock")) == "true"
+	activeFilter := strings.TrimSpace(r.URL.Query().Get("active"))
+
+	globalThreshold := getGlobalLowStockThreshold()
+
+	query := `SELECT id, sku, COALESCE(barcode, ''), name, COALESCE(category, 'Umum'), 
+		COALESCE(unit, 'pcs'), COALESCE(cost, 0), price, stock, 
+		COALESCE(reserved_stock, 0), COALESCE(online_stock, 0), COALESCE(min_stock, 0), 
+		COALESCE(promo_active, 0), COALESCE(promo_price, 0), active 
+		FROM products 
+		WHERE 1=1`
+	var args []interface{}
+
+	if activeFilter == "" || activeFilter == "1" {
+		query += " AND active = 1"
+	} else if activeFilter == "0" {
+		query += " AND active = 0"
+	}
+
+	if category != "" && category != "all" {
+		query += " AND category = ?"
+		args = append(args, category)
+	}
+
+	if lowStockOnly {
+		query += " AND stock <= (CASE WHEN COALESCE(min_stock, 0) > 0 THEN min_stock ELSE ? END)"
+		args = append(args, globalThreshold)
+	}
+
+	query += " ORDER BY category ASC, name ASC"
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		logError("handleExportInventoryCSV", err)
+		http.Error(w, "Gagal mengambil data inventori", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	filename := fmt.Sprintf("laporan_inventori_%s.csv", nowWIB().Format("2006-01-02"))
+	if lowStockOnly {
+		filename = fmt.Sprintf("laporan_stok_menipis_%s.csv", nowWIB().Format("2006-01-02"))
+	}
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+
+	// UTF-8 BOM for Excel compatibility
+	w.Write([]byte{0xEF, 0xBB, 0xBF})
+
+	writer := csv.NewWriter(w)
+	defer writer.Flush()
+
+	header := []string{
+		"ID",
+		"SKU",
+		"Barcode",
+		"Nama Produk",
+		"Kategori",
+		"Satuan",
+		"Harga Modal (Rp)",
+		"Harga Jual (Rp)",
+		"Stok Fisik",
+		"Reserved Stok",
+		"Stok Online",
+		"Min Stok",
+		"Status Stok",
+		"Total Nilai Modal (Rp)",
+		"Total Nilai Jual (Rp)",
+		"Promo Aktif",
+		"Harga Promo (Rp)",
+		"Status Produk",
+	}
+	if err := writer.Write(header); err != nil {
+		logError("handleExportInventoryCSV write header", err)
+		return
+	}
+
+	for rows.Next() {
+		var id, cost, price, stock, reservedStock, onlineStock, minStock, promoActive, promoPrice, active int
+		var sku, barcode, name, cat, unit string
+
+		if err := rows.Scan(&id, &sku, &barcode, &name, &cat, &unit, &cost, &price,
+			&stock, &reservedStock, &onlineStock, &minStock, &promoActive, &promoPrice, &active); err != nil {
+			continue
+		}
+
+		effThreshold := minStock
+		if effThreshold <= 0 {
+			effThreshold = globalThreshold
+		}
+
+		stockStatus := "Normal"
+		if stock <= 0 {
+			stockStatus = "Habis"
+		} else if stock <= effThreshold {
+			stockStatus = "Menipis"
+		}
+
+		statusPromo := "Tidak"
+		if promoActive == 1 {
+			statusPromo = "Aktif"
+		}
+
+		statusProduk := "Aktif"
+		if active == 0 {
+			statusProduk = "Nonaktif"
+		}
+
+		totalCost := stock * cost
+		totalPrice := stock * price
+
+		record := []string{
+			strconv.Itoa(id),
+			sku,
+			barcode,
+			name,
+			cat,
+			unit,
+			strconv.Itoa(cost),
+			strconv.Itoa(price),
+			strconv.Itoa(stock),
+			strconv.Itoa(reservedStock),
+			strconv.Itoa(onlineStock),
+			strconv.Itoa(minStock),
+			stockStatus,
+			strconv.Itoa(totalCost),
+			strconv.Itoa(totalPrice),
+			statusPromo,
+			strconv.Itoa(promoPrice),
+			statusProduk,
+		}
+		_ = writer.Write(record)
+	}
 }
 
 // === Sales Trend ===
@@ -2338,7 +2854,11 @@ func handlePaymentBreakdown(w http.ResponseWriter, r *http.Request) {
 
 // === Low Stock Alerts ===
 func handleLowStock(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.Query("SELECT id,sku,name,stock,category FROM products WHERE active=1 AND stock<10 ORDER BY stock ASC")
+	threshold := getGlobalLowStockThreshold()
+	rows, err := db.Query(`SELECT id, sku, name, stock, category, COALESCE(min_stock, 0)
+		FROM products 
+		WHERE active = 1 AND stock <= (CASE WHEN COALESCE(min_stock, 0) > 0 THEN min_stock ELSE ? END) 
+		ORDER BY stock ASC`, threshold)
 	if err != nil {
 		logError("handleLowStock", err)
 		jsonResponse(w, []map[string]interface{}{}, 200)
@@ -2347,10 +2867,23 @@ func handleLowStock(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	var products []map[string]interface{}
 	for rows.Next() {
-		var id, stock int
+		var id, stock, minStock int
 		var sku, name, category string
-		rows.Scan(&id, &sku, &name, &stock, &category)
-		products = append(products, map[string]interface{}{"id": id, "sku": sku, "name": name, "stock": stock, "category": category})
+		if err := rows.Scan(&id, &sku, &name, &stock, &category, &minStock); err == nil {
+			effThreshold := minStock
+			if effThreshold <= 0 {
+				effThreshold = threshold
+			}
+			products = append(products, map[string]interface{}{
+				"id":        id,
+				"sku":       sku,
+				"name":      name,
+				"stock":     stock,
+				"category":  category,
+				"min_stock": minStock,
+				"threshold": effThreshold,
+			})
+		}
 	}
 	if products == nil {
 		products = []map[string]interface{}{}
@@ -2624,18 +3157,32 @@ func handleGetCSRFToken(w http.ResponseWriter, r *http.Request) {
 
 
 func handleRestockCandidates(w http.ResponseWriter, r *http.Request) {
-	var threshold int = 10
+	var threshold int = getGlobalLowStockThreshold()
+	hasExplicitThreshold := false
 	thresholdStr := r.URL.Query().Get("threshold")
 	if thresholdStr != "" {
-		threshold, _ = strconv.Atoi(thresholdStr)
+		if t, err := strconv.Atoi(thresholdStr); err == nil && t > 0 {
+			threshold = t
+			hasExplicitThreshold = true
+		}
 	}
 	var aiThreshold string
 	db.QueryRow("SELECT value FROM settings WHERE key='ai_stock_threshold'").Scan(&aiThreshold)
-	if aiThreshold != "" {
+	if !hasExplicitThreshold && aiThreshold != "" {
 		t, _ := strconv.Atoi(aiThreshold)
-		if t > 0 { threshold = t }
+		if t > 0 {
+			threshold = t
+			hasExplicitThreshold = true
+		}
 	}
-	rows, err := db.Query("SELECT id,sku,name,stock,category,price,cost FROM products WHERE active=1 AND stock<? ORDER BY stock", threshold)
+
+	var rows *sql.Rows
+	var err error
+	if hasExplicitThreshold {
+		rows, err = db.Query("SELECT id,sku,name,stock,category,price,cost,COALESCE(min_stock,0) FROM products WHERE active=1 AND stock<=? ORDER BY stock", threshold)
+	} else {
+		rows, err = db.Query("SELECT id,sku,name,stock,category,price,cost,COALESCE(min_stock,0) FROM products WHERE active=1 AND stock <= (CASE WHEN COALESCE(min_stock,0) > 0 THEN min_stock ELSE ? END) ORDER BY stock", threshold)
+	}
 	if err != nil {
 		logError("handleRestockCandidates", err)
 		jsonResponse(w, map[string]interface{}{"version": "1.0", "threshold": threshold, "candidates": []map[string]interface{}{}, "count": 0}, 200)
@@ -2644,14 +3191,14 @@ func handleRestockCandidates(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	var candidates []map[string]interface{}
 	for rows.Next() {
-		var id, stock, price, cost int
+		var id, stock, price, cost, minStock int
 		var sku, name, category string
-		rows.Scan(&id, &sku, &name, &stock, &category, &price, &cost)
+		rows.Scan(&id, &sku, &name, &stock, &category, &price, &cost, &minStock)
 		margin := 0
 		if cost > 0 { margin = ((price - cost) * 100) / cost }
 		candidates = append(candidates, map[string]interface{}{
 			"product_id": id, "sku": sku, "name": name,
-			"stock": stock, "category": category,
+			"stock": stock, "min_stock": minStock, "category": category,
 			"price": price, "cost": cost, "margin_pct": margin,
 		})
 	}
@@ -2785,8 +3332,9 @@ func handleAIWebhook(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, map[string]interface{}{"status": "ok", "applied": true, "message": "Stock adjusted"}, 200)
 
 	case "restock_recommendation":
-		// AI agent baca stok rendah
-		rows, err := db.Query("SELECT id,sku,name,stock,category FROM products WHERE active=1 AND stock<10 ORDER BY stock")
+		// AI agent baca stok rendah berdasarkan min_stock per produk / threshold global
+		threshold := getGlobalLowStockThreshold()
+		rows, err := db.Query("SELECT id,sku,name,stock,category FROM products WHERE active=1 AND stock <= (CASE WHEN COALESCE(min_stock,0) > 0 THEN min_stock ELSE ? END) ORDER BY stock", threshold)
 		if err != nil {
 			logError("handleAIWebhook restock", err)
 			jsonResponse(w, []map[string]interface{}{}, 200)
@@ -2849,8 +3397,9 @@ func handleAIReport(w http.ResponseWriter, r *http.Request) {
 		productSales = []ProductSales{}
 	}
 
-	// Low stock items
-	lowStockRows, lsErr := db.Query("SELECT id,sku,name,stock,category FROM products WHERE active=1 AND stock<10 ORDER BY stock")
+	// Low stock items berdasarkan min_stock per produk / threshold global
+	threshold := getGlobalLowStockThreshold()
+	lowStockRows, lsErr := db.Query("SELECT id,sku,name,stock,category FROM products WHERE active=1 AND stock <= (CASE WHEN COALESCE(min_stock,0) > 0 THEN min_stock ELSE ? END) ORDER BY stock", threshold)
 	var lowStock []map[string]interface{}
 	if lsErr == nil {
 		for lowStockRows.Next() {
@@ -3359,6 +3908,7 @@ func handleCreateStockOpname(w http.ResponseWriter, r *http.Request) {
 	}
 
 	auditLog("stock_opname", "session", fmt.Sprintf("%d", sessionID), username, "Created stock opname session for "+req.OpnameDate)
+	wsBroadcast(WSMessage{Type: "opname_status_changed", Data: map[string]interface{}{"session_id": sessionID, "status": "open"}})
 	go TriggerSync()
 	jsonResponse(w, map[string]interface{}{"session_id": sessionID, "status": "open", "opname_date": req.OpnameDate}, 201)
 }
@@ -3752,6 +4302,7 @@ func handleApplyStockOpname(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	wsBroadcast(WSMessage{Type: "opname_status_changed", Data: map[string]interface{}{"session_id": sessionID, "status": "closed"}})
 	go TriggerSync()
 
 	jsonResponse(w, map[string]interface{}{
@@ -3771,14 +4322,16 @@ func handleGetSyncStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	status := GetSyncStatus()
 	jsonResponse(w, map[string]interface{}{
-		"status":          status.Mode,
-		"is_online":       status.IsOnline,
-		"cloud_connected": status.IsOnline || cloudDB != nil,
-		"last_sync":       status.LastSync,
-		"pending_count":   status.PendingCount,
-		"is_syncing":      status.IsSyncing,
-		"last_error":      status.LastError,
-		"mode":            status.Mode,
+		"status":               status.Mode,
+		"is_online":            status.IsOnline,
+		"cloud_connected":      status.IsOnline || cloudDB != nil,
+		"last_sync":            status.LastSync,
+		"pending_count":        status.PendingCount,
+		"is_syncing":           status.IsSyncing,
+		"last_error":           status.LastError,
+		"mode":                 status.Mode,
+		"consecutive_failures": status.ConsecutiveFailures,
+		"next_retry_in_sec":    status.NextRetryInSec,
 	}, 200)
 }
 
@@ -4073,12 +4626,80 @@ type MobileOrderReq struct {
 	DeliveryFee     int                  `json:"delivery_fee"`
 	PaymentMethod   string               `json:"payment_method"`   // 'qris', 'va', 'cod'
 	ShopperNotes    string               `json:"shopper_notes"`
+	PushToken       string               `json:"push_token"`
 	Items           []MobileOrderItemReq `json:"items"`
 }
 
 type MobileOrderPayReq struct {
-	OrderNo       string `json:"order_no"`
-	PaymentMethod string `json:"payment_method"`
+	OrderNo           string `json:"order_no"`
+	OrderID           string `json:"order_id"`
+	StatusCode        string `json:"status_code"`
+	GrossAmount       string `json:"gross_amount"`
+	SignatureKey      string `json:"signature_key"`
+	TransactionStatus string `json:"transaction_status"`
+	PaymentMethod     string `json:"payment_method"`
+}
+
+func getPaymentWebhookSecret() string {
+	if s := os.Getenv("PAYMENT_WEBHOOK_SECRET"); s != "" {
+		return s
+	}
+	if s := os.Getenv("MIDTRANS_SERVER_KEY"); s != "" {
+		return s
+	}
+	return "ymb-mart-secret-webhook-key-2026"
+}
+
+func verifyPaymentAuth(r *http.Request, rawBody []byte, req MobileOrderPayReq) bool {
+	secret := getPaymentWebhookSecret()
+
+	// 1. Direct Secret Token Header (X-Payment-Secret or X-Api-Key)
+	clientSecret := r.Header.Get("X-Payment-Secret")
+	if clientSecret == "" {
+		clientSecret = r.Header.Get("X-Api-Key")
+	}
+	if clientSecret != "" && subtle.ConstantTimeCompare([]byte(clientSecret), []byte(secret)) == 1 {
+		return true
+	}
+
+	// 2. Bearer Token Header (Authorization: Bearer <secret>)
+	authHeader := r.Header.Get("Authorization")
+	if strings.HasPrefix(authHeader, "Bearer ") {
+		token := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
+		if subtle.ConstantTimeCompare([]byte(token), []byte(secret)) == 1 {
+			return true
+		}
+	}
+
+	// 3. HMAC-SHA256 Header (X-Signature or X-Hub-Signature-256)
+	clientSig := strings.TrimSpace(r.Header.Get("X-Signature"))
+	if clientSig == "" {
+		clientSig = strings.TrimSpace(r.Header.Get("X-Hub-Signature-256"))
+	}
+	if strings.HasPrefix(clientSig, "sha256=") {
+		clientSig = strings.TrimPrefix(clientSig, "sha256=")
+	}
+	if clientSig != "" && len(rawBody) > 0 {
+		mac := hmac.New(sha256.New, []byte(secret))
+		mac.Write(rawBody)
+		expectedSig := hex.EncodeToString(mac.Sum(nil))
+		if subtle.ConstantTimeCompare([]byte(strings.ToLower(clientSig)), []byte(strings.ToLower(expectedSig))) == 1 {
+			return true
+		}
+	}
+
+	// 4. Midtrans SHA512 Signature Key (order_id + status_code + gross_amount + ServerKey)
+	if req.SignatureKey != "" && req.OrderID != "" && req.StatusCode != "" && req.GrossAmount != "" {
+		toHash := req.OrderID + req.StatusCode + req.GrossAmount + secret
+		h := sha512.New()
+		h.Write([]byte(toHash))
+		expectedHash := hex.EncodeToString(h.Sum(nil))
+		if subtle.ConstantTimeCompare([]byte(strings.ToLower(req.SignatureKey)), []byte(strings.ToLower(expectedHash))) == 1 {
+			return true
+		}
+	}
+
+	return false
 }
 
 func handleMobileCreateOrder(w http.ResponseWriter, r *http.Request) {
@@ -4132,6 +4753,19 @@ func handleMobileCreateOrder(w http.ResponseWriter, r *http.Request) {
 				"error":      fmt.Sprintf("Produk ID %d tidak ditemukan atau tidak aktif", it.ProductID),
 				"product_id": it.ProductID,
 			}, 404)
+			return
+		}
+
+		// Guard: Check if product is locked in an active stock opname session
+		var opnameCount int
+		errOp := sqlTx.QueryRow(`SELECT COUNT(*) FROM stock_opname_items soi 
+			JOIN stock_opname_sessions sos ON soi.session_id = sos.id 
+			WHERE sos.status = 'open' AND soi.product_id = ?`, it.ProductID).Scan(&opnameCount)
+		if errOp == nil && opnameCount > 0 {
+			jsonResponse(w, map[string]interface{}{
+				"error":      fmt.Sprintf("Produk %s sedang dalam proses Stock Opname dan tidak dapat dipesan", p.Name),
+				"product_id": p.ID,
+			}, 409)
 			return
 		}
 
@@ -4220,12 +4854,13 @@ func handleMobileCreateOrder(w http.ResponseWriter, r *http.Request) {
 		order_no, member_id, customer_name, customer_phone, fulfillment_type, 
 		address_text, status, items_subtotal, delivery_fee, discount_amount, 
 		infaq_amount, total_amount, payment_method, payment_status, shopper_notes,
-		driver_name, driver_phone, eta_minutes, expires_at, created_at, updated_at, sync_status
-	) VALUES (?, ?, ?, ?, ?, ?, 'pending_payment', ?, ?, ?, ?, ?, ?, 'unpaid', ?, 'Pak Joko (Kurir Kilat Masjid)', '+628123456789', 15, ?, ?, ?, 'pending')`,
+		driver_name, driver_phone, eta_minutes, expires_at, created_at, updated_at, sync_status, push_token
+	) VALUES (?, ?, ?, ?, ?, ?, 'pending_payment', ?, ?, ?, ?, ?, ?, 'unpaid', ?, 'Pak Joko (Kurir Kilat Masjid)', '+628123456789', 15, ?, ?, ?, 'pending', ?)`,
 		orderNo, req.MemberID, req.CustomerName, req.CustomerPhone, fulfillmentType,
 		req.AddressText, itemsSubtotal, deliveryFee, voucherDiscount,
 		infaqAmount, grandTotal, paymentMethod, req.ShopperNotes,
-		expiresAt.Format("2006-01-02 15:04:05"), now.Format("2006-01-02 15:04:05"), now.Format("2006-01-02 15:04:05"),
+		expiresAt.UTC().Format("2006-01-02 15:04:05"), now.UTC().Format("2006-01-02 15:04:05"), now.UTC().Format("2006-01-02 15:04:05"),
+		req.PushToken,
 	)
 	if err != nil {
 		logError("handleMobileCreateOrder insert order", err)
@@ -4234,6 +4869,12 @@ func handleMobileCreateOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	orderID, _ := orderRes.LastInsertId()
+
+	if strings.TrimSpace(req.PushToken) != "" && strings.TrimSpace(req.CustomerPhone) != "" {
+		sqlTx.Exec(`INSERT OR REPLACE INTO customer_push_tokens (customer_phone, push_token, device_name, updated_at) 
+			VALUES (?, ?, 'Mobile App', ?)`,
+			strings.TrimSpace(req.CustomerPhone), strings.TrimSpace(req.PushToken), now.Format("2006-01-02 15:04:05"))
+	}
 
 	// Insert into online_order_items
 	for _, item := range reservedItems {
@@ -4285,9 +4926,83 @@ func handleMobileCreateOrder(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleMobilePayOrder(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", 405)
+		return
+	}
+
+	rawBody, err := io.ReadAll(r.Body)
+	if err != nil {
+		jsonResponse(w, map[string]string{"error": "Gagal membaca body request"}, 400)
+		return
+	}
+
 	var req MobileOrderPayReq
-	if err := decodeJSON(w, r, &req); err != nil || req.OrderNo == "" {
-		jsonResponse(w, map[string]string{"error": "Order No wajib diisi"}, 400)
+	if err := json.Unmarshal(rawBody, &req); err != nil {
+		jsonResponse(w, map[string]string{"error": "Format JSON tidak valid"}, 400)
+		return
+	}
+
+	orderNo := strings.TrimSpace(req.OrderNo)
+	if orderNo == "" {
+		orderNo = strings.TrimSpace(req.OrderID)
+	}
+	if orderNo == "" {
+		jsonResponse(w, map[string]string{"error": "order_no atau order_id wajib diisi"}, 400)
+		return
+	}
+
+	// SECURITY: Verify HMAC signature or payment secret
+	if !verifyPaymentAuth(r, rawBody, req) {
+		logError("handleMobilePayOrder unauthorized", fmt.Errorf("akses ditolak untuk order %s dari IP %s", orderNo, r.RemoteAddr))
+		jsonResponse(w, map[string]string{
+			"error": "Akses ditolak: Verifikasi signature atau token autentikasi pembayaran tidak valid",
+		}, 401)
+		return
+	}
+
+	// Handle Gateway Cancel / Expire webhook events
+	if req.TransactionStatus == "cancel" || req.TransactionStatus == "expire" || req.TransactionStatus == "deny" {
+		checkoutMu.Lock()
+		defer checkoutMu.Unlock()
+
+		var currentStatus string
+		if err := db.QueryRow("SELECT status FROM online_orders WHERE order_no = ?", orderNo).Scan(&currentStatus); err == nil && currentStatus == "pending_payment" {
+			rows, _ := db.Query("SELECT product_id, qty FROM online_order_items WHERE order_no = ?", orderNo)
+			if rows != nil {
+				for rows.Next() {
+					var pid, qty int
+					if err := rows.Scan(&pid, &qty); err == nil {
+						db.Exec("UPDATE products SET reserved_stock = MAX(0, COALESCE(reserved_stock, 0) - ?), sync_status = 'pending' WHERE id = ?", qty, pid)
+					}
+				}
+				rows.Close()
+			}
+			now := nowWIB()
+			db.Exec("UPDATE online_orders SET status = 'cancelled', payment_status = ?, updated_at = ?, sync_status = 'pending' WHERE order_no = ?",
+				req.TransactionStatus, now.Format("2006-01-02 15:04:05"), orderNo)
+			wsBroadcast(WSMessage{
+				Type: "ONLINE_ORDER_CANCELLED",
+				Data: map[string]interface{}{"order_no": orderNo, "status": "cancelled", "reason": req.TransactionStatus},
+			})
+		}
+		jsonResponse(w, map[string]interface{}{
+			"success":  true,
+			"order_no": orderNo,
+			"status":   "cancelled",
+			"message":  "Status pesanan dibatalkan sesuai notifikasi gateway",
+		}, 200)
+		return
+	}
+
+	// If gateway status is pending (e.g. Midtrans pending payment notification), acknowledge without stock commit
+	if req.TransactionStatus == "pending" {
+		jsonResponse(w, map[string]interface{}{
+			"success":  true,
+			"order_no": orderNo,
+			"status":   "pending_payment",
+			"message":  "Menunggu penyelesaian pembayaran oleh pelanggan",
+		}, 200)
 		return
 	}
 
@@ -4306,19 +5021,20 @@ func handleMobilePayOrder(w http.ResponseWriter, r *http.Request) {
 	var customerName, customerPhone, memberID, paymentMethod string
 	var totalAmount, itemsSubtotal, discountAmount int
 	var status string
-	err = sqlTx.QueryRow(`SELECT id, customer_name, customer_phone, member_id, payment_method, total_amount, items_subtotal, discount_amount, status 
-		FROM online_orders WHERE order_no = ?`, req.OrderNo).
-		Scan(&orderID, &customerName, &customerPhone, &memberID, &paymentMethod, &totalAmount, &itemsSubtotal, &discountAmount, &status)
+	var expiresAt sql.NullString
+	err = sqlTx.QueryRow(`SELECT id, customer_name, customer_phone, member_id, payment_method, total_amount, items_subtotal, discount_amount, status, expires_at 
+		FROM online_orders WHERE order_no = ?`, orderNo).
+		Scan(&orderID, &customerName, &customerPhone, &memberID, &paymentMethod, &totalAmount, &itemsSubtotal, &discountAmount, &status, &expiresAt)
 
 	if err != nil {
 		jsonResponse(w, map[string]string{"error": "Pesanan tidak ditemukan"}, 404)
 		return
 	}
 
-	if status == "paid" || status == "delivering" || status == "completed" {
+	if status == "paid" || status == "processing" || status == "ready" || status == "delivering" || status == "completed" {
 		jsonResponse(w, map[string]interface{}{
 			"success":  true,
-			"order_no": req.OrderNo,
+			"order_no": orderNo,
 			"status":   status,
 			"message":  "Pesanan sudah dibayar sebelumnya",
 		}, 200)
@@ -4330,8 +5046,44 @@ func handleMobilePayOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	now := nowWIB()
+	// Check expiration if order was still pending_payment
+	if expiresAt.Valid && expiresAt.String != "" {
+		var expTime time.Time
+		var parseErr error
+		if strings.Contains(expiresAt.String, "T") {
+			expTime, parseErr = time.Parse(time.RFC3339, expiresAt.String)
+		} else {
+			expTime, parseErr = time.ParseInLocation("2006-01-02 15:04:05", expiresAt.String, now.Location())
+		}
+		if parseErr == nil && now.After(expTime) {
+			// Auto-cancel and release reserved stock
+			rows, _ := sqlTx.Query("SELECT product_id, qty FROM online_order_items WHERE order_no = ?", orderNo)
+			if rows != nil {
+				for rows.Next() {
+					var pid, qty int
+					if err := rows.Scan(&pid, &qty); err == nil {
+						sqlTx.Exec("UPDATE products SET reserved_stock = MAX(0, COALESCE(reserved_stock, 0) - ?), sync_status = 'pending' WHERE id = ?", qty, pid)
+					}
+				}
+				rows.Close()
+			}
+			sqlTx.Exec("UPDATE online_orders SET status = 'cancelled', payment_status = 'expired', updated_at = ?, sync_status = 'pending' WHERE id = ?",
+				now.Format("2006-01-02 15:04:05"), orderID)
+			sqlTx.Commit()
+
+			wsBroadcast(WSMessage{
+				Type: "ONLINE_ORDER_CANCELLED",
+				Data: map[string]interface{}{"order_no": orderNo, "status": "cancelled", "reason": "expired"},
+			})
+
+			jsonResponse(w, map[string]string{"error": "Pesanan telah kadaluarsa (melewati batas waktu 15 menit) dan alokasi stok telah dilepas"}, 400)
+			return
+		}
+	}
+
 	// Fetch items to deduct stock
-	rows, err := sqlTx.Query(`SELECT product_id, product_name, price, qty, subtotal FROM online_order_items WHERE order_no = ?`, req.OrderNo)
+	rows, err := sqlTx.Query(`SELECT product_id, product_name, price, qty, subtotal FROM online_order_items WHERE order_no = ?`, orderNo)
 	if err != nil {
 		logError("handleMobilePayOrder query items", err)
 		jsonResponse(w, map[string]string{"error": "Gagal membaca item pesanan"}, 500)
@@ -4366,23 +5118,22 @@ func handleMobilePayOrder(w http.ResponseWriter, r *http.Request) {
 
 		sqlTx.Exec(`INSERT INTO inventory_movements (product_id, movement_type, quantity, stock_before, stock_after, reference_type, reference_id, source, reason, user)
 			VALUES (?, 'online_sale', ?, ?, ?, 'online_order', ?, 'mobile_app', 'Online Order Payment Commit', 'Mobile App')`,
-			it.ProductID, -it.Qty, currentStock, currentStock-it.Qty, req.OrderNo)
+			it.ProductID, -it.Qty, currentStock, currentStock-it.Qty, orderNo)
 
 		sqlTx.Exec(`INSERT INTO tx_items (tx_id, product_id, name, qty, price, discount, subtotal, notes)
 			VALUES (?, ?, ?, ?, ?, 0, ?, 'Online Delivery')`,
-			req.OrderNo, it.ProductID, it.Name, it.Qty, it.Price, it.Subtotal)
+			orderNo, it.ProductID, it.Name, it.Qty, it.Price, it.Subtotal)
 	}
 
 	// Record in transactions table so it enters the physical store shift & sales report
-	now := nowWIB()
 	sqlTx.Exec(`INSERT INTO transactions (tx_id, total, discount, tax, grand_total, payment, amount_paid, change_amount, customer_name, member_id, cashier, notes, status, created_at, sync_status)
 		VALUES (?, ?, ?, 0, ?, ?, ?, 0, ?, ?, 'Online Mobile', 'Online Order App', 'completed', ?, 'pending')`,
-		req.OrderNo, itemsSubtotal, discountAmount, totalAmount, paymentMethod, totalAmount,
+		orderNo, itemsSubtotal, discountAmount, totalAmount, paymentMethod, totalAmount,
 		customerName, nullStr(memberID), now.Format("2006-01-02 15:04:05"))
 
 	// Update online_orders status to paid
 	sqlTx.Exec(`UPDATE online_orders 
-		SET status = 'paid', payment_status = 'paid', updated_at = ? WHERE id = ?`,
+		SET status = 'paid', payment_status = 'paid', updated_at = ?, sync_status = 'pending' WHERE id = ?`,
 		now.Format("2006-01-02 15:04:05"), orderID)
 
 	if err := sqlTx.Commit(); err != nil {
@@ -4397,16 +5148,18 @@ func handleMobilePayOrder(w http.ResponseWriter, r *http.Request) {
 	wsBroadcast(WSMessage{
 		Type: "ONLINE_ORDER_PAID",
 		Data: map[string]interface{}{
-			"order_no":      req.OrderNo,
+			"order_no":      orderNo,
 			"customer_name": customerName,
 			"total_amount":  totalAmount,
 			"status":        "paid",
 		},
 	})
 
+	go notifyOrderStatusChange(orderNo, "paid")
+
 	jsonResponse(w, map[string]interface{}{
 		"success":  true,
-		"order_no": req.OrderNo,
+		"order_no": orderNo,
 		"status":   "paid",
 		"message":  "Pembayaran berhasil diverifikasi, pesanan diteruskan ke staf toko",
 	}, 200)
@@ -4460,6 +5213,8 @@ func handleMobileCancelOrder(w http.ResponseWriter, r *http.Request) {
 			"status":   "cancelled",
 		},
 	})
+
+	go notifyOrderStatusChange(req.OrderNo, "cancelled")
 
 	jsonResponse(w, map[string]interface{}{
 		"success":  true,
@@ -4564,5 +5319,627 @@ func handleMobileGetOrders(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonResponse(w, orders, 200)
 }
+
+func handleMobileUpdateOrderStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", 405)
+		return
+	}
+	var req struct {
+		OrderNo string `json:"order_no"`
+		Status  string `json:"status"`
+	}
+	if err := decodeJSON(w, r, &req); err != nil || req.OrderNo == "" || req.Status == "" {
+		jsonResponse(w, map[string]string{"error": "order_no dan status wajib diisi"}, 400)
+		return
+	}
+
+	validStatuses := map[string]bool{
+		"pending_payment": true,
+		"paid":            true,
+		"processing":      true,
+		"ready":           true,
+		"completed":       true,
+		"cancelled":       true,
+	}
+	if !validStatuses[req.Status] {
+		jsonResponse(w, map[string]string{"error": "Status tidak valid"}, 400)
+		return
+	}
+
+	now := nowWIB()
+	res, err := db.Exec("UPDATE online_orders SET status = ?, updated_at = ?, sync_status = 'pending' WHERE order_no = ?",
+		req.Status, now.Format("2006-01-02 15:04:05"), req.OrderNo)
+	if err != nil {
+		logError("handleMobileUpdateOrderStatus", err)
+		jsonResponse(w, map[string]string{"error": "Gagal update status pesanan"}, 500)
+		return
+	}
+	rowsAff, _ := res.RowsAffected()
+	if rowsAff == 0 {
+		jsonResponse(w, map[string]string{"error": "Pesanan tidak ditemukan"}, 404)
+		return
+	}
+
+	wsBroadcast(WSMessage{
+		Type: "ONLINE_ORDER_UPDATED",
+		Data: map[string]interface{}{
+			"order_no": req.OrderNo,
+			"status":   req.Status,
+		},
+	})
+
+	go notifyOrderStatusChange(req.OrderNo, req.Status)
+
+	jsonResponse(w, map[string]interface{}{
+		"success":  true,
+		"order_no": req.OrderNo,
+		"status":   req.Status,
+		"message":  "Status pesanan online berhasil diperbarui",
+	}, 200)
+}
+
+// === Customer Addresses Management (Mobile App Integration) ===
+
+type CustomerAddressReq struct {
+	ID            int     `json:"id,omitempty"`
+	MemberID      string  `json:"member_id"`
+	Phone         string  `json:"phone"`
+	Label         string  `json:"label"`
+	RecipientName string  `json:"recipient_name"`
+	AddressLine   string  `json:"address_line"`
+	BenchmarkNote string  `json:"benchmark_note"`
+	Latitude      float64 `json:"latitude"`
+	Longitude     float64 `json:"longitude"`
+	IsPrimary     bool    `json:"is_primary"`
+}
+
+func handleMobileGetAddresses(w http.ResponseWriter, r *http.Request) {
+	phone := strings.TrimSpace(r.URL.Query().Get("phone"))
+	memberID := strings.TrimSpace(r.URL.Query().Get("member_id"))
+
+	if phone == "" && memberID == "" {
+		jsonResponse(w, map[string]string{"error": "parameter phone atau member_id wajib diisi"}, 400)
+		return
+	}
+
+	query := `SELECT id, COALESCE(member_id, ''), phone, COALESCE(label, 'Rumah'), 
+		recipient_name, address_line, COALESCE(benchmark_note, ''), 
+		COALESCE(latitude, 0), COALESCE(longitude, 0), is_primary, created_at, updated_at 
+		FROM customer_addresses WHERE 1=1`
+	var args []interface{}
+
+	if phone != "" {
+		query += " AND phone = ?"
+		args = append(args, phone)
+	} else if memberID != "" {
+		query += " AND member_id = ?"
+		args = append(args, memberID)
+	}
+
+	query += " ORDER BY is_primary DESC, id DESC"
+
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		logError("handleMobileGetAddresses", err)
+		jsonResponse(w, map[string]string{"error": "Gagal membaca database alamat"}, 500)
+		return
+	}
+	defer rows.Close()
+
+	var addresses []map[string]interface{}
+	for rows.Next() {
+		var id, isPrimary int
+		var memID, ph, lbl, rName, aLine, bNote, cAt, uAt string
+		var lat, lng float64
+		if err := rows.Scan(&id, &memID, &ph, &lbl, &rName, &aLine, &bNote, &lat, &lng, &isPrimary, &cAt, &uAt); err == nil {
+			addresses = append(addresses, map[string]interface{}{
+				"id":             fmt.Sprintf("addr-%d", id),
+				"db_id":          id,
+				"member_id":      memID,
+				"phone":          ph,
+				"label":          lbl,
+				"recipient_name": rName,
+				"recipientName":  rName,
+				"address_line":   aLine,
+				"addressLine":    aLine,
+				"benchmark_note": bNote,
+				"benchmarkNote":  bNote,
+				"latitude":       lat,
+				"longitude":      lng,
+				"is_primary":     isPrimary == 1,
+				"isPrimary":      isPrimary == 1,
+				"created_at":     cAt,
+				"updated_at":     uAt,
+			})
+		}
+	}
+
+	if addresses == nil {
+		addresses = []map[string]interface{}{}
+	}
+	jsonResponse(w, addresses, 200)
+}
+
+func handleMobileSaveAddress(w http.ResponseWriter, r *http.Request) {
+	var req CustomerAddressReq
+	if err := decodeJSON(w, r, &req); err != nil {
+		jsonResponse(w, map[string]string{"error": "Format JSON tidak valid"}, 400)
+		return
+	}
+
+	req.Phone = strings.TrimSpace(req.Phone)
+	req.RecipientName = strings.TrimSpace(req.RecipientName)
+	req.AddressLine = strings.TrimSpace(req.AddressLine)
+
+	if req.Phone == "" || req.RecipientName == "" || req.AddressLine == "" {
+		jsonResponse(w, map[string]string{"error": "phone, recipient_name, dan address_line wajib diisi"}, 400)
+		return
+	}
+
+	if req.Label == "" {
+		req.Label = "Rumah"
+	}
+
+	now := nowWIB()
+	nowStr := now.Format("2006-01-02 15:04:05")
+	isPrimaryInt := 0
+	if req.IsPrimary {
+		isPrimaryInt = 1
+	}
+
+	// If marked as primary, unset other primary addresses for this phone
+	if isPrimaryInt == 1 {
+		db.Exec("UPDATE customer_addresses SET is_primary = 0, sync_status = 'pending' WHERE phone = ?", req.Phone)
+	}
+
+	if req.ID > 0 {
+		_, err := db.Exec(`UPDATE customer_addresses SET 
+			member_id = ?, phone = ?, label = ?, recipient_name = ?, address_line = ?, 
+			benchmark_note = ?, latitude = ?, longitude = ?, is_primary = ?, updated_at = ?, sync_status = 'pending'
+			WHERE id = ?`,
+			req.MemberID, req.Phone, req.Label, req.RecipientName, req.AddressLine,
+			req.BenchmarkNote, req.Latitude, req.Longitude, isPrimaryInt, nowStr, req.ID)
+		if err != nil {
+			logError("handleMobileSaveAddress update", err)
+			jsonResponse(w, map[string]string{"error": "Gagal update alamat"}, 500)
+			return
+		}
+		TriggerSync()
+		jsonResponse(w, map[string]interface{}{
+			"success": true,
+			"id":      fmt.Sprintf("addr-%d", req.ID),
+			"db_id":   req.ID,
+			"message": "Alamat pengiriman berhasil diperbarui",
+		}, 200)
+	} else {
+		res, err := db.Exec(`INSERT INTO customer_addresses (
+			member_id, phone, label, recipient_name, address_line, 
+			benchmark_note, latitude, longitude, is_primary, created_at, updated_at, sync_status
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+			req.MemberID, req.Phone, req.Label, req.RecipientName, req.AddressLine,
+			req.BenchmarkNote, req.Latitude, req.Longitude, isPrimaryInt, nowStr, nowStr)
+		if err != nil {
+			logError("handleMobileSaveAddress insert", err)
+			jsonResponse(w, map[string]string{"error": "Gagal menyimpan alamat baru"}, 500)
+			return
+		}
+		newID, _ := res.LastInsertId()
+		TriggerSync()
+		jsonResponse(w, map[string]interface{}{
+			"success": true,
+			"id":      fmt.Sprintf("addr-%d", newID),
+			"db_id":   newID,
+			"message": "Alamat pengiriman berhasil disimpan",
+		}, 201)
+	}
+}
+
+func handleMobileDeleteAddress(w http.ResponseWriter, r *http.Request) {
+	idStr := r.URL.Query().Get("id")
+	if strings.HasPrefix(idStr, "addr-") {
+		idStr = strings.TrimPrefix(idStr, "addr-")
+	}
+	id, err := strconv.Atoi(idStr)
+	if err != nil || id <= 0 {
+		jsonResponse(w, map[string]string{"error": "id alamat tidak valid"}, 400)
+		return
+	}
+
+	res, err := db.Exec("DELETE FROM customer_addresses WHERE id = ?", id)
+	if err != nil {
+		logError("handleMobileDeleteAddress", err)
+		jsonResponse(w, map[string]string{"error": "Gagal menghapus alamat"}, 500)
+		return
+	}
+	rowsAff, _ := res.RowsAffected()
+	if rowsAff == 0 {
+		jsonResponse(w, map[string]string{"error": "Alamat tidak ditemukan"}, 404)
+		return
+	}
+
+	TriggerSync()
+	jsonResponse(w, map[string]interface{}{
+		"success": true,
+		"message": "Alamat berhasil dihapus",
+	}, 200)
+}
+
+// CancelExpiredOrders cancels stale pending_payment online orders past expires_at,
+// atomically releases reserved_stock, sets sync_status='pending', and broadcasts WS event.
+func CancelExpiredOrders() (int, error) {
+	if db == nil {
+		return 0, nil
+	}
+
+	checkoutMu.Lock()
+	defer checkoutMu.Unlock()
+
+	now := nowWIB()
+	nowUTC := time.Now().UTC()
+	nowUTCStr := nowUTC.Format("2006-01-02 15:04:05")
+	nowWIBStr := now.Format("2006-01-02 15:04:05")
+
+	rows, err := db.Query(`SELECT id, order_no, expires_at FROM online_orders 
+		WHERE status = 'pending_payment' AND expires_at IS NOT NULL AND expires_at != ''
+		AND (expires_at <= ? OR expires_at <= ? OR expires_at <= datetime('now'))`, nowWIBStr, nowUTCStr)
+	if err != nil {
+		log.Printf("[CancelExpiredOrders] query error: %v", err)
+		return 0, err
+	}
+	defer rows.Close()
+
+	type expiredRecord struct {
+		id      int
+		orderNo string
+	}
+	var expiredList []expiredRecord
+
+	for rows.Next() {
+		var (
+			id      int
+			orderNo string
+			expVal  any
+		)
+		if err := rows.Scan(&id, &orderNo, &expVal); err != nil {
+			log.Printf("[CancelExpiredOrders] scan error: %v", err)
+			continue
+		}
+
+		isExpired := false
+		switch v := expVal.(type) {
+		case time.Time:
+			if nowUTC.After(v) {
+				isExpired = true
+			} else {
+				wibV := time.Date(v.Year(), v.Month(), v.Day(), v.Hour(), v.Minute(), v.Second(), v.Nanosecond(), now.Location())
+				if now.After(wibV) {
+					isExpired = true
+				}
+			}
+		case string:
+			cleanExp := strings.TrimSuffix(v, "Z")
+			var expTime time.Time
+			var pErr error
+			if strings.Contains(v, "T") {
+				expTime, pErr = time.Parse(time.RFC3339, v)
+				if pErr != nil {
+					expTime, pErr = time.Parse("2006-01-02T15:04:05", cleanExp)
+				}
+			} else {
+				expTime, pErr = time.ParseInLocation("2006-01-02 15:04:05", v, now.Location())
+			}
+			if pErr == nil {
+				wibV := time.Date(expTime.Year(), expTime.Month(), expTime.Day(), expTime.Hour(), expTime.Minute(), expTime.Second(), expTime.Nanosecond(), now.Location())
+				isExpired = nowUTC.After(expTime) || now.After(wibV)
+			} else {
+				isExpired = true
+			}
+		case []byte:
+			s := string(v)
+			cleanExp := strings.TrimSuffix(s, "Z")
+			var expTime time.Time
+			var pErr error
+			if strings.Contains(s, "T") {
+				expTime, pErr = time.Parse(time.RFC3339, s)
+				if pErr != nil {
+					expTime, pErr = time.Parse("2006-01-02T15:04:05", cleanExp)
+				}
+			} else {
+				expTime, pErr = time.ParseInLocation("2006-01-02 15:04:05", s, now.Location())
+			}
+			if pErr == nil {
+				wibV := time.Date(expTime.Year(), expTime.Month(), expTime.Day(), expTime.Hour(), expTime.Minute(), expTime.Second(), expTime.Nanosecond(), now.Location())
+				isExpired = nowUTC.After(expTime) || now.After(wibV)
+			} else {
+				isExpired = true
+			}
+		default:
+			isExpired = true
+		}
+
+		if isExpired {
+			expiredList = append(expiredList, expiredRecord{id: id, orderNo: orderNo})
+		}
+	}
+
+	if len(expiredList) == 0 {
+		return 0, nil
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	cancelledCount := 0
+	for _, exp := range expiredList {
+		itemRows, err := tx.Query(`SELECT product_id, qty FROM online_order_items WHERE order_no = ?`, exp.orderNo)
+		if err == nil {
+			for itemRows.Next() {
+				var pid, qty int
+				if err := itemRows.Scan(&pid, &qty); err == nil {
+					tx.Exec(`UPDATE products 
+						SET reserved_stock = MAX(0, COALESCE(reserved_stock, 0) - ?), sync_status = 'pending' 
+						WHERE id = ?`, qty, pid)
+				}
+			}
+			itemRows.Close()
+		}
+
+		tx.Exec(`UPDATE online_orders 
+			SET status = 'cancelled', payment_status = 'expired', updated_at = ?, sync_status = 'pending' 
+			WHERE id = ? AND status = 'pending_payment'`, nowWIBStr, exp.id)
+
+		wsBroadcast(WSMessage{
+			Type: "ONLINE_ORDER_CANCELLED",
+			Data: map[string]interface{}{
+				"order_no": exp.orderNo,
+				"status":   "cancelled",
+				"reason":   "Batas waktu pembayaran telah habis (15 menit)",
+			},
+		})
+		wsBroadcast(WSMessage{
+			Type: "ONLINE_ORDER_UPDATED",
+			Data: map[string]interface{}{
+				"order_no": exp.orderNo,
+				"status":   "cancelled",
+			},
+		})
+
+		go notifyOrderStatusChange(exp.orderNo, "cancelled")
+
+		cancelledCount++
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+
+	if cancelledCount > 0 {
+		go TriggerSync()
+	}
+
+	return cancelledCount, nil
+}
+
+func handleCleanupExpiredOrders(w http.ResponseWriter, r *http.Request) {
+	count, err := CancelExpiredOrders()
+	if err != nil {
+		jsonResponse(w, map[string]string{"error": err.Error()}, 500)
+		return
+	}
+	jsonResponse(w, map[string]interface{}{
+		"status":          "ok",
+		"cancelled_count": count,
+		"message":         fmt.Sprintf("Berhasil membatalkan %d pesanan kedaluwarsa", count),
+	}, 200)
+}
+
+// === Push Notifications (Expo Push API) ===
+
+var (
+	expoPushAPIURL = "https://exp.host/--/api/v2/push/send"
+	expoPushClient = &http.Client{Timeout: 6 * time.Second}
+)
+
+type ExpoPushMessage struct {
+	To        string                 `json:"to"`
+	Title     string                 `json:"title"`
+	Body      string                 `json:"body"`
+	Data      map[string]interface{} `json:"data,omitempty"`
+	Sound     string                 `json:"sound,omitempty"`
+	Priority  string                 `json:"priority,omitempty"`
+	ChannelID string                 `json:"channelId,omitempty"`
+}
+
+func formatRupiahInt(amount int) string {
+	s := strconv.Itoa(amount)
+	n := len(s)
+	if n <= 3 {
+		return s
+	}
+	var res []byte
+	rem := n % 3
+	if rem > 0 {
+		res = append(res, s[:rem]...)
+	}
+	for i := rem; i < n; i += 3 {
+		if len(res) > 0 {
+			res = append(res, '.')
+		}
+		res = append(res, s[i:i+3]...)
+	}
+	return string(res)
+}
+
+func sendExpoPushNotification(messages []ExpoPushMessage) error {
+	if len(messages) == 0 {
+		return nil
+	}
+
+	var valid []ExpoPushMessage
+	for _, m := range messages {
+		token := strings.TrimSpace(m.To)
+		if token != "" && (strings.HasPrefix(token, "ExponentPushToken[") || strings.HasPrefix(token, "ExpoPushToken[") || strings.HasPrefix(token, "test-push-token-")) {
+			valid = append(valid, m)
+		}
+	}
+	if len(valid) == 0 {
+		return nil
+	}
+
+	payload, err := json.Marshal(valid)
+	if err != nil {
+		logError("sendExpoPushNotification marshal", err)
+		return err
+	}
+
+	req, err := http.NewRequest("POST", expoPushAPIURL, bytes.NewBuffer(payload))
+	if err != nil {
+		logError("sendExpoPushNotification new request", err)
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept-Encoding", "gzip, deflate")
+
+	resp, err := expoPushClient.Do(req)
+	if err != nil {
+		logError("sendExpoPushNotification do", err)
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		b, _ := io.ReadAll(resp.Body)
+		log.Printf("[Push] Expo API error status %d: %s\n", resp.StatusCode, string(b))
+		return fmt.Errorf("expo API status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func notifyOrderStatusChange(orderNo, newStatus string) {
+	if db == nil || strings.TrimSpace(orderNo) == "" {
+		return
+	}
+
+	var customerName, customerPhone, fulfillmentType, driverName, orderPushToken string
+	var totalAmount int
+
+	err := db.QueryRow(`SELECT customer_name, customer_phone, fulfillment_type, total_amount, driver_name, COALESCE(push_token, '') 
+		FROM online_orders WHERE order_no = ?`, orderNo).
+		Scan(&customerName, &customerPhone, &fulfillmentType, &totalAmount, &driverName, &orderPushToken)
+	if err != nil {
+		return
+	}
+
+	tokensMap := make(map[string]bool)
+	if orderPushToken != "" {
+		tokensMap[orderPushToken] = true
+	}
+
+	if customerPhone != "" {
+		rows, err := db.Query("SELECT push_token FROM customer_push_tokens WHERE customer_phone = ?", customerPhone)
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var t string
+				if err := rows.Scan(&t); err == nil && t != "" {
+					tokensMap[t] = true
+				}
+			}
+		}
+	}
+
+	if len(tokensMap) == 0 {
+		return
+	}
+
+	var title, body string
+	switch newStatus {
+	case "paid":
+		title = "Pembayaran Dikonfirmasi ✅"
+		body = fmt.Sprintf("Pesanan #%s sebesar Rp%s telah dikonfirmasi dan segera disiapkan toko.", orderNo, formatRupiahInt(totalAmount))
+	case "processing":
+		title = "Pesanan Sedang Disiapkan 🍳"
+		body = fmt.Sprintf("Pesanan #%s sedang dikemas oleh staf Baiturrahman Mart.", orderNo)
+	case "ready":
+		if fulfillmentType == "pickup" {
+			title = "Pesanan Siap Diambil! 🏪"
+			body = fmt.Sprintf("Pesanan #%s sudah siap. Silakan ambil di kasir Baiturrahman Mart.", orderNo)
+		} else {
+			title = "Pesanan Siap Dikirim! 🛵"
+			body = fmt.Sprintf("Pesanan #%s sudah siap dan sedang diantar kurir (%s).", orderNo, driverName)
+		}
+	case "completed":
+		title = "Pesanan Selesai 🎉"
+		body = fmt.Sprintf("Pesanan #%s telah selesai. Terima kasih telah berbelanja di Baiturrahman Mart!", orderNo)
+	case "cancelled":
+		title = "Pesanan Dibatalkan ❌"
+		body = fmt.Sprintf("Pesanan #%s telah dibatalkan. Hubungi toko jika ada kendala.", orderNo)
+	default:
+		title = fmt.Sprintf("Status Pesanan #%s Diperbarui", orderNo)
+		body = fmt.Sprintf("Status pesanan Anda saat ini: %s.", newStatus)
+	}
+
+	var messages []ExpoPushMessage
+	for tok := range tokensMap {
+		messages = append(messages, ExpoPushMessage{
+			To:        tok,
+			Title:     title,
+			Body:      body,
+			Data:      map[string]interface{}{"order_no": orderNo, "status": newStatus},
+			Sound:     "default",
+			Priority:  "high",
+			ChannelID: "orders",
+		})
+	}
+
+	_ = sendExpoPushNotification(messages)
+}
+
+func handleMobileRegisterPushToken(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		jsonResponse(w, map[string]string{"error": "Method not allowed"}, 405)
+		return
+	}
+	var req struct {
+		CustomerPhone string `json:"customer_phone"`
+		PushToken     string `json:"push_token"`
+		DeviceName    string `json:"device_name"`
+	}
+	if err := decodeJSON(w, r, &req); err != nil {
+		jsonResponse(w, map[string]string{"error": "Format request tidak valid"}, 400)
+		return
+	}
+
+	phone := strings.TrimSpace(req.CustomerPhone)
+	pushToken := strings.TrimSpace(req.PushToken)
+	if pushToken == "" {
+		jsonResponse(w, map[string]string{"error": "Push token wajib diisi"}, 400)
+		return
+	}
+	deviceName := strings.TrimSpace(req.DeviceName)
+	if deviceName == "" {
+		deviceName = "Mobile Device"
+	}
+
+	now := nowWIB().Format("2006-01-02 15:04:05")
+	_, err := db.Exec(`INSERT OR REPLACE INTO customer_push_tokens (customer_phone, push_token, device_name, updated_at)
+		VALUES (?, ?, ?, ?)`, phone, pushToken, deviceName, now)
+	if err != nil {
+		logError("handleMobileRegisterPushToken insert", err)
+		jsonResponse(w, map[string]string{"error": "Gagal menyimpan push token"}, 500)
+		return
+	}
+
+	jsonResponse(w, map[string]interface{}{
+		"success": true,
+		"message": "Push token berhasil didaftarkan",
+	}, 200)
+}
+
 
 

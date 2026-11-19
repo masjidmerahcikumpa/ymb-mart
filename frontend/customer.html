@@ -572,7 +572,10 @@ body {
     </div>
     <div class="r-cashier-box">
       <div class="r-cashier-title" id="kasir-display">KASIR STANDBY</div>
-      <div class="r-cashier-sub">Senang melayani anda</div>
+      <div class="r-cashier-sub" style="display:flex;align-items:center;justify-content:flex-end;">
+        <span id="ws-status-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#16a34a;margin-right:5px;flex-shrink:0;"></span>
+        <span id="ws-status-text">Senang melayani anda</span>
+      </div>
     </div>
   </div>
 
@@ -754,32 +757,124 @@ async function loadActiveCashier(){
 }
 loadActiveCashier();
 
-// WebSocket
+// WebSocket with Exponential Backoff & State Recovery
 var liveItems = [];
 var isCheckoutDone = false;
-var WS_URL = "ws://" + location.host + "/ws";
+var wsConn = null;
+var reconnectDelay = 1000;
+var maxReconnectDelay = 16000;
+var reconnectTimer = null;
+var WS_URL = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws";
+
+function updateConnectionStatus(status){
+  var dot = document.getElementById("ws-status-dot");
+  var text = document.getElementById("ws-status-text");
+  if(!dot || !text) return;
+  if(status === "connected"){
+    dot.style.background = "#16a34a";
+    dot.className = "";
+    text.textContent = "Senang melayani anda";
+  } else if(status === "reconnecting"){
+    dot.style.background = "#eab308";
+    dot.className = "pulse-glow";
+    text.textContent = "Menghubungkan (" + Math.round(reconnectDelay / 1000) + "d)...";
+  } else if(status === "disconnected"){
+    dot.style.background = "#dc2626";
+    dot.className = "";
+    text.textContent = "Terputus dari kasir";
+  }
+}
 
 function connectWS(){
+  if(reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
   try {
-    var ws = new WebSocket(WS_URL);
-    ws.onopen = function(){
+    updateConnectionStatus(reconnectDelay > 1000 ? "reconnecting" : "connecting");
+    wsConn = new WebSocket(WS_URL);
+    wsConn.onopen = function(){
+      console.log("[WS] Connected to server");
+      reconnectDelay = 1000;
+      updateConnectionStatus("connected");
       loadActiveCashier();
+      recoverDisplayState();
     };
-    ws.onmessage = function(e){
-      var msg = JSON.parse(e.data);
-      if(msg.type === "cart_update") handleCartUpdate(msg.data);
-      if(msg.type === "new_transaction") handleNewTx(msg.data);
-      if(msg.type === "reset_display"){ isCheckoutDone = false; closeTransaction(msg.data); }
-      if(msg.type === "shift_open") handleShiftOpen(msg.data);
-      if(msg.type === "shift_close") handleShiftClose(msg.data);
-      if(msg.type === "show_qris") handleShowQris(msg.data);
-      if(msg.type === "hide_qris") handleHideQris();
+    wsConn.onmessage = function(e){
+      try {
+        var msg = JSON.parse(e.data);
+        if(msg.type === "cart_update") handleCartUpdate(msg.data);
+        else if(msg.type === "new_transaction") handleNewTx(msg.data);
+        else if(msg.type === "reset_display"){ isCheckoutDone = false; closeTransaction(msg.data); }
+        else if(msg.type === "shift_open") handleShiftOpen(msg.data);
+        else if(msg.type === "shift_close") handleShiftClose(msg.data);
+        else if(msg.type === "show_qris") handleShowQris(msg.data);
+        else if(msg.type === "hide_qris") handleHideQris();
+      } catch(err) {
+        console.warn("[WS] Error parsing message:", err);
+      }
     };
-    ws.onclose = function(){
-      setTimeout(connectWS, 3000);
+    wsConn.onclose = function(e){
+      console.warn("[WS] Connection lost, reconnecting in", reconnectDelay, "ms...");
+      updateConnectionStatus("reconnecting");
+      scheduleReconnect();
     };
-    ws.onerror = function(){};
+    wsConn.onerror = function(err){
+      console.warn("[WS] Socket error:", err);
+      try { wsConn.close(); } catch(e){}
+    };
+  } catch(e){
+    console.error("[WS] connectWS error:", e);
+    scheduleReconnect();
+  }
+}
+
+function scheduleReconnect(){
+  if(reconnectTimer) clearTimeout(reconnectTimer);
+  var jitter = Math.floor(Math.random() * 500);
+  var delay = reconnectDelay + jitter;
+  reconnectDelay = Math.min(reconnectDelay * 2, maxReconnectDelay);
+  reconnectTimer = setTimeout(function(){
+    connectWS();
+  }, delay);
+}
+
+// LOCAL STORAGE STATE RECOVERY
+function saveLocalDisplayState(type, data){
+  try {
+    sessionStorage.setItem("customer_display_state", JSON.stringify({
+      type: type,
+      data: data,
+      time: Date.now()
+    }));
   } catch(e){}
+}
+
+function restoreLocalDisplayState(){
+  try {
+    var raw = sessionStorage.getItem("customer_display_state");
+    if(!raw) return;
+    var state = JSON.parse(raw);
+    if(state && state.time && (Date.now() - state.time < 15 * 60 * 1000)){
+      if(state.type === "cart_update") handleCartUpdate(state.data);
+      else if(state.type === "new_transaction") handleNewTx(state.data);
+    }
+  } catch(e){}
+}
+
+async function recoverDisplayState(){
+  try {
+    var r = await fetch("/api/customer-display/state");
+    var res = await r.json();
+    if(res && res.active && res.state){
+      var msg = res.state;
+      if(msg.type === "cart_update") handleCartUpdate(msg.data);
+      else if(msg.type === "new_transaction") handleNewTx(msg.data);
+      else if(msg.type === "show_qris") handleShowQris(msg.data);
+      return;
+    }
+  } catch(e) {}
+  restoreLocalDisplayState();
 }
 
 function handleShiftOpen(data){
@@ -799,6 +894,7 @@ function handleShiftClose(data){
 
 function handleCartUpdate(data){
   if(isCheckoutDone) return;
+  saveLocalDisplayState("cart_update", data);
   liveItems = data.items || [];
   var total = data.total || 0;
   renderLiveItems();
@@ -863,6 +959,7 @@ function handleHideQris(){
 }
 
 function handleNewTx(tx){
+  saveLocalDisplayState("new_transaction", tx);
   handleHideQris();
   isCheckoutDone = true;
   liveItems = (tx.items || []).map(function(it){ return { name: it.name, qty: it.qty, price: it.price }; });
@@ -887,6 +984,7 @@ function handleNewTx(tx){
 }
 
 function closeTransaction(data){
+  try { sessionStorage.removeItem("customer_display_state"); } catch(e){}
   handleHideQris();
   isCheckoutDone = false;
   liveItems = [];
@@ -909,6 +1007,8 @@ function closeTransaction(data){
   }
 }
 
+restoreLocalDisplayState();
+recoverDisplayState();
 connectWS();
 </script>
 </body>

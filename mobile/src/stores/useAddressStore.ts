@@ -1,4 +1,9 @@
 import { create } from 'zustand';
+import {
+  fetchCustomerAddresses,
+  saveCustomerAddress,
+  deleteCustomerAddress,
+} from '@/services/api';
 
 export interface CustomerAddress {
   id: string;
@@ -34,15 +39,18 @@ const DEFAULT_ADDRESSES: CustomerAddress[] = [
 interface AddressState {
   addresses: CustomerAddress[];
   selectedId: string;
+  isLoading: boolean;
   getSelectedAddress: () => CustomerAddress;
   selectAddress: (id: string) => void;
-  addAddress: (addr: Omit<CustomerAddress, 'id'>) => void;
-  deleteAddress: (id: string) => void;
+  loadAddresses: (phone: string, memberId?: string) => Promise<void>;
+  addAddress: (addr: Omit<CustomerAddress, 'id'>, memberId?: string) => Promise<void>;
+  deleteAddress: (id: string) => Promise<void>;
 }
 
 export const useAddressStore = create<AddressState>((set, get) => ({
   addresses: DEFAULT_ADDRESSES,
   selectedId: 'addr-1',
+  isLoading: false,
 
   getSelectedAddress: () => {
     const { addresses, selectedId } = get();
@@ -53,16 +61,61 @@ export const useAddressStore = create<AddressState>((set, get) => ({
     set({ selectedId: id });
   },
 
-  addAddress: (newAddr) => {
-    const id = `addr-${Date.now()}`;
-    const entry: CustomerAddress = { ...newAddr, id };
-    set((state) => ({
-      addresses: [entry, ...state.addresses],
-      selectedId: id,
-    }));
+  loadAddresses: async (phone: string, memberId?: string) => {
+    if (!phone && !memberId) return;
+    set({ isLoading: true });
+    try {
+      const data = await fetchCustomerAddresses(phone, memberId);
+      if (Array.isArray(data) && data.length > 0) {
+        const mapped: CustomerAddress[] = data.map((d: any) => ({
+          id: d.id || `addr-${d.db_id}`,
+          label: d.label || 'Rumah',
+          recipientName: d.recipientName || d.recipient_name,
+          phone: d.phone,
+          addressLine: d.addressLine || d.address_line,
+          benchmarkNote: d.benchmarkNote || d.benchmark_note || '',
+          isPrimary: d.isPrimary || d.is_primary,
+        }));
+        const primary = mapped.find((a) => a.isPrimary) || mapped[0];
+        set({ addresses: mapped, selectedId: primary ? primary.id : mapped[0]?.id || '' });
+      }
+    } catch (e) {
+      console.warn('[AddressStore] loadAddresses fallback:', e);
+    } finally {
+      set({ isLoading: false });
+    }
   },
 
-  deleteAddress: (id: string) => {
+  addAddress: async (newAddr, memberId) => {
+    const tempId = `addr-${Date.now()}`;
+    const entry: CustomerAddress = { ...newAddr, id: tempId };
+    set((state) => ({
+      addresses: [entry, ...state.addresses],
+      selectedId: tempId,
+    }));
+
+    try {
+      const res = await saveCustomerAddress({
+        member_id: memberId || '',
+        phone: newAddr.phone,
+        label: newAddr.label,
+        recipient_name: newAddr.recipientName,
+        address_line: newAddr.addressLine,
+        benchmark_note: newAddr.benchmarkNote,
+        is_primary: !!newAddr.isPrimary,
+      });
+      if (res && res.success && res.id) {
+        set((state) => ({
+          addresses: state.addresses.map((a) => (a.id === tempId ? { ...a, id: res.id! } : a)),
+          selectedId: res.id!,
+        }));
+      }
+    } catch (e) {
+      console.warn('[AddressStore] saveCustomerAddress error:', e);
+    }
+  },
+
+  deleteAddress: async (id: string) => {
     set((state) => {
       const remaining = state.addresses.filter((a) => a.id !== id);
       const nextSelected = state.selectedId === id ? remaining[0]?.id || '' : state.selectedId;
@@ -71,5 +124,11 @@ export const useAddressStore = create<AddressState>((set, get) => ({
         selectedId: nextSelected,
       };
     });
+
+    try {
+      await deleteCustomerAddress(id);
+    } catch (e) {
+      console.warn('[AddressStore] deleteCustomerAddress error:', e);
+    }
   },
 }));

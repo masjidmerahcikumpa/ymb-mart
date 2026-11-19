@@ -184,6 +184,7 @@ type Product struct {
 	PromoActive   int     `json:"promo_active"`
 	TaxRate       float64 `json:"tax_rate"`
 	Active        int     `json:"active"`
+	IsOpnameLocked bool   `json:"is_opname_locked"`
 }
 
 type Transaction struct {
@@ -287,13 +288,16 @@ type StockOpnameItem struct {
 }
 
 type CartItemReq struct {
-	ProductID    int     `json:"product_id"`
-	Qty          int     `json:"qty"`
-	Notes        string  `json:"notes"`
-	Discount     float64 `json:"discount"`
-	DiscountType string  `json:"discount_type,omitempty"` // "nominal" or "percent"
-	Name         string  `json:"name,omitempty"`
-	Price        int     `json:"price,omitempty"`
+	ProductID      int     `json:"product_id"`
+	Qty            int     `json:"qty"`
+	Notes          string  `json:"notes"`
+	Discount       float64 `json:"discount"`
+	DiscountType   string  `json:"discount_type,omitempty"` // "nominal" or "percent"
+	Name           string  `json:"name,omitempty"`
+	Price          int     `json:"price,omitempty"`
+	OverridePrice  int     `json:"override_price,omitempty"`
+	OverrideToken  string  `json:"override_token,omitempty"`
+	OverrideReason string  `json:"override_reason,omitempty"`
 }
 
 type CheckoutReq struct {
@@ -531,6 +535,19 @@ func initDB() {
 	db.Exec("ALTER TABLE stock_opname_sessions ADD COLUMN sync_status TEXT DEFAULT 'pending'")
 	db.Exec("ALTER TABLE stock_opname_items ADD COLUMN sync_status TEXT DEFAULT 'pending'")
 	db.Exec("ALTER TABLE members ADD COLUMN sync_status TEXT DEFAULT 'pending'")
+	db.Exec("ALTER TABLE tx_items ADD COLUMN override_price INTEGER DEFAULT 0")
+	db.Exec("ALTER TABLE tx_items ADD COLUMN override_manager TEXT DEFAULT ''")
+	db.Exec("ALTER TABLE tx_items ADD COLUMN override_reason TEXT DEFAULT ''")
+	db.Exec("ALTER TABLE online_orders ADD COLUMN push_token TEXT DEFAULT ''")
+
+	db.Exec(`CREATE TABLE IF NOT EXISTS customer_push_tokens (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		customer_phone TEXT NOT NULL,
+		push_token TEXT NOT NULL,
+		device_name TEXT DEFAULT '',
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(customer_phone, push_token)
+	)`)
 
 	db.Exec(`CREATE TABLE IF NOT EXISTS audit_log (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -546,7 +563,25 @@ func initDB() {
 		expires_at TEXT NOT NULL
 	)`)
 
-	// Tables for Mobile App Online Orders
+	// Tables for Mobile App Online Orders & Customer Addresses
+	db.Exec(`CREATE TABLE IF NOT EXISTS customer_addresses (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		member_id TEXT DEFAULT '',
+		phone TEXT NOT NULL,
+		label TEXT DEFAULT 'Rumah',
+		recipient_name TEXT NOT NULL,
+		address_line TEXT NOT NULL,
+		benchmark_note TEXT DEFAULT '',
+		latitude REAL DEFAULT 0,
+		longitude REAL DEFAULT 0,
+		is_primary INTEGER DEFAULT 0,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		sync_status TEXT DEFAULT 'pending'
+	)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_cust_addr_phone ON customer_addresses(phone)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_cust_addr_member ON customer_addresses(member_id)`)
+
 	db.Exec(`CREATE TABLE IF NOT EXISTS online_orders (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		order_no TEXT UNIQUE NOT NULL,
@@ -569,6 +604,7 @@ func initDB() {
 		driver_phone TEXT DEFAULT '+628123456789',
 		eta_minutes INTEGER DEFAULT 15,
 		expires_at TIMESTAMP,
+		push_token TEXT DEFAULT '',
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 		sync_status TEXT DEFAULT 'pending'
@@ -643,6 +679,7 @@ func initDB() {
 		"qris_merchant":       "POS Simulator",
 		"qris_amount":         "0",
 		"ppn_rate":            "0",
+		"low_stock_threshold": "10",
 		"public_presensi_url": "https://ymb-mart.vercel.app",
 		"etrans_admin_fee":    "1500",
 	}
@@ -664,45 +701,11 @@ func startExpiredOrderReleaser() {
 		if db == nil {
 			continue
 		}
-		rows, err := db.Query(`SELECT id, order_no FROM online_orders 
-			WHERE status = 'pending_payment' AND expires_at IS NOT NULL AND expires_at < CURRENT_TIMESTAMP`)
+		count, err := CancelExpiredOrders()
 		if err != nil {
-			continue
-		}
-		var expiredOrders []struct {
-			id      int
-			orderNo string
-		}
-		for rows.Next() {
-			var o struct {
-				id      int
-				orderNo string
-			}
-			if err := rows.Scan(&o.id, &o.orderNo); err == nil {
-				expiredOrders = append(expiredOrders, o)
-			}
-		}
-		rows.Close()
-
-		for _, o := range expiredOrders {
-			itemRows, err := db.Query(`SELECT product_id, qty FROM online_order_items WHERE order_no = ?`, o.orderNo)
-			if err == nil {
-				for itemRows.Next() {
-					var pid, qty int
-					if err := itemRows.Scan(&pid, &qty); err == nil {
-						db.Exec(`UPDATE products SET reserved_stock = MAX(0, COALESCE(reserved_stock, 0) - ?) WHERE id = ?`, qty, pid)
-					}
-				}
-				itemRows.Close()
-			}
-			db.Exec(`UPDATE online_orders SET status = 'cancelled', payment_status = 'expired', updated_at = CURRENT_TIMESTAMP WHERE id = ?`, o.id)
-			wsBroadcast(WSMessage{
-				Type: "ONLINE_ORDER_EXPIRED",
-				Data: map[string]interface{}{
-					"order_no": o.orderNo,
-					"status":   "cancelled",
-				},
-			})
+			logError("CancelExpiredOrders", err)
+		} else if count > 0 {
+			log.Printf("[Auto-Cancel] %d pesanan online kedaluwarsa dibatalkan & reserved stock dilepaskan\n", count)
 		}
 	}
 }
