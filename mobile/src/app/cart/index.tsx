@@ -11,6 +11,7 @@ import {
   Alert,
   Modal,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -266,7 +267,7 @@ export default function CartScreen() {
         <TouchableOpacity
           style={styles.clearBtn}
           onPress={() => {
-            if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+            if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.confirm === 'function') {
               if (window.confirm('Kosongkan semua barang belanjaan di keranjang?')) {
                 clearCart();
               }

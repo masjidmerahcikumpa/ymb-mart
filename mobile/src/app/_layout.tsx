@@ -6,12 +6,20 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SplashScreen from 'expo-splash-screen';
 
-SplashScreen.preventAutoHideAsync().catch(() => {});
+try {
+  SplashScreen.preventAutoHideAsync().catch(() => {});
+} catch {
+  // Safe ignore
+}
 
 export default function RootLayout() {
   useEffect(() => {
     const timer = setTimeout(() => {
-      SplashScreen.hideAsync().catch(() => {});
+      try {
+        SplashScreen.hideAsync().catch(() => {});
+      } catch {
+        // Safe ignore
+      }
     }, 150);
     return () => clearTimeout(timer);
   }, []);

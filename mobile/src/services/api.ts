@@ -3,10 +3,7 @@ import { MOCK_CATEGORIES, MOCK_PRODUCTS } from '@/constants/mockData';
 
 // Configurable API URL. Defaults to live cloud backend, fallback to localhost.
 export const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL ||
-  (typeof window !== 'undefined' && window.location.hostname === 'localhost'
-    ? 'https://ymb-mart.vercel.app'
-    : 'https://ymb-mart.vercel.app');
+  process.env.EXPO_PUBLIC_API_URL || 'https://ymb-mart.vercel.app';
 
 export const PAYMENT_CLIENT_SECRET =
   process.env.EXPO_PUBLIC_PAYMENT_SECRET || 'ymb-mart-secret-webhook-key-2026';
