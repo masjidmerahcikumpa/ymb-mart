@@ -16,8 +16,13 @@ export async function getExpoPushToken(): Promise<string | null> {
   }
 
   try {
-    // Dynamic import to support environments with or without native notification module
-    const Notifications = await import('expo-notifications');
+    // Dynamic safe check for native notification module
+    // @ts-ignore
+    const Notifications = await import('expo-notifications').catch(() => null);
+    if (!Notifications || typeof Notifications.getPermissionsAsync !== 'function') {
+      return null;
+    }
+
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
 
